@@ -4928,3 +4928,21 @@ Plan / progress:
 Notes:
 - Do not restart langgraph-orchestrator or the inference nodes while this runs (invalidates the run).
 - Infra errors are analysed, fixed and the affected track restarted (project rule), not excluded.
+
+## 2026-09-18T22:48:00Z — Benchmark Spur 1 -> Spur 2 (one round each) — aborted / invalid
+Plan / progress:
+- The run started 22:32:44Z was invalidated: langgraph-orchestrator was stopped and restarted at 22:44:30Z
+  by another agent/session (not this one); the first request (705 s) was cut off, all 143 following requests failed
+  with ConnectError, so Spur 1 "finished" with all-zero scores and Spur 2 was killed by us after 13 s.
+  Outputs moved to benchmarks/results/invalid_20260919_orchestrator_restarted_by_other_agent/ (NOT results).
+- Evidence of parallel changes found afterwards (not made by this session):
+  * running container has working-tree versions of graph/planner.py, graph/expert.py, services/routing.py
+    (hashes differ from image bf2a5c7e and from HEAD) -> files were copied into the container and it was restarted;
+  * base template tmpl-11f532fc now has a forced security shadow expert ("role": "always") under code_reviewer;
+  * uncommitted diffs: planner prompt "MULTI-DISCIPLINARY CO-EVALUATION" rule + few-shot example (global, all
+    templates), per-model system prompt for forced experts, forced flag handling.
+  Saved for reference: benchmarks/results/runbook/foreign_uncommitted_20260919.patch and
+  benchmarks/results/runbook/tmpl-11f532fc_as_found_20260919.json.
+Notes:
+- Nothing of the other agent's work was reverted or committed by this session. The benchmark must not be restarted until
+  the owner of the system state is decided (see user decision).
