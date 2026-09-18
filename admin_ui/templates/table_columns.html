@@ -1,0 +1,169 @@
+{# Opt-in column resizing; ordinary forms keep their native layout. #}
+<style>
+  .moe-table-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+  .moe-table-scroll:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: 2px; }
+  table.moe-resizable { table-layout: fixed; }
+  .moe-resizable > thead > tr > th { position: relative; padding-right: 14px; vertical-align: middle; font-size: .78rem; font-weight: 600; }
+  .moe-column-label { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .moe-resizable .form-control, .moe-resizable .form-select { min-width: 0; max-width: 100%; }
+  .moe-column-handle { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; cursor: col-resize; touch-action: none; }
+  .moe-column-handle::after { content: ''; position: absolute; top: 30%; bottom: 30%; left: 6px; border-left: 1px solid var(--bs-border-color); }
+  .moe-column-handle:hover::after, .moe-column-handle:focus-visible::after { border-color: var(--bs-primary); }
+  .moe-column-handle:focus-visible { outline: 2px solid var(--bs-primary); outline-offset: -2px; }
+  .moe-column-dragging { cursor: col-resize; user-select: none; }
+  #servers-table { width: 100%; }
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(5),
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(6),
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(7),
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(8),
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(10),
+  #servers-table.moe-resizable:not(.server-columns-expanded) :is(th, td):nth-child(12) { display: none; }
+  #servers-table .d-flex > .form-control, #servers-table .d-flex > .form-select { flex: 1 1 0; width: 0 !important; }
+  .server-column-tools { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .server-column-tools .form-check { margin: 0; }
+</style>
+<script>
+(() => {
+  const hint = {{ t(request, 'table.resize_hint') | tojson }};
+  const columnLabel = {{ t(request, 'table.resize_column') | tojson }};
+  const scrollLabel = {{ t(request, 'table.scroll_columns') | tojson }};
+
+  function init(table) {
+    if (table.dataset.columnsReady || !table.tHead || table.tHead.rows.length !== 1) return;
+    const headers = [...table.tHead.rows[0].cells];
+    const wrapper = table.parentElement;
+    if (!wrapper.matches('.table-responsive')) return;
+    table.dataset.columnsReady = 'true';
+    table.classList.add('moe-resizable');
+    wrapper.classList.add('moe-table-scroll');
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute('role', 'region');
+    wrapper.setAttribute('aria-label', scrollLabel);
+    const mins = headers.map(th => Number(th.dataset.columnMin) || 64);
+    const defaults = headers.map((th, i) => Math.max(mins[i], Number(th.dataset.columnWidth) || 120));
+    const group = document.createElement('colgroup');
+    const columns = headers.map(() => document.createElement('col'));
+    table.insertBefore(group, table.tHead);
+    let widths = [...defaults], visible = [], handles = [], drag = null;
+    const storageKey = () => `moe-column-widths:v2:${location.pathname}:${table.dataset.resizableColumns}:${table.dataset.columnView || 'compact'}`;
+    function save() {
+      try { localStorage.setItem(storageKey(), JSON.stringify(widths)); } catch (_) { /* Optional storage. */ }
+    }
+    function apply() {
+      visible.forEach(i => { columns[i].style.width = `${widths[i]}px`; });
+      table.style.width = `${visible.reduce((sum, i) => sum + widths[i], 0)}px`;
+      handles.forEach(({handle, i, next}) => {
+        handle.setAttribute('aria-valuenow', Math.round(widths[i]));
+        handle.setAttribute('aria-valuemax', Math.round(widths[i] + widths[next] - mins[next]));
+      });
+    }
+    function fit() {
+      if (!wrapper.clientWidth || drag) return;
+      const minimum = visible.reduce((sum, i) => sum + mins[i], 0);
+      // Keep useful room for the two long text columns, even on narrow screens.
+      const available = Math.max(wrapper.clientWidth, minimum + 160) - minimum;
+      let weights = visible.map(i => Math.max(0, widths[i] - mins[i]));
+      if (!weights.some(Boolean)) weights = visible.map(i => Math.max(1, defaults[i] - mins[i]));
+      const total = weights.reduce((a, b) => a + b, 0);
+      visible.forEach((i, index) => { widths[i] = mins[i] + available * weights[index] / total; });
+      apply();
+    }
+    function move(i, next, delta, start = widths) {
+      const change = Math.max(mins[i] - start[i], Math.min(start[next] - mins[next], delta));
+      widths[i] = start[i] + change;
+      widths[next] = start[next] - change;
+      apply();
+    }
+    function finish() {
+      if (!drag) return;
+      const {handle, id} = drag;
+      drag = null;
+      wrapper.classList.remove('moe-column-dragging');
+      if (handle.hasPointerCapture(id)) handle.releasePointerCapture(id);
+      save();
+    }
+    headers.forEach(th => {
+      const label = document.createElement('span');
+      label.className = 'moe-column-label';
+      label.title = th.textContent.trim();
+      while (th.firstChild) label.append(th.firstChild);
+      th.append(label);
+    });
+    function refresh() {
+      finish();
+      handles.forEach(({handle}) => handle.remove());
+      handles = [];
+      visible = headers.map((th, i) => getComputedStyle(th).display !== 'none' ? i : -1).filter(i => i >= 0);
+      const picker = document.getElementById('server-width-column');
+      if (table.id === 'servers-table' && picker) {
+        picker.replaceChildren(...visible.slice(0, -1).map(i => new Option(headers[i].textContent.trim(), i)));
+      }
+      group.replaceChildren(...visible.map(i => columns[i]));
+      widths = [...defaults];
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey()));
+        if (Array.isArray(saved) && saved.length === headers.length && saved.every(v => Number.isFinite(v) && v >= 0 && v <= 4000)) {
+          widths = saved.map((v, i) => Math.max(mins[i], v));
+        }
+      } catch (_) { /* Invalid or unavailable storage uses defaults. */ }
+      visible.slice(0, -1).forEach((i, index) => {
+        const next = visible[index + 1];
+        const handle = document.createElement('span');
+        handle.className = 'moe-column-handle';
+        handle.tabIndex = 0;
+        handle.title = hint;
+        handle.setAttribute('role', 'separator');
+        handle.setAttribute('aria-orientation', 'vertical');
+        handle.setAttribute('aria-valuemin', mins[i]);
+        handle.setAttribute('aria-label', `${columnLabel}: ${headers[i].textContent.trim()}`);
+        headers[i].append(handle);
+        handles.push({handle, i, next});
+        handle.addEventListener('pointerdown', e => {
+          if (e.button !== 0 || !e.isPrimary) return;
+          e.preventDefault(); e.stopPropagation();
+          handle.focus({preventScroll: true});
+          drag = {handle, id: e.pointerId, x: e.clientX, start: [...widths]};
+          handle.setPointerCapture(e.pointerId);
+          wrapper.classList.add('moe-column-dragging');
+        });
+        handle.addEventListener('pointermove', e => {
+          if (drag && drag.id === e.pointerId) move(i, next, e.clientX - drag.x, drag.start);
+        });
+        ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => handle.addEventListener(type, finish));
+        handle.addEventListener('click', e => e.stopPropagation());
+        handle.addEventListener('keydown', e => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+          e.preventDefault(); e.stopPropagation();
+          move(i, next, (e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 40 : 10)); save();
+        });
+      });
+      fit();
+    }
+    table.addEventListener('moe:columns-change', refresh);
+    if (table.id === 'servers-table') {
+      document.querySelectorAll('[data-column-step]').forEach(button => button.addEventListener('click', () => {
+        const i = Number(document.getElementById('server-width-column')?.value);
+        const next = visible[visible.indexOf(i) + 1];
+        if (next === undefined) return;
+        move(i, next, Number(button.dataset.columnStep)); save();
+      }));
+    }
+    document.querySelector(`[data-reset-columns="${table.id}"]`)?.addEventListener('click', () => {
+      finish();
+      try { localStorage.removeItem(storageKey()); } catch (_) { /* Optional. */ }
+      widths = [...defaults]; fit();
+    });
+    refresh();
+    new ResizeObserver(fit).observe(wrapper);
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('table[data-resizable-columns]').forEach(init);
+    const table = document.getElementById('servers-table');
+    document.getElementById('server-extra-columns')?.addEventListener('change', e => {
+      table.classList.toggle('server-columns-expanded', e.target.checked);
+      table.dataset.columnView = e.target.checked ? 'expanded' : 'compact';
+      table.dispatchEvent(new Event('moe:columns-change'));
+    });
+  });
+})();
+</script>

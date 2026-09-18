@@ -1,0 +1,24 @@
+{# Search only hides complete records; form controls stay enabled and submitted. #}
+<div class="moe-list-tools" data-list-tools data-target="{{ filter_target }}" hidden>
+  <label class="moe-search" for="{{ filter_id }}">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <span class="visually-hidden">{{ filter_label }}</span>
+    <input type="search" id="{{ filter_id }}" class="form-control form-control-sm" placeholder="{{ filter_label }}" autocomplete="off">
+  </label>
+  {% if filter_id == 'template-search' %}
+  <label class="moe-density-label">{{ t(request, 'ui.privacy') }}
+    <select class="form-select form-select-sm" data-list-privacy>
+      <option value="">{{ t(request, 'ui.all') }}</option>
+      {% for value in ['local_only', 'mixed', 'external'] %}<option value="{{ value }}">{{ t(request, 'ui.' + value) }}</option>{% endfor %}
+    </select>
+  </label>
+  {% endif %}
+  <label class="moe-density-label">{{ t(request, 'ui.density') }}
+    <select class="form-select form-select-sm" data-list-density>
+      <option value="comfortable">{{ t(request, 'ui.comfortable') }}</option>
+      <option value="compact">{{ t(request, 'ui.compact') }}</option>
+    </select>
+  </label>
+  <output class="small text-body-secondary" aria-live="polite" data-list-count></output>
+  <p class="moe-empty-filter mb-0" data-list-empty hidden>{{ t(request, 'ui.no_results') }}</p>
+</div>

@@ -640,7 +640,6 @@ _PORTAL_STATIC_ASSETS_TO_CACHE = [
     "/static/css/bootstrap.min.css",
     "/static/css/bootstrap-icons.min.css",
     "/static/js/bootstrap.bundle.min.js",
-    "/static/js/chart.umd.min.js",
 ]
 
 

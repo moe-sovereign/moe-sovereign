@@ -14,7 +14,8 @@
   <script>
     /* Apply saved theme before first paint to avoid flash */
     (function(){
-      const t = localStorage.getItem('moe-theme') || 'light';
+      let t = 'light';
+      try { t = localStorage.getItem('moe-theme') || t; } catch (_) {}
       document.documentElement.setAttribute('data-bs-theme', t);
     })();
     /* Register service worker — own /user/-scoped app, independent of MoE Admin's */
@@ -31,7 +32,7 @@
   </title>
   <link rel="stylesheet" href="/static/css/bootstrap.min.css">
   <link rel="stylesheet" href="/static/css/bootstrap-icons.min.css">
-  <script src="/static/js/chart.umd.min.js"></script>
+
   <style>
     body { background-color: var(--bs-body-bg); }
     /* PWA standalone: add top/bottom padding for the device status/home bar */
@@ -85,8 +86,11 @@ const CSRF_TOKEN = "{{ csrf_token }}";
   };
 })();
 </script>
+<link rel="stylesheet" href="/static/css/moe-ui.css?v=1">
+<script src="/static/js/moe-ui.js?v=1" defer></script>
 </head>
-<body>
+<body class="moe-app">
+<a class="moe-skip-link" href="#main-content">{{ t(request, "ui.skip_content") }}</a>
 
 <nav class="navbar navbar-dark bg-dark px-3 sticky-top">
   <a class="navbar-brand d-flex align-items-center gap-2" href="/user/dashboard">
@@ -140,7 +144,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
     </div>
     {# ── Dark / Light Mode Toggle ── #}
     <button type="button" id="themeToggleBtn" class="btn btn-sm btn-outline-light"
-            onclick="toggleTheme()" title="{{ t(request, 'btn.toggle_theme') }}">
+            aria-label="{{ t(request, 'btn.toggle_theme') }}" onclick="toggleTheme()" title="{{ t(request, 'btn.toggle_theme') }}">
       <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
     </button>
     {# ── Language Switcher ── #}
@@ -160,6 +164,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
   {% endif %}
 </nav>
 
+{% if page in ["login", "forgot_password", "reset_password", "change_password"] %}<main id="main-content" tabindex="-1">{% endif %}
 {% if page == "login" %}
 <!-- ═══════════════════════════════════════════ LOGIN ═════════════════════════ -->
 <div class="d-flex justify-content-center align-items-center" style="min-height:85vh">
@@ -350,7 +355,8 @@ const CSRF_TOKEN = "{{ csrf_token }}";
   <div class="d-flex gap-4 align-items-start portal-layout">
 
     <!-- Sidebar -->
-    <div class="portal-sidebar">
+    <details class="portal-sidebar" id="portal-navigation" open>
+      <summary>{{ t(request, "ui.navigation") }} <i class="bi bi-chevron-down" aria-hidden="true"></i></summary>
       <div class="card mb-3">
         <div class="card-body py-3 text-center">
           <i class="bi bi-person-circle fs-1 text-primary"></i>
@@ -358,7 +364,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
           <div class="text-muted small">{{ user.email }}</div>
         </div>
       </div>
-      <nav class="card">
+      <nav class="card" aria-label="{{ t(request, 'ui.navigation') }}">
         <div class="card-body py-2 px-2">
           <a href="/user/dashboard" class="sidebar-link {% if page=='dashboard' %}active{% endif %}">
             <i class="bi bi-speedometer2 me-2"></i>{{ t(request, 'portal.sidebar.dashboard') }}
@@ -396,10 +402,10 @@ const CSRF_TOKEN = "{{ csrf_token }}";
           </a>
         </div>
       </nav>
-    </div>
+    </details>
 
     <!-- Main Content -->
-    <div class="flex-grow-1">
+    <main id="main-content" tabindex="-1" class="flex-grow-1 portal-content">
 
       {% if flash %}
       <div class="alert alert-{{ flash_type or 'info' }} py-2 small mb-3">{{ flash }}</div>
@@ -407,8 +413,13 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── DASHBOARD ─────────────────────────────────────────────────────── #}
       {% if page == "dashboard" %}
-      <h5 class="mb-3"><i class="bi bi-speedometer2 me-2 text-primary"></i>{{ t(request, 'page.user_dashboard') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-speedometer2 me-2 text-primary"></i>{{ t(request, 'page.user_dashboard') }}</h1>
 
+      <div class="moe-quick-actions mb-4" aria-label="{{ t(request, 'ui.quick_actions') }}">
+        <a href="/user/keys" class="moe-action-card"><i class="bi bi-key" aria-hidden="true"></i><span><strong>{{ t(request, 'portal.sidebar.api_keys') }}</strong><small>{{ t(request, 'ui.keys_hint') }}</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+        {% if can_create_cc_profiles %}<a href="/user/cc-profiles" class="moe-action-card"><i class="bi bi-cpu" aria-hidden="true"></i><span><strong>{{ t(request, 'portal.sidebar.cc_profiles') }}</strong><small>{{ t(request, 'ui.profiles_hint') }}</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a>{% endif %}
+        {% if can_create_templates %}<a href="/user/connections" class="moe-action-card"><i class="bi bi-plug" aria-hidden="true"></i><span><strong>{{ t(request, 'portal.sidebar.connections') }}</strong><small>{{ t(request, 'ui.connections_hint') }}</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a>{% endif %}
+      </div>
       <!-- Budget-Status-Karten -->
       {% set daily_pct  = (redis.daily_used / budget.daily_limit * 100) if budget.daily_limit else 0 %}
       {% set month_pct  = (redis.monthly_used / budget.monthly_limit * 100) if budget.monthly_limit else 0 %}
@@ -531,8 +542,8 @@ const CSRF_TOKEN = "{{ csrf_token }}";
           <span><i class="bi bi-key me-2"></i>{{ t(request, 'portal.active_keys') }}</span>
           <a href="/user/keys" class="btn btn-sm btn-outline-light py-0" style="font-size:.75rem">{{ t(request, 'portal.manage') }}</a>
         </div>
-        <div class="card-body p-0">
-          <table class="table table-sm mb-0">
+        <div class="card-body p-0 table-responsive" tabindex="0" role="region" aria-label="{{ t(request, 'page.api_keys') }}">
+          <table class="table table-sm mb-0" id="portal-keys-table">
             <thead class="table-light"><tr><th>Key-Prefix</th><th>Label</th><th>{{ t(request, 'lbl.last_used') }}</th></tr></thead>
             <tbody>
               {% for k in keys if k.is_active %}
@@ -649,7 +660,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
               const remEl = el('-remaining');
               const pctEl = el('-pct');
               if (bar)   { bar.style.width = pct.toFixed(1) + '%'; bar.className = 'progress-bar ' + barClass(pct); }
-              if (remEl) { remEl.textContent = fmt(rem) + ' remaining'; remEl.className = pct > 90 ? 'text-danger fw-semibold' : pct > 70 ? 'text-warning' : 'text-success'; }
+              if (remEl) { remEl.textContent = fmt(rem) + ' ' + {{ t(request, 'portal.remaining_col') | lower | tojson }}; remEl.className = pct > 90 ? 'text-danger fw-semibold' : pct > 70 ? 'text-warning' : 'text-success'; }
               if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
             }
             const resetEl = el('-reset');
@@ -664,7 +675,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
           updateCard('b-monthly', d.monthly_used, d.monthly_limit, d.monthly_reset_iso, d.monthly_input, d.monthly_output);
           updateCard('b-total',   d.total_used,   d.total_limit,   null,                d.total_input,   d.total_output);
           const ts = document.getElementById('budget-last-update');
-          if (ts) ts.textContent = 'Updated ' + new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          if (ts) ts.textContent = {{ t(request, 'lbl.last_update') | tojson }} + ' ' + new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         }
         // Initial reset countdowns (no API call, times come from server render on next poll)
         function startCountdownTick() {
@@ -700,7 +711,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── BILLING ───────────────────────────────────────────────────────── #}
       {% elif page == "billing" %}
-      <h5 class="mb-3"><i class="bi bi-bar-chart-line me-2 text-primary"></i>{{ t(request, 'page.billing') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-bar-chart-line me-2 text-primary"></i>{{ t(request, 'page.billing') }}</h1>
 
       <!-- Budget overview -->
       {% set now_utc = now() if now is defined else none %}
@@ -793,8 +804,8 @@ const CSRF_TOKEN = "{{ csrf_token }}";
       {% if summary.by_model %}
       <div class="card mb-4">
         <div class="card-header bg-dark text-white"><i class="bi bi-cpu me-2"></i>{{ t(request, 'portal.usage_by_model') }}</div>
-        <div class="card-body p-0">
-          <table class="table table-sm mb-0">
+        <div class="card-body p-0 table-responsive" tabindex="0" role="region" aria-label="{{ t(request, 'page.api_keys') }}">
+          <table class="table table-sm mb-0" id="portal-keys-table">
             <thead class="table-light"><tr><th>{{ t(request, 'portal.col_model') }}</th><th>{{ t(request, 'portal.filter_mode') }}</th><th>{{ t(request, 'portal.total_col') }}</th><th class="text-primary">Input</th><th class="text-success">Output</th><th>{{ t(request, 'portal.requests_col') }}</th></tr></thead>
             <tbody>
               {% for row in summary.by_model %}
@@ -852,7 +863,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
       {# ─── USAGE HISTORY ─────────────────────────────────────────────────── #}
       {% elif page == "usage" %}
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0"><i class="bi bi-list-columns me-2 text-primary"></i>{{ t(request, 'page.usage') }}</h5>
+        <h1 class="h4 mb-0"><i class="bi bi-list-columns me-2 text-primary"></i>{{ t(request, 'page.usage') }}</h1>
         <div class="dropdown">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
                   data-bs-toggle="dropdown">
@@ -1406,7 +1417,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── API KEYS ──────────────────────────────────────────────────────── #}
       {% elif page == "keys" %}
-      <h5 class="mb-3"><i class="bi bi-key me-2 text-primary"></i>{{ t(request, 'page.api_keys') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-key me-2 text-primary"></i>{{ t(request, 'page.api_keys') }}</h1>
 
       {% if request.session.get("new_api_key") %}
       <div class="alert alert-success">
@@ -1421,8 +1432,9 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       <div class="card mb-4">
         <div class="card-header bg-dark text-white"><i class="bi bi-key-fill me-2"></i>{{ t(request, 'portal.my_api_keys') }}</div>
-        <div class="card-body p-0">
-          <table class="table table-sm mb-0">
+        {% with filter_id="key-search", filter_target="#portal-keys-table tbody tr[id]", filter_label=t(request, "ui.search_keys") %}{% include "list_toolbar.html" %}{% endwith %}
+        <div class="card-body p-0 table-responsive" tabindex="0" role="region" aria-label="{{ t(request, 'page.api_keys') }}">
+          <table class="table table-sm mb-0" id="portal-keys-table">
             <thead class="table-light">
               <tr>
                 <th>Key-Prefix</th>
@@ -1442,8 +1454,8 @@ const CSRF_TOKEN = "{{ csrf_token }}";
                 <td><code>{{ k.key_prefix }}...</code></td>
                 <td>
                   <span id="key-label-text-{{ k.id }}" class="text-truncate" style="max-width:160px;display:inline-block">{{ k.label or '—' }}</span>
-                  <button class="btn btn-xs p-0 border-0 text-secondary ms-1" style="font-size:.85rem;line-height:1"
-                          title="{{ t(request, 'portal.label_edit_title') }}" onclick="openLabelEdit('{{ k.id }}', '{{ k.label or '' }}')">
+                  <button class="btn btn-sm border-0 text-secondary ms-1" style="font-size:.85rem;line-height:1"
+                          title="{{ t(request, 'portal.label_edit_title') }}" onclick='openLabelEdit({{ k.id | tojson }}, {{ (k.label or "") | tojson }})' >
                     <i class="bi bi-pencil"></i>
                   </button>
                 </td>
@@ -1451,7 +1463,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
                   {% if available_cc_profiles %}
                   <select class="form-select form-select-sm" style="min-width:140px;font-size:.75rem"
                           onchange="saveKeyCcProfile('{{ k.id }}', this.value)"
-                          id="key-cc-profile-{{ k.id }}">
+                          id="key-cc-profile-{{ k.id }}" aria-label="{{ t(request, 'portal.sidebar.cc_profiles') }} · {{ k.key_prefix }}">
                     <option value="">{{ t(request, 'portal.user_default') }}</option>
                     {% for p in available_cc_profiles %}
                     <option value="{{ p.id }}"{% if k.cc_profile_id == p.id %} selected{% endif %}>{{ p.name }}</option>
@@ -1465,7 +1477,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
                   <div class="form-check form-switch d-flex justify-content-center mb-0"
                        title="KI-gesteuertes dynamisches Expert-Routing ein-/ausschalten">
                     <input class="form-check-input" type="checkbox" role="switch"
-                           id="dyn-routing-{{ k.id }}"
+                           id="dyn-routing-{{ k.id }}" aria-label="Dynamic Routing · {{ k.key_prefix }}"
                            {% if k.dynamic_routing %}checked{% endif %}
                            onchange="saveKeyDynamicRouting('{{ k.id }}', this.checked)">
                   </div>
@@ -1474,7 +1486,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
                   <div class="form-check form-switch d-flex justify-content-center mb-0"
                        title="Nur lokale Endpoints (kein Cloud-API-Zugriff für diesen Key)">
                     <input class="form-check-input" type="checkbox" role="switch"
-                           id="local-only-{{ k.id }}"
+                           id="local-only-{{ k.id }}" aria-label="{{ t(request, 'ui.local_only') }} · {{ k.key_prefix }}"
                            {% if k.local_only_routing %}checked{% endif %}
                            onchange="saveKeyLocalOnlyRouting('{{ k.id }}', this.checked)">
                   </div>
@@ -1641,7 +1653,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── PROFILE ───────────────────────────────────────────────────────── #}
       {% elif page == "profile" %}
-      <h5 class="mb-3"><i class="bi bi-person-gear me-2 text-primary"></i>{{ t(request, 'page.profile_pw') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-person-gear me-2 text-primary"></i>{{ t(request, 'page.profile_pw') }}</h1>
       <div class="card">
         <div class="card-header bg-dark text-white"><i class="bi bi-person me-2"></i>{{ t(request, 'portal.my_data') }}</div>
         <div class="card-body">
@@ -1850,7 +1862,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── MY TEMPLATES ─────────────────────────────────────────────────── #}
       {% elif page == "templates" %}
-      <h5 class="mb-3"><i class="bi bi-diagram-3 me-2 text-primary"></i>{{ t(request, 'portal.my_templates_title') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-diagram-3 me-2 text-primary"></i>{{ t(request, 'portal.my_templates_title') }}</h1>
       <p class="text-muted small mb-3">{{ t(request, 'portal.my_templates_desc') | safe }}</p>
 
       <!-- Vom Admin freigegebene Templates -->
@@ -2576,7 +2588,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {# ─── CC PROFILES ──────────────────────────────────────────────────── #}
       {% elif page == "cc_profiles" %}
-      <h5 class="mb-3"><i class="bi bi-cpu me-2 text-primary"></i>{{ t(request, 'portal.my_cc_profiles') }}</h5>
+      <h1 class="h4 mb-3"><i class="bi bi-cpu me-2 text-primary"></i>{{ t(request, 'portal.my_cc_profiles') }}</h1>
       <p class="text-muted small mb-3">{{ t(request, 'portal.cc_profiles_desc') }}</p>
 
       <div class="d-flex justify-content-between align-items-center mb-3">
@@ -3076,7 +3088,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
       <!-- ─── User API Connections ─── -->
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-          <h5 class="mb-0"><i class="bi bi-plug me-2 text-primary"></i>{{ t(request, 'portal.my_connections_title') }}</h5>
+          <h1 class="h4 mb-0"><i class="bi bi-plug me-2 text-primary"></i>{{ t(request, 'portal.my_connections_title') }}</h1>
           <p class="text-muted small mb-0 mt-1">{{ t(request, 'portal.my_connections_desc') | safe }}</p>
         </div>
         <button class="btn btn-primary btn-sm" onclick="openConnModal()">
@@ -3490,7 +3502,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
       <!-- ─── Conversation Audit Log ─── -->
       <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-          <h5 class="mb-0"><i class="bi bi-shield-check me-2 text-primary"></i>{{ t(request, 'portal.audit_log.title') }}</h5>
+          <h1 class="h4 mb-0"><i class="bi bi-shield-check me-2 text-primary"></i>{{ t(request, 'portal.audit_log.title') }}</h1>
           <p class="text-muted small mb-0 mt-1">{{ t(request, 'portal.audit_log.subtitle') }}</p>
         </div>
         <div class="d-flex gap-2">
@@ -3748,20 +3760,24 @@ const CSRF_TOKEN = "{{ csrf_token }}";
 
       {% endif %}
 
-    </div><!-- /main content -->
+    </main><!-- /main content -->
   </div><!-- /flex -->
 </div><!-- /container -->
 {% endif %}
 
+{% if page in ["login", "forgot_password", "reset_password", "change_password"] %}</main>{% endif %}
 <footer class="text-center py-3 mt-2">
   {{ t(request, 'footer.portal') }}
 </footer>
 
 <script src="/static/js/bootstrap.bundle.min.js"></script>
+{% if page == "usage" %}
 <script src="/static/js/cytoscape.min.js"></script>
 <script src="/static/js/pipeline_diagram.js"></script>
+{% endif %}
 
 {% if page == "dashboard" and summary.daily %}
+<script src="/static/js/chart.umd.min.js"></script>
 <script>
 const dailyData = {{ summary.daily | tojson }};
 const ctx = document.getElementById('dailyChart').getContext('2d');
@@ -3918,7 +3934,7 @@ function cancelUserImport() {
 /* ─── Dark / Light theme toggle ─────────────────────────────────────────── */
 function _applyTheme(theme) {
   document.documentElement.setAttribute('data-bs-theme', theme);
-  localStorage.setItem('moe-theme', theme);
+  try { localStorage.setItem('moe-theme', theme); } catch (_) {}
   const icon = document.getElementById('themeIcon');
   if (icon) icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
 }
@@ -3927,7 +3943,7 @@ function toggleTheme() {
   _applyTheme(cur === 'dark' ? 'light' : 'dark');
 }
 document.addEventListener('DOMContentLoaded', function() {
-  const cur = localStorage.getItem('moe-theme') || 'light';
+  const cur = document.documentElement.getAttribute('data-bs-theme') || 'light';
   _applyTheme(cur);
 });
 </script>
