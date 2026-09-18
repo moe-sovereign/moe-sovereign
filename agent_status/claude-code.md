@@ -4916,3 +4916,15 @@ Plan / progress:
   gitignored file /opt/deployment/Github/moe-sovereign/.env.env.bak.ref-templates; it is revoked now.
 Notes:
 - Arm N (native baseline) stopped at 4/24 evaluations, resumable without --fresh; arms B-D open.
+
+## 2026-09-18T22:34:01Z — Benchmark Spur 1 -> Spur 2, one round each — in_progress
+Plan / progress:
+- Started on user request via benchmarks/run_spur1_and_spur2.sh with MOE_BENCHMARK_NUM_ROUNDS=1
+  (8 tasks x 4 conditions per track, --fresh), pipeline image revision bf2a5c7e (P0 fixes deployed, fixed judge).
+- Judge: hf.co/h3rb3rn/sovereign-judge-olmo31-32b:Q4_K_M @ N04-RTX for both tracks. Wrapper log:
+  benchmarks/results/spur1_spur2_1round_*.wrapper.log; watcher exits on track change, errors or judge fallbacks.
+- Preconditions checked: all 6 templates exist and are permitted, every referenced model is pulled on its endpoint,
+  13 endpoints reachable, native models present.
+Notes:
+- Do not restart langgraph-orchestrator or the inference nodes while this runs (invalidates the run).
+- Infra errors are analysed, fixed and the affected track restarted (project rule), not excluded.
