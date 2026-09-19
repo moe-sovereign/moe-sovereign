@@ -4967,3 +4967,22 @@ Notes:
   the removed tag; dynamic templates still use planner qwen3-planner:q4km.
 - Open: Spur 2 fine-tuned Qwen template does not exist yet (coder-4b Q4_K_M not pulled on N04/N02); baseline model choice;
   variant A/B/C decision and freeze of the other agent. Benchmark NOT restarted.
+
+## 2026-09-19T06:32:33Z — Benchmark setup: one pre-finetune template + fine-tuned templates per track — done (benchmark NOT started)
+Plan / progress:
+- Per track: 5 conditions = native_baseline, prefinetune_ai (ONE template with the pre-finetune models),
+  compound_ai_debate / compound_ai / ablation_no_graphrag (fine-tuned models from hf.co/h3rb3rn).
+- Spur 1: pre-finetune = "LUMI-G Base (Pre-Finetune)" (OLMo3-7B base planner, OLMo3.1-32B base judge, SmolLM3-3B base
+  experts), fine-tuned = "LUMI-G OLMo + SmolLM3 Sovereign Ensemble" (+ Deliberation, No-GraphRAG); judge OLMo31 fine-tune.
+- Spur 2: pre-finetune = "Open-Weight Base (Pre-Finetune)" with planner changed qwen3.5:4b -> qwen3.5:9b (base Qwen3.5-9B,
+  pulled on N04, old value in benchmarks/results/runbook/spur2_planner_backup_20260919.json); fine-tuned = NEW
+  "Open-Weight Finetuned Ensemble" (+ Deliberation, No-GraphRAG; ids tmpl-ow-ft*, granted to philipp+horndev):
+  planner moe-sovereign-planner-9b, 15 categories -> moe-expert-*-4b:Q4_K_M (mapping taken from the frontier template),
+  judge sovereign-judge-27b. moe-expert-coder-4b:Q4_K_M pulled on N04 (was missing).
+- Verified: all 8 templates resolve, all referenced models present on their endpoints, real requests OK through the
+  Pre-Finetune and the Finetuned Spur 2 chains (planner, MCP, coder-4b expert on N04-TM10-01, Qwen judge).
+- Harness: optional prefinetune_ai condition + finetuning_system_delta; runner script now tracked.
+Notes:
+- Native baseline defaults (to be confirmed by the user): Spur 1 olmo31-32b-instruct-base-fixed:latest, Spur 2 qwen3.6:27b.
+- Still open before starting: variant A/B/C decision and freezing the other agent (running orchestrator = image
+  :hotpatched-20260919 incl. its files; base template tmpl-11f532fc has a forced security shadow expert).
