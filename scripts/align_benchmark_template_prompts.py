@@ -9,8 +9,13 @@ must receive the SAME prompts, otherwise the comparison mixes a weights effect w
 What it sets, identically in every target template:
   * experts[cat].system_prompt  = training role prompt of the domain role assigned to the category
   * judge_prompt                = training judge prompt
-  * planner_prompt              = training preamble + category block (training format) for the template's own
-                                  categories + the "never return an empty array" guard
+  * planner_prompt              = the original descriptive category list (validated by A/B test, see below) for the
+                                  template's own categories, in a fixed order, plus the "never return an empty array" guard
+
+Planner prompt decision (A/B test 2026-09-19, 9 planner calls per variant on tmpl-smollm3-nograph): the training preamble
++ training-format category block (v1, v2) never routed a GDPR question to `governance` (0/6) and v1 once returned an
+empty plan; the original list format ("- category: description") routed it 3/3 and never returned an empty plan. The
+planner prompt is therefore NOT aligned with the training prompt; experts and judge are.
 
 Usage (host only, uses ``docker exec terra_checkpoints psql``):
     python3 scripts/align_benchmark_template_prompts.py            # dry run, prints what would change
@@ -59,31 +64,47 @@ CATEGORY_ROLE = {
     "compounding_knowledge": "graphrag", "graphrag": "graphrag", "science": "graphrag",
 }
 
-# Descriptions for categories that are not part of the training taxonomy (wording taken from the existing template
-# prompts); categories of the training pool are rendered with the training descriptions.
-EXTRA_DESCRIPTIONS = {
-    "research": ["Literature review, fact-finding, synthesizing information from sources"],
-    "security": ["Vulnerability analysis, secure coding review, threat assessment"],
-    "governance": ["Policy, regulation, compliance, organizational process questions"],
-    "compounding_knowledge": ["Storing, updating or querying structured facts and relationships in the",
-                              "Knowledge Graph (GraphRAG); use it whenever the task persists or retrieves them"],
-    "precision_tools": ["Deterministic calculations via a registered MCP tool ONLY;", "never invent an mcp_tool name"],
-    "systems_programming": ["Systems programming: concurrency, memory ordering, kernel and eBPF code"],
-    "web_researcher": ["Web research and literature extraction"],
-    "tool_expert": ["MCP tool execution"],
-    "graphrag": ["Knowledge-graph extraction and relational reasoning (GraphRAG)"],
+# Planner category descriptions in the original list style. The eight Spur 1 entries are verbatim from the original
+# fine-tuned Spur 1 planner prompt (each hint was added after an observed routing failure); the rest follow the same style.
+PLANNER_DESCRIPTIONS = {
+    "general": "everyday/cross-domain questions with no specialist fit.",
+    "security": "vulnerability analysis, secure coding review, threat assessment.",
+    "research": "literature review, fact-finding, synthesizing information from sources.",
+    "governance": "policy, regulation, compliance, organizational process questions.",
+    "compounding_knowledge": (
+        "storing, updating, or querying structured knowledge in the Knowledge Graph/GraphRAG (e.g. system topologies, "
+        "entity relationships, cluster architecture, \"remember/store this fact\" tasks) -- use this whenever the task is "
+        "about persisting or retrieving structured facts/relationships, even if the subject matter (auth, networking, "
+        "etc.) sounds like another category."
+    ),
+    "precision_tools": (
+        "ONLY deterministic calculations dispatched to a real registered MCP tool (e.g. calculate, subnet_calc, "
+        "vlsm_subnet_calc). Never invent an mcp_tool name -- if no exact tool matches, do not use this category."
+    ),
+    "data_analyst": "data pipelines, databases, analytics.",
+    "code_reviewer": (
+        "writing, reviewing, or explaining source code (any language), including systems programming, kernel/eBPF code, "
+        "and code review. Never route code generation through precision_tools -- there is no code-generation MCP tool."
+    ),
+    "reasoning": "logic puzzles, argumentation, deductive reasoning.",
+    "science": "physics, chemistry, biology, research methodology.",
+    "math": "mathematical proofs, derivations, theoretical mathematics (NOT for arithmetic -- use precision_tools).",
+    "technical_support": "troubleshooting, installation, configuration, DevOps, networking.",
+    "systems_programming": "systems programming: concurrency, memory ordering, kernel and eBPF code.",
+    "web_researcher": "web research and literature extraction.",
+    "tool_expert": "MCP tool execution.",
+    "graphrag": "knowledge-graph extraction and relational reasoning (GraphRAG).",
 }
-# Fixed category order so that templates with the same categories get byte-identical planner prompts.
+PLANNER_HEADER = (
+    "You are a specialized planner model in a Mixture of Experts (MoE) system. Coordinate planning, tool execution, "
+    "and task delegation across these expert areas:"
+)
+# Fixed category order (the Spur 1 subset keeps the original order) so equal category sets give byte-identical prompts.
 CATEGORY_ORDER = [
-    "general", "reasoning", "research", "web_researcher", "science", "security", "governance", "code_reviewer",
-    "systems_programming", "precision_tools", "math", "tool_expert", "data_analyst", "technical_support",
-    "compounding_knowledge", "graphrag", "dynamic",
+    "general", "reasoning", "security", "research", "web_researcher", "science", "governance", "compounding_knowledge",
+    "graphrag", "precision_tools", "tool_expert", "math", "data_analyst", "technical_support", "code_reviewer",
+    "systems_programming", "dynamic",
 ]
-# The fine-tuned expert that serves data_analyst is the data-infrastructure expert (Spur 1 assignment), so the
-# planner must be told the same scope instead of the training pool's "statistics / ML" wording.
-DESCRIPTION_OVERRIDES = {
-    "data_analyst": ["Data pipelines, databases, SQL and analytics"],
-}
 # Model assignments that differ between the tracks for the same category name (Spur 1 is the reference).
 MODEL_FIXES = {
     "Open-Weight Finetuned Ensemble": {"data_analyst": "hf.co/h3rb3rn/moe-expert-datainfra-4b:Q4_K_M"},
@@ -115,34 +136,21 @@ def psql(sql: str, stdin: str | None = None) -> str:
 
 
 def canonical_prompts():
+    """Training role prompts for experts and judge (the planner prompt is not taken from training, see docstring)."""
     experts_mod = _load("scripts/generate_expert_ensemble_datasets.py", "gen_experts")
-    planner_mod = _load("scripts/generate_planner_dataset.py", "gen_planner")
     strip = lambda s: re.sub(r"<\|im_(?:start|end)\|>(?:system)?", "", s).strip()
-    roles = {k: strip(v) for k, v in experts_mod.CHATML_SYSTEM_PROMPTS.items()}
-    train = planner_mod.PLANNER_SYSTEM_PROMPT
-    preamble = train[: train.index("MANDATORY:")].strip()
-    return roles, preamble, planner_mod
+    return {k: strip(v) for k, v in experts_mod.CHATML_SYSTEM_PROMPTS.items()}
 
 
-def planner_prompt(categories: list[str], preamble: str, planner_mod) -> str:
-    pool = planner_mod._CANONICAL_LLM_CATEGORIES
-    described = {}
-    for cat in sorted(categories, key=CATEGORY_ORDER.index):
-        if cat == "dynamic":  # handled by the runtime "DYNAMIC EXPERT" section
-            continue
-        described[cat] = DESCRIPTION_OVERRIDES.get(cat) or pool.get(cat) or EXTRA_DESCRIPTIONS.get(cat)
-        if described[cat] is None:
-            raise SystemExit(f"no description for category {cat!r}; extend EXTRA_DESCRIPTIONS")
-    # training column width (21) unless a category name is longer
-    column = max(planner_mod._CATEGORY_COLUMN, max(len(name) + 4 for name in described))
+def planner_prompt(categories: list[str]) -> str:
     lines = []
-    for name, description in described.items():
-        head, *rest = description
-        lines.append(f'"{name}"'.ljust(column) + head)
-        lines.extend(" " * column + line for line in rest)
-    block = "\n".join(lines)
-    rule = "─" * 66
-    return f"{preamble}\n\n{rule}\nLLM EXPERT CATEGORIES\n{rule}\n{block}\n\n{EMPTY_PLAN_GUARD}"
+    for cat in sorted(categories, key=CATEGORY_ORDER.index):
+        if cat == "dynamic":  # covered by the "dynamic" sentence below and the runtime DYNAMIC EXPERT section
+            continue
+        if cat not in PLANNER_DESCRIPTIONS:
+            raise SystemExit(f"no planner description for category {cat!r}; extend PLANNER_DESCRIPTIONS")
+        lines.append(f"- {cat}: {PLANNER_DESCRIPTIONS[cat]}")
+    return PLANNER_HEADER + "\n" + "\n".join(lines) + "\n" + EMPTY_PLAN_GUARD
 
 
 def h(text: str) -> str:
@@ -152,9 +160,10 @@ def h(text: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
-    ap.add_argument("--backup", default=str(ROOT / "benchmarks/results/runbook/template_prompts_backup.json"))
+    stamp = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ap.add_argument("--backup", default=str(ROOT / f"benchmarks/results/runbook/template_prompts_backup_{stamp}.json"))
     args = ap.parse_args()
-    roles, preamble, planner_mod = canonical_prompts()
+    roles = canonical_prompts()
     judge = roles["judge"]
     names = ", ".join("'" + n.replace("'", "''") + "'" for n in TARGETS)
     rows = json.loads(psql(f"select json_agg(t) from (select id, name, config_json from admin_expert_templates "
@@ -178,7 +187,7 @@ def main() -> None:
                 if slot.get("role") != "always":
                     slot["model"] = model
         new["judge_prompt"] = judge
-        new["planner_prompt"] = planner_prompt(cats, preamble, planner_mod)
+        new["planner_prompt"] = planner_prompt(cats)
         changed = [k for k in ("planner_prompt", "judge_prompt") if new[k] != cfg.get(k)]
         changed += [f"experts.{c}" for c in cats if new["experts"][c]["system_prompt"] != cfg["experts"][c].get("system_prompt")]
         changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if new["experts"][c]["models"] != cfg["experts"][c]["models"]]
@@ -188,6 +197,8 @@ def main() -> None:
     if not args.apply:
         print(f"\ndry run: {len(updates)} of {len(rows)} templates would change (use --apply)")
         return
+    if Path(args.backup).exists():
+        raise SystemExit(f"refusing to overwrite an existing backup: {args.backup}")
     Path(args.backup).write_text(json.dumps(backup, indent=1))
     sql = ["BEGIN;"] + [
         f"UPDATE admin_expert_templates SET config_json=$j${cfg}$j$, updated_at=now()::text WHERE id='{tid}';"

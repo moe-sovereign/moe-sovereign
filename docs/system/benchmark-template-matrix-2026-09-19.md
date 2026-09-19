@@ -15,12 +15,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | a9300b51 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | a9300b51 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | a9300b51 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | a9300b51 / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | a9300b51 / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | a9300b51 / 627b2c29 | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
 
 ### Spur 1 (open source): expert assignment (category -> model @ endpoint)
 
@@ -41,12 +41,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 43275a9b / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 43275a9b / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 43275a9b / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 43275a9b / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 43275a9b / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 43275a9b / 627b2c29 | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
 
 ### Spur 2 (open weight): expert assignment (category -> model @ endpoint)
 
@@ -79,11 +79,14 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
    the templates again: re-run this script before every benchmark start. `review_lenses` still exist in the Review and
    Review NoSC arms (intended) and in the three `LUMI-G Ensemble` hybrids (outside the matrix).
 2. **Spur 2 is comparable.** All six templates pass C1 to C4.
-3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`: each expert category gets the
-   training role prompt of its assigned domain expert, the judge gets the training judge prompt, and the planner gets the
-   training preamble plus a category block in the training format and the guard against empty plans. The full
-   12.8k-character training planner prompt is deliberately not used because `graph/planner.py` appends the routing
-   rules itself and they would appear twice. The same category has the same prompt hash in both tracks.
+3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`. Experts: each category gets the
+   training role prompt of its assigned domain expert; judge: the training judge prompt. **Planner: not the training
+   prompt.** An A/B test (9 planner calls per variant, 2026-09-19) showed that the training preamble with a
+   training-format category block never routed a GDPR question to `governance` (0/6) and once returned an empty plan,
+   while the original list format routed it 3/3 and never returned an empty plan. The canonical planner prompt is
+   therefore the original descriptive list ("- category: description" plus the empty-plan guard) for each template's own
+   categories in a fixed order; for Spur 1 it is byte-identical to the validated original. The same category has the
+   same expert prompt hash in both tracks. Expert-prompt alignment itself has no A/B evidence yet.
 4. **Model assignment aligned across tracks:** `data_analyst` was served by the precision expert in Spur 2 and by the
    data-infrastructure expert in Spur 1; Spur 2 now follows Spur 1. Questionable but unchanged: Spur 2 `science` and
    `dynamic` are served by the GraphRAG and data-infrastructure experts.

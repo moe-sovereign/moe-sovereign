@@ -84,6 +84,7 @@ weights-only comparison is fair only if both families use the same prompts.
 | 34 dynamic templates and their 34 permission rows deleted (never used, all broken; backup `benchmarks/results/runbook/dynamic_templates_backup_20260919.json`) | applied (2026-09-19, operator approval) |
 | Seed `seed_default_admin_templates()` removed from `admin_ui/database.py` and `admin_ui/app.py`; the four seeded `MoE Sovereign ...` templates (planner `moe-sovereign-student:4b`) and their 16 permission rows deleted (backup `moe_sovereign_seeded_templates_backup_20260919.json`) | applied; takes effect in the running admin process at its next restart |
 | Harness defaults for the three template variables now point at the Spur 1 fine-tuned templates | applied |
+| Prompts of 14 benchmark templates aligned by `scripts/align_benchmark_template_prompts.py`: experts and judge use the training role prompts, the planner uses the original descriptive category list (not the training prompt, see below); backup of the pre-alignment rows in `benchmarks/results/runbook/template_prompts_backup_original_pre_alignment_20260919.json` | applied (2026-09-19, operator approval) |
 
 ## 5. Not verified
 
@@ -95,9 +96,17 @@ weights-only comparison is fair only if both families use the same prompts.
 ## 6. Recommendations (planned)
 
 1. Stop the dynamic router from persisting templates whose planner does not exist (the 34 dead ones are deleted).
-2. **Align prompts with training** in the fine-tuned and pre-finetune benchmark templates: experts get the role prompt
-   from `CHATML_SYSTEM_PROMPTS`, the judge gets the training judge prompt, the planner gets the training prompt
-   rendered for the template's categories. Run it as an A/B arm against the current generic prompts.
+2. **Align prompts with training** in the fine-tuned and pre-finetune benchmark templates: *done for experts and judge*
+   (training role prompts, effect not yet measured). *Planner: deliberately not aligned.* A/B test on 2026-09-19 (9
+   planner calls per variant, one Spur 1 template, GDPR probe question; n is small, so this is a routing sanity check,
+   not a score measurement):
+
+   | Planner prompt | empty plans | GDPR routed to `governance` |
+   |---|---:|---:|
+   | Original list format (kept) | 0 / 9 | 3 / 3 |
+   | Training preamble + category list (v1) | 1 / 9 | 0 / 3 |
+   | Training preamble, variant 2 | 0 / 9 | 0 / 3 |
+   | Rule-based prompt from the parallelisation plan | 0 / 9 | 1 / 3 |
 3. Replace the global default planner (`PLANNER_MODEL`, currently `qwen3-planner:q4km`, present on no node) with an
    existing fine-tuned planner; requires an orchestrator restart. The 49 user templates that use
    `moe-sovereign-student:4b` belong to their owners.

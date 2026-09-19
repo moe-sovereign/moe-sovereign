@@ -61,11 +61,14 @@ NOTES = """## Findings and open points
    the templates again: re-run this script before every benchmark start. `review_lenses` still exist in the Review and
    Review NoSC arms (intended) and in the three `LUMI-G Ensemble` hybrids (outside the matrix).
 2. **Spur 2 is comparable.** All six templates pass C1 to C4.
-3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`: each expert category gets the
-   training role prompt of its assigned domain expert, the judge gets the training judge prompt, and the planner gets the
-   training preamble plus a category block in the training format and the guard against empty plans. The full
-   12.8k-character training planner prompt is deliberately not used because `graph/planner.py` appends the routing
-   rules itself and they would appear twice. The same category has the same prompt hash in both tracks.
+3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`. Experts: each category gets the
+   training role prompt of its assigned domain expert; judge: the training judge prompt. **Planner: not the training
+   prompt.** An A/B test (9 planner calls per variant, 2026-09-19) showed that the training preamble with a
+   training-format category block never routed a GDPR question to `governance` (0/6) and once returned an empty plan,
+   while the original list format routed it 3/3 and never returned an empty plan. The canonical planner prompt is
+   therefore the original descriptive list ("- category: description" plus the empty-plan guard) for each template's own
+   categories in a fixed order; for Spur 1 it is byte-identical to the validated original. The same category has the
+   same expert prompt hash in both tracks. Expert-prompt alignment itself has no A/B evidence yet.
 4. **Model assignment aligned across tracks:** `data_analyst` was served by the precision expert in Spur 2 and by the
    data-infrastructure expert in Spur 1; Spur 2 now follows Spur 1. Questionable but unchanged: Spur 2 `science` and
    `dynamic` are served by the GraphRAG and data-infrastructure experts.

@@ -1,0 +1,254 @@
+# =============================================================================
+#  MoE Sovereign — Langfuse Observability Stack (LLM Tracing for LangGraph)
+#
+#  Services: Langfuse Web (UI/API), Langfuse Worker (async ingestion),
+#            dedicated Postgres (metadata), ClickHouse (trace analytics),
+#            Redis (queue), MinIO (S3-compatible blob storage for events/media).
+#
+#  Deliberately isolated from terra_checkpoints/terra_cache (the main stack's
+#  Postgres/Redis): no coupling risk between Langfuse's own schema migrations
+#  and the LangGraph checkpoint store or app-level rate limiting.
+#
+#  Config reference: https://raw.githubusercontent.com/langfuse/langfuse/main/docker-compose.yml
+#  (env var names and the minio bucket-init trick below are taken from there;
+#  pinned versions, network binding and TELEMETRY_ENABLED=false are this
+#  project's own choices — see comments below for what and why).
+#
+#  Usage (standalone, after the main stack is running):
+#    docker compose -f docker-compose.langfuse.yml --profile langfuse up -d
+#
+#  Managed automatically by install.sh when INSTALL_LANGFUSE=true (only
+#  offered alongside INSTALL_MONITORING=true).
+#  Requires moe-infra to be running so the external network exists.
+# =============================================================================
+
+services:
+
+  # ── Postgres — Langfuse's own metadata store (projects, users, API keys) ────
+  langfuse-postgres:
+    image: postgres:17.11-alpine
+    container_name: langfuse-postgres
+    restart: unless-stopped
+    profiles: [langfuse]
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:?missing — run install.sh first}
+      POSTGRES_DB: langfuse
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    networks:
+      - moe_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── ClickHouse — trace/observation analytics store ───────────────────────────
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:25.12.11.4-alpine
+    container_name: langfuse-clickhouse
+    restart: unless-stopped
+    profiles: [langfuse]
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?missing — run install.sh first}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      - "127.0.0.1:${LANGFUSE_CLICKHOUSE_HTTP_PORT:-8143}:8123"   # debug/inspection only
+    networks:
+      - moe_net
+    healthcheck:
+      # 127.0.0.1, not localhost: this host's Docker networking has IPv6
+      # disabled, so "localhost" resolves to ::1 first and wget gets
+      # "Connection refused" even though the IPv4 0.0.0.0:8123 listener is
+      # healthy (verified live — clickhouse-server was actually up the whole
+      # time). Upstream Langfuse's own reference compose uses "localhost"
+      # here and hits the same false-unhealthy on IPv6-disabled hosts.
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  # ── Redis — Langfuse's own ingestion queue (BullMQ), not a cache ─────────────
+  # noeviction is required: Langfuse uses this Redis as a durable job queue, so
+  # evicting keys under memory pressure would silently drop trace ingestion jobs.
+  langfuse-redis:
+    image: redis:7.4.11
+    container_name: langfuse-redis
+    restart: unless-stopped
+    profiles: [langfuse]
+    command: >
+      --requirepass ${LANGFUSE_REDIS_PASSWORD:?missing — run install.sh first}
+      --maxmemory-policy noeviction
+    volumes:
+      - langfuse_redis_data:/data
+    networks:
+      - moe_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  # ── MinIO — S3-compatible blob storage for event/media uploads ──────────────
+  # MinIO's own upstream image publishing was discontinued (Oct 2025, repo
+  # archived Apr 2026); this is the actively-maintained build Langfuse's own
+  # official compose now uses, pinned by digest since Chainguard's free tier
+  # only offers a rolling "latest" tag, not versioned ones. Bucket creation is
+  # baked into the entrypoint (no separate init/mc container needed).
+  # Resolved from cgr.dev/chainguard/minio:latest on 2026-08-28 — re-resolve
+  # periodically via: crane digest cgr.dev/chainguard/minio:latest
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio@sha256:6bf8b5199cd0333152558a9596b653a67142636203cf4393f0a8b41e2797d73e
+    container_name: langfuse-minio
+    restart: unless-stopped
+    profiles: [langfuse]
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_USER:-langfuse}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_PASSWORD:?missing — run install.sh first}
+    volumes:
+      - langfuse_minio_data:/data
+    ports:
+      # Both bound to 127.0.0.1 only, unlike upstream's own example (which
+      # exposes the S3 API port publicly for browser media access) — this
+      # stack is internal-only like Prometheus/node-exporter/cadvisor
+      # elsewhere in this repo, not routed through Caddy. Consequence: if a
+      # trace ever includes an uploaded media attachment, the browser-side
+      # presigned URL (pointing at the internal langfuse-minio:9000 name)
+      # will only resolve on the host itself — not a concern for this
+      # project's use case (text-only LangGraph LLM tracing, no manual
+      # media uploads).
+      - "127.0.0.1:${LANGFUSE_MINIO_API_PORT:-9190}:9000"
+      - "127.0.0.1:${LANGFUSE_MINIO_CONSOLE_PORT:-9191}:9001"
+    networks:
+      - moe_net
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+  # ── Langfuse Worker — async trace ingestion (Postgres/ClickHouse writes) ────
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.24.0
+    container_name: langfuse-worker
+    restart: unless-stopped
+    profiles: [langfuse]
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${LANGFUSE_WORKER_PORT:-3030}:3030"
+    environment: &langfuse-shared-env
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD}@langfuse-postgres:5432/langfuse
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      # Required explicitly: without it, Langfuse's migration tool assumes a
+      # replicated/clustered ClickHouse and issues `CREATE TABLE ... ON
+      # CLUSTER default ... ReplicatedMergeTree`, which fails hard against
+      # this single-node setup (no Zookeeper) with "There is no Zookeeper
+      # configuration in server config" — live-verified 2026-08-29.
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-langfuse}
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_USER:-langfuse}
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+    networks:
+      - moe_net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+
+  # ── Langfuse Web — UI/API, what services/langfuse_client.py talks to ────────
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.24.0
+    container_name: moe-langfuse
+    restart: unless-stopped
+    profiles: [langfuse]
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-worker:
+        condition: service_started
+    environment:
+      <<: *langfuse-shared-env
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_HOST_PORT:-3020}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET}
+      # Deterministically provisions org/project/API keys on first boot so
+      # LANGFUSE_PUBLIC_KEY/LANGFUSE_SECRET_KEY (generated by install.sh) are
+      # valid immediately — no manual setup-wizard click-through needed.
+      LANGFUSE_INIT_ORG_ID: moe-sovereign
+      LANGFUSE_INIT_ORG_NAME: MoE Sovereign
+      LANGFUSE_INIT_PROJECT_ID: langgraph
+      LANGFUSE_INIT_PROJECT_NAME: LangGraph Pipeline
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+    ports:
+      # 127.0.0.1-only like Prometheus/AKHQ/etc. elsewhere in this repo — not
+      # routed through Caddy by default, since trace content (prompts/
+      # responses) is sensitive. See install.sh's Langfuse success-banner note.
+      - "127.0.0.1:${LANGFUSE_HOST_PORT:-3020}:3000"
+    networks:
+      - moe_net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          # 1024M was too tight — the Next.js 16 web process OOM-crashed
+          # ("JavaScript heap out of memory") during LANGFUSE_INIT_* startup,
+          # live-verified 2026-08-29. 2G gives it headroom.
+          memory: 2048M
+
+# =============================================================================
+volumes:
+  langfuse_postgres_data:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_redis_data:
+  langfuse_minio_data:
+
+networks:
+  moe_net:
+    name: moe-infra_default
+    external: true

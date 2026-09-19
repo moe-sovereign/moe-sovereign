@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "align_benchmark_template_prompts.py"
+SPUR1 = ["general", "research", "security", "governance", "data_analyst", "code_reviewer", "precision_tools", "compounding_knowledge"]
 
 
 @pytest.fixture(scope="module")
@@ -16,43 +17,41 @@ def al():
     return module
 
 
-@pytest.fixture(scope="module")
-def canon(al):
-    return al.canonical_prompts()
-
-
-def test_every_mapped_category_has_an_order_and_a_training_role(al, canon):
-    roles, _, _ = canon
+def test_every_mapped_category_has_an_order_a_description_and_a_training_role(al):
+    roles = al.canonical_prompts()
     assert set(al.CATEGORY_ROLE) == set(al.CATEGORY_ORDER)
     assert set(al.CATEGORY_ROLE.values()) <= set(roles)
+    assert set(al.PLANNER_DESCRIPTIONS) == set(al.CATEGORY_ORDER) - {"dynamic"}
 
 
-def test_training_prompts_are_clean_and_long(canon):
-    roles, preamble, _ = canon
+def test_training_prompts_are_clean_and_long(al):
+    roles = al.canonical_prompts()
     assert "<|im_" not in "".join(roles.values())
     assert all(len(v) > 200 for k, v in roles.items() if k != "judge")
-    assert preamble.startswith("You are the orchestrator of MoE Sovereign")
+    assert roles["judge"].startswith("You are the MoE Sovereign Paraconsistent Quality Gate")
 
 
-def test_planner_prompt_is_independent_of_category_order(al, canon):
-    _, preamble, planner_mod = canon
-    cats = ["general", "research", "security", "governance", "data_analyst", "code_reviewer", "precision_tools", "compounding_knowledge"]
-    assert al.planner_prompt(cats, preamble, planner_mod) == al.planner_prompt(list(reversed(cats)), preamble, planner_mod)
+def test_planner_prompt_is_independent_of_category_order(al):
+    assert al.planner_prompt(SPUR1) == al.planner_prompt(list(reversed(SPUR1)))
 
 
-def test_long_category_names_do_not_touch_their_description(al, canon):
-    _, preamble, planner_mod = canon
-    text = al.planner_prompt(["general", "compounding_knowledge"], preamble, planner_mod)
-    line = next(l for l in text.splitlines() if l.startswith('"compounding_knowledge"'))
-    assert line.startswith('"compounding_knowledge"  ')
+def test_spur1_planner_prompt_is_the_validated_original(al):
+    """The A/B-validated original prompt (1635 chars): list format, original order, empty-plan guard."""
+    text = al.planner_prompt(SPUR1)
+    assert len(text) == 1635
+    assert text.startswith("You are a specialized planner model in a Mixture of Experts (MoE) system.")
+    order = [line.split(":")[0][2:] for line in text.splitlines() if line.startswith("- ")]
+    assert order == ["general", "security", "research", "governance", "compounding_knowledge", "precision_tools", "data_analyst", "code_reviewer"]
+    assert "NEVER return an empty JSON array" in text
+    assert "MULTI-DISCIPLINARY" not in text
 
 
-def test_guard_against_empty_plans_is_present(al, canon):
-    _, preamble, planner_mod = canon
-    assert "NEVER return an empty JSON array" in al.planner_prompt(["general"], preamble, planner_mod)
+def test_planner_prompt_lists_every_category_but_dynamic(al):
+    text = al.planner_prompt(list(al.CATEGORY_ORDER))
+    for cat in al.CATEGORY_ORDER:
+        assert (f"- {cat}:" in text) == (cat != "dynamic")
 
 
-def test_unknown_category_is_rejected(al, canon):
-    _, preamble, planner_mod = canon
+def test_unknown_category_is_rejected(al):
     with pytest.raises(ValueError):
-        al.planner_prompt(["general", "no_such_category"], preamble, planner_mod)
+        al.planner_prompt(["general", "no_such_category"])
