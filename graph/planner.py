@@ -133,13 +133,15 @@ def _sanitize_plan(raw: list, fallback_input: str,
     expert fallbacks (with different models) cannot be triggered.
     """
     NON_EXPERT_CATEGORIES = {"precision_tools", "research"}
-    _special = {"agentic_coder", "memory_recall", "dynamic"}
+    _special = {"agentic_coder", "memory_recall"}
     if user_expert_cats:
         # Template active: only allow template categories + non-expert types.
         # Global EXPERTS categories are excluded to prevent silent model substitution.
+        # "dynamic" hands the task to expert_builder, which floats to any model on any endpoint; a template
+        # that pins its roster must not be left through it (unless the template itself defines "dynamic").
         valid_cats = user_expert_cats | NON_EXPERT_CATEGORIES | _special
     else:
-        valid_cats = set(EXPERTS.keys()) | NON_EXPERT_CATEGORIES | _special
+        valid_cats = set(EXPERTS.keys()) | NON_EXPERT_CATEGORIES | _special | {"dynamic"}
     result = []
     for item in raw:
         if not isinstance(item, dict):
