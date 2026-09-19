@@ -435,7 +435,6 @@ async def _poll_and_record_gpu_history() -> None:
 async def lifespan(app: FastAPI):
     await db.init_db()
     await db.seed_initial_admin()
-    await db.seed_default_admin_templates()
     logger.info(f"User DB initialized: {db.DB_PATH}")
     # Migrate expert templates from .env to database (one-time) and populate cache
     await refresh_expert_templates_cache()
