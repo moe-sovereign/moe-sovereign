@@ -295,3 +295,21 @@ class TestRedisPasswordLookup:
         import re
         src = pathlib.Path("benchmarks/run_scientific_benchmark.py").read_text()
         assert not re.search(r"password\s*=\s*[\"'][A-Za-z0-9+/_\-]{12,}[\"']", src)
+
+
+class TestPrefinetuneCondition:
+    def test_disabled_by_default(self, monkeypatch):
+        import importlib
+        monkeypatch.delenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", raising=False)
+        from benchmarks import run_scientific_benchmark as rsb
+        importlib.reload(rsb)
+        assert rsb.TEMPLATES["prefinetune_ai"] == ""
+
+    def test_enabled_via_env(self, monkeypatch):
+        import importlib
+        monkeypatch.setenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "LUMI-G Base (Pre-Finetune)")
+        from benchmarks import run_scientific_benchmark as rsb
+        importlib.reload(rsb)
+        assert rsb.TEMPLATES["prefinetune_ai"] == "LUMI-G Base (Pre-Finetune)"
+        monkeypatch.delenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", raising=False)
+        importlib.reload(rsb)

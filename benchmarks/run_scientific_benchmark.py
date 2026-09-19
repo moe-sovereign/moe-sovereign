@@ -93,6 +93,10 @@ TEMPLATES = {
     "ablation_no_graphrag": os.environ.get(
         "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "MoE Sovereign Ablation (No GraphRAG)"
     ),
+    # Optional reference arm: the same ensemble built from the models BEFORE fine-tuning
+    # (e.g. "LUMI-G Base (Pre-Finetune)"). Empty = condition disabled. Comparing it with
+    # compound_ai isolates the system-level effect of the fine-tuned weights.
+    "prefinetune_ai": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "").strip(),
 }
 
 VALID_VERDICTS = {"EXCELLENT", "PASS", "DEFICIENT", "FAIL"}
@@ -1021,6 +1025,9 @@ async def main():
         ("ablation_no_graphrag", TEMPLATES["ablation_no_graphrag"]),
         ("native_baseline", NATIVE_MODEL),
     ]
+    if TEMPLATES["prefinetune_ai"]:
+        # run right after the fine-tuned reference (compound_ai) for each task, native stays last
+        conditions.insert(1, ("prefinetune_ai", TEMPLATES["prefinetune_ai"]))
     _cond_filter = os.environ.get("MOE_BENCHMARK_CONDITIONS", "").strip()
     if _cond_filter:
         _wanted_conds = {c.strip() for c in _cond_filter.split(",") if c.strip()}
@@ -1217,6 +1224,18 @@ async def main():
     native_overall = summary_by_condition.get("native_baseline", {}).get("mean_overall_score", 0.0)
     native_time = summary_by_condition.get("native_baseline", {}).get("mean_latency_s", 0.0)
     compound_vs_native_delta = round(c_overall - native_overall, 2)
+    _pre = summary_by_condition.get("prefinetune_ai")
+    finetuning_system_delta = None
+    if _pre:
+        finetuning_system_delta = {
+            "prefinetune_template": TEMPLATES["prefinetune_ai"],
+            "finetuned_template": TEMPLATES["compound_ai"],
+            "prefinetune_overall_score": _pre.get("mean_overall_score", 0.0),
+            "finetuned_overall_score": c_overall,
+            "delta_overall": round(c_overall - _pre.get("mean_overall_score", 0.0), 2),
+            "prefinetune_mean_latency_s": _pre.get("mean_latency_s", 0.0),
+            "finetuned_mean_latency_s": summary_by_condition.get("compound_ai", {}).get("mean_latency_s", 0.0),
+        }
 
     output_payload = {
         "run_id": run_id,
@@ -1227,6 +1246,7 @@ async def main():
         "judge_reference_fix": True,
         "summary": summary_by_condition,
         "summary_valid_only": summary_by_condition_valid_only,
+        "finetuning_system_delta": finetuning_system_delta,
         "lumi_finetuning_validation": {
             # Dynamically reference template rather than obsolete student:4b label
             "planner_model": f"{TEMPLATES['compound_ai']} (Planner on N04-RGTX)",
