@@ -28,7 +28,9 @@ TRACKS = {
     "Spur 1 (open source)": {
         "native_default": "olmo31-32b-instruct-base-fixed:latest",
         "rows": [
-            ("Pre-Finetune reference", "LUMI-G Base (Pre-Finetune)", None),
+            ("Pre-Finetune, GraphRAG", "LUMI-G Base (Pre-Finetune)", None),
+            ("Pre-Finetune, no GraphRAG", "LUMI-G Base (Pre-Finetune) - No-GraphRAG", None),
+            ("Pre-Finetune, GraphRAG + debate", "LUMI-G Base (Pre-Finetune) - Deliberation", None),
             ("Fine-tuned, GraphRAG", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble", "LUMI-G Base (Pre-Finetune)"),
             ("Fine-tuned, no GraphRAG", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG", "LUMI-G Base (Pre-Finetune) - No-GraphRAG"),
             ("Fine-tuned, GraphRAG + debate", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation", "LUMI-G Base (Pre-Finetune) - Deliberation"),
@@ -37,7 +39,9 @@ TRACKS = {
     "Spur 2 (open weight)": {
         "native_default": "qwen3.6:27b",
         "rows": [
-            ("Pre-Finetune reference", "Open-Weight Base (Pre-Finetune)", None),
+            ("Pre-Finetune, GraphRAG", "Open-Weight Base (Pre-Finetune)", None),
+            ("Pre-Finetune, no GraphRAG", "Open-Weight Base (Pre-Finetune) - No-GraphRAG", None),
+            ("Pre-Finetune, GraphRAG + debate", "Open-Weight Base (Pre-Finetune) - Deliberation", None),
             ("Fine-tuned, GraphRAG", "Open-Weight Finetuned Ensemble", "Open-Weight Base (Pre-Finetune)"),
             ("Fine-tuned, no GraphRAG", "Open-Weight Finetuned Ensemble - No-GraphRAG", "Open-Weight Base (Pre-Finetune) - No-GraphRAG"),
             ("Fine-tuned, GraphRAG + debate", "Open-Weight Finetuned Ensemble - Deliberation", "Open-Weight Base (Pre-Finetune) - Deliberation"),
@@ -73,9 +77,10 @@ NOTES = """## Findings and open points
 7. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
    prompt) at temperature 0.2. The model defaults above follow the operator's earlier statement (Qwen3.6-27B for
    Open Weight, OLMo 3.1 for Open Source) and are not yet confirmed.
-8. **Not part of the matrix:** the Review and Review NoSC variants (review-wave arms), the `LUMI-G Ensemble` hybrids,
-   the `moe-frontier-*` templates, and the pre-finetune Deliberation / No-GraphRAG variants (their prompts are aligned but
-   the design uses one pre-finetune reference template per track).
+8. **Design per track: 7 conditions** = 3 pre-finetune templates + 3 fine-tuned templates (GraphRAG, no GraphRAG,
+   GraphRAG + debate) + 1 native baseline. Each pre-finetune template is compared with its fine-tuned counterpart.
+9. **Not part of the matrix:** the Review and Review NoSC variants (review-wave arms), the `LUMI-G Ensemble` hybrids and
+   the `moe-frontier-*` templates.
 """.splitlines()
 
 
@@ -141,6 +146,7 @@ def main() -> None:
     md = [f"# Benchmark template matrix ({date.today().isoformat()})", "",
           "**Status:** validated against the live database and the Ollama endpoints at generation time "
           "(`python3 scripts/benchmark_template_matrix.py`). Regenerate after every template change.", "",
+          "Design per track: 3 pre-finetune templates, 3 fine-tuned templates and 1 native baseline (7 conditions). "
           "Comparability criteria checked per fine-tuned template against its pre-finetune counterpart:", "",
           "- **C1** identical structure (categories, flags, context windows, endpoints, number of models per category); only model names differ",
           "- **C2** identical planner, judge and expert system prompts",
@@ -175,7 +181,7 @@ def main() -> None:
                 c2 = (h(cfg["planner_prompt"]) == h(ref["planner_prompt"]) and h(cfg["judge_prompt"]) == h(ref["judge_prompt"])
                       and all(h(ec["system_prompt"]) == h(ref["experts"][c]["system_prompt"]) for c, ec in cfg["experts"].items()))
             checks = [x for x in (c1, c2) if x is not None] + [c3, c4]
-            verdict = "reference" if counterpart is None and c3 and c4 else ("sound" if all(checks) else "**not sound**: " + ("; ".join(notes) or "see checks"))
+            verdict = "pre-finetune" if counterpart is None and c3 and c4 else ("sound" if all(checks) else "**not sound**: " + ("; ".join(notes) or "see checks"))
             mark = lambda v: "-" if v is None else ("yes" if v else "**NO**")
             md.append(f"| {role} | `{name}` (`{t['id']}`) | `{pm.split('/')[-1]}` @{pe} ctx {cfg.get('planner_num_ctx')} | `{jm.split('/')[-1]}` @{je} ctx {cfg.get('judge_num_ctx')} | "
                       f"{'on' if cfg.get('enable_graphrag') else 'off'} | {'on' if 'deliberation_policy' in cfg else 'off'} | "

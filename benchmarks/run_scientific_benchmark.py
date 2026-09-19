@@ -8,8 +8,10 @@ Evaluates (per track; the templates are configured through MOE_BENCHMARK_TEMPLAT
      e.g. Spur 2: Qwen3.5-9B planner, Qwen3.5-4B experts, Qwen3.8-27B judge.
   2. compound_ai_debate: the same ensemble plus multi-agent deliberation before the judge verdict
   3. ablation_no_graphrag: the same ensemble without the GraphRAG knowledge base
-  4. prefinetune_ai (optional, MOE_BENCHMARK_TEMPLATE_PREFINETUNE): ONE template with the models before
-     fine-tuning; compare with compound_ai to isolate the system-level effect of the fine-tuned weights
+  4. prefinetune_ai / prefinetune_ai_debate / prefinetune_ablation_no_graphrag (optional, enabled per variable
+     MOE_BENCHMARK_TEMPLATE_PREFINETUNE, _PREFINETUNE_DEBATE, _PREFINETUNE_ABLATION_NO_GRAPHRAG): the same three
+     ensembles built from the models BEFORE fine-tuning; each is compared with its fine-tuned counterpart
+     (compound_ai, compound_ai_debate, ablation_no_graphrag) to isolate the system-level effect of the fine-tuned weights
   5. native_baseline: a large dense base model called directly (no orchestration/tools/GraphRAG) -- the
      "bigger brother" the compound system has to match or exceed.
 
@@ -94,11 +96,20 @@ TEMPLATES = {
     "ablation_no_graphrag": os.environ.get(
         "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG"
     ),
-    # Optional reference arm: the same ensemble built from the models BEFORE fine-tuning
-    # (e.g. "LUMI-G Base (Pre-Finetune)"). Empty = condition disabled. Comparing it with
-    # compound_ai isolates the system-level effect of the fine-tuned weights.
+    # Optional reference arms: the same three ensembles built from the models BEFORE fine-tuning
+    # (e.g. "LUMI-G Base (Pre-Finetune)" + " - Deliberation" + " - No-GraphRAG"). Empty = condition disabled.
+    # Comparing each with its fine-tuned counterpart isolates the system-level effect of the fine-tuned weights.
     "prefinetune_ai": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "").strip(),
+    "prefinetune_ai_debate": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE", "").strip(),
+    "prefinetune_ablation_no_graphrag": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG", "").strip(),
 }
+
+# (pre-finetune condition, fine-tuned counterpart, label used in the report)
+PREFINETUNE_PAIRS = [
+    ("prefinetune_ai", "compound_ai", "graphrag"),
+    ("prefinetune_ai_debate", "compound_ai_debate", "graphrag_debate"),
+    ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag", "no_graphrag"),
+]
 
 VALID_VERDICTS = {"EXCELLENT", "PASS", "DEFICIENT", "FAIL"}
 
@@ -997,7 +1008,7 @@ async def main():
     print(f"Dataset: {DATASET_PATH.name}")
     # Dynamically resolve planner template reference instead of obsolete hardcoded student:4b
     print(f"Fine-tuned Template: {TEMPLATES['compound_ai']}")
-    print(f"Pre-Finetune Template: {TEMPLATES['prefinetune_ai'] or '(disabled)'}")
+    print(f"Pre-Finetune Templates: {[TEMPLATES[c] for c, _, _ in PREFINETUNE_PAIRS if TEMPLATES[c]] or '(disabled)'}")
     print(f"Judge Model:   {JUDGE_MODEL} @ {JUDGE_NODE}")
     print(f"Baseline:      Native {NATIVE_MODEL} @ {JUDGE_NODE} (Direct Inference)")
     print("=" * 80)
@@ -1020,15 +1031,13 @@ async def main():
     # native_baseline reinstated: the benchmark's purpose includes proving (or disproving)
     # that the 4B-SLM + GraphRAG + Judge compound system matches its "bigger brother" --
     # a dense large model (NATIVE_MODEL, qwen3.8:27b) with none of the scaffolding.
-    conditions = [
-        ("compound_ai", TEMPLATES["compound_ai"]),
-        ("compound_ai_debate", TEMPLATES["compound_ai_debate"]),
-        ("ablation_no_graphrag", TEMPLATES["ablation_no_graphrag"]),
-        ("native_baseline", NATIVE_MODEL),
-    ]
-    if TEMPLATES["prefinetune_ai"]:
-        # run right after the fine-tuned reference (compound_ai) for each task, native stays last
-        conditions.insert(1, ("prefinetune_ai", TEMPLATES["prefinetune_ai"]))
+    conditions = []
+    for pre_name, fine_name, _ in PREFINETUNE_PAIRS:
+        conditions.append((fine_name, TEMPLATES[fine_name]))
+        if TEMPLATES[pre_name]:
+            # the pre-finetune counterpart runs right after the fine-tuned condition of the same task
+            conditions.append((pre_name, TEMPLATES[pre_name]))
+    conditions.append(("native_baseline", NATIVE_MODEL))
     _cond_filter = os.environ.get("MOE_BENCHMARK_CONDITIONS", "").strip()
     if _cond_filter:
         _wanted_conds = {c.strip() for c in _cond_filter.split(",") if c.strip()}
@@ -1225,18 +1234,21 @@ async def main():
     native_overall = summary_by_condition.get("native_baseline", {}).get("mean_overall_score", 0.0)
     native_time = summary_by_condition.get("native_baseline", {}).get("mean_latency_s", 0.0)
     compound_vs_native_delta = round(c_overall - native_overall, 2)
-    _pre = summary_by_condition.get("prefinetune_ai")
-    finetuning_system_delta = None
-    if _pre:
-        finetuning_system_delta = {
-            "prefinetune_template": TEMPLATES["prefinetune_ai"],
-            "finetuned_template": TEMPLATES["compound_ai"],
-            "prefinetune_overall_score": _pre.get("mean_overall_score", 0.0),
-            "finetuned_overall_score": c_overall,
-            "delta_overall": round(c_overall - _pre.get("mean_overall_score", 0.0), 2),
-            "prefinetune_mean_latency_s": _pre.get("mean_latency_s", 0.0),
-            "finetuned_mean_latency_s": summary_by_condition.get("compound_ai", {}).get("mean_latency_s", 0.0),
-        }
+    finetuning_system_delta = {}
+    for pre_name, fine_name, label in PREFINETUNE_PAIRS:
+        _pre = summary_by_condition.get(pre_name)
+        _fine = summary_by_condition.get(fine_name)
+        if _pre and _fine:
+            finetuning_system_delta[label] = {
+                "prefinetune_template": TEMPLATES[pre_name],
+                "finetuned_template": TEMPLATES[fine_name],
+                "prefinetune_overall_score": _pre.get("mean_overall_score", 0.0),
+                "finetuned_overall_score": _fine.get("mean_overall_score", 0.0),
+                "delta_overall": round(_fine.get("mean_overall_score", 0.0) - _pre.get("mean_overall_score", 0.0), 2),
+                "prefinetune_mean_latency_s": _pre.get("mean_latency_s", 0.0),
+                "finetuned_mean_latency_s": _fine.get("mean_latency_s", 0.0),
+            }
+    finetuning_system_delta = finetuning_system_delta or None
 
     output_payload = {
         "run_id": run_id,

@@ -3,8 +3,8 @@
 #
 # Spur 1: Open Source  (planner OLMo3-7B, experts SmolLM3-3B, judge OLMo3.1-32B, all fine-tuned from hf.co/h3rb3rn)
 # Spur 2: Open Weight  (planner Qwen3.5-9B, experts Qwen3.5-4B, judge Qwen3.8-27B, all fine-tuned from hf.co/h3rb3rn)
-# Conditions per track (5): native_baseline (large dense base model, no orchestration), prefinetune_ai (ONE template
-# with the models before fine-tuning), and the three fine-tuned templates (no GraphRAG / GraphRAG / GraphRAG + debate).
+# Conditions per track (7): native_baseline (large dense base model, no orchestration), the three pre-finetune
+# templates (GraphRAG / GraphRAG + debate / no GraphRAG) and the three fine-tuned templates (same three variants).
 #
 # Each track evaluates 4 conditions:
 #   1. native_baseline (direct model call)
@@ -66,6 +66,8 @@ MOE_JUDGE_MODEL="$JUDGE_MODEL_SPUR1" \
 MOE_JUDGE_NODE="$JUDGE_NODE" \
 MOE_BENCHMARK_NATIVE_MODEL="$NATIVE_SPUR1" \
 MOE_BENCHMARK_TEMPLATE_PREFINETUNE="LUMI-G Base (Pre-Finetune)" \
+MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE="LUMI-G Base (Pre-Finetune) - Deliberation" \
+MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG="LUMI-G Base (Pre-Finetune) - No-GraphRAG" \
 MOE_BENCHMARK_TEMPLATE_COMPOUND_AI="LUMI-G OLMo + SmolLM3 Sovereign Ensemble" \
 MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE="LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation" \
 MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG="LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG" \
@@ -99,6 +101,8 @@ MOE_JUDGE_MODEL="$JUDGE_MODEL_SPUR2" \
 MOE_JUDGE_NODE="$JUDGE_NODE" \
 MOE_BENCHMARK_NATIVE_MODEL="$NATIVE_SPUR2" \
 MOE_BENCHMARK_TEMPLATE_PREFINETUNE="Open-Weight Base (Pre-Finetune)" \
+MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE="Open-Weight Base (Pre-Finetune) - Deliberation" \
+MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG="Open-Weight Base (Pre-Finetune) - No-GraphRAG" \
 MOE_BENCHMARK_TEMPLATE_COMPOUND_AI="Open-Weight Finetuned Ensemble" \
 MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE="Open-Weight Finetuned Ensemble - Deliberation" \
 MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG="Open-Weight Finetuned Ensemble - No-GraphRAG" \

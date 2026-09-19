@@ -297,19 +297,40 @@ class TestRedisPasswordLookup:
         assert not re.search(r"password\s*=\s*[\"'][A-Za-z0-9+/_\-]{12,}[\"']", src)
 
 
-class TestPrefinetuneCondition:
-    def test_disabled_by_default(self, monkeypatch):
-        import importlib
-        monkeypatch.delenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", raising=False)
-        from benchmarks import run_scientific_benchmark as rsb
-        importlib.reload(rsb)
-        assert rsb.TEMPLATES["prefinetune_ai"] == ""
+class TestPrefinetuneConditions:
+    ENV = ("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE",
+           "MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG")
 
-    def test_enabled_via_env(self, monkeypatch):
+    def _reload(self, monkeypatch, **values):
         import importlib
-        monkeypatch.setenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "LUMI-G Base (Pre-Finetune)")
         from benchmarks import run_scientific_benchmark as rsb
+        for name in self.ENV:
+            monkeypatch.delenv(name, raising=False)
+        for name, value in values.items():
+            monkeypatch.setenv(name, value)
         importlib.reload(rsb)
-        assert rsb.TEMPLATES["prefinetune_ai"] == "LUMI-G Base (Pre-Finetune)"
-        monkeypatch.delenv("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", raising=False)
-        importlib.reload(rsb)
+        return rsb
+
+    def test_all_three_disabled_by_default(self, monkeypatch):
+        rsb = self._reload(monkeypatch)
+        assert [rsb.TEMPLATES[c] for c, _, _ in rsb.PREFINETUNE_PAIRS] == ["", "", ""]
+
+    def test_each_variable_enables_its_own_condition(self, monkeypatch):
+        rsb = self._reload(
+            monkeypatch,
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE="Base",
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE="Base - Deliberation",
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG="Base - No-GraphRAG",
+        )
+        assert rsb.TEMPLATES["prefinetune_ai"] == "Base"
+        assert rsb.TEMPLATES["prefinetune_ai_debate"] == "Base - Deliberation"
+        assert rsb.TEMPLATES["prefinetune_ablation_no_graphrag"] == "Base - No-GraphRAG"
+
+    def test_pairs_map_pre_to_finetuned_counterparts(self, monkeypatch):
+        rsb = self._reload(monkeypatch)
+        assert {(p, f) for p, f, _ in rsb.PREFINETUNE_PAIRS} == {
+            ("prefinetune_ai", "compound_ai"),
+            ("prefinetune_ai_debate", "compound_ai_debate"),
+            ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag"),
+        }
+        self._reload(monkeypatch)
