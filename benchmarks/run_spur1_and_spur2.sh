@@ -31,7 +31,7 @@ API_KEY="${MOE_API_KEY:-}"
 JUDGE_MODEL_SPUR1="${MOE_JUDGE_MODEL_SPUR1:-hf.co/h3rb3rn/sovereign-judge-olmo31-32b:Q4_K_M}"
 # Native single-LLM baselines (the only models allowed to run without orchestration): large dense base models.
 NATIVE_SPUR1="${MOE_NATIVE_SPUR1:-olmo31-32b-instruct-base-fixed:latest}"
-NATIVE_SPUR2="${MOE_NATIVE_SPUR2:-qwen3.6:27b}"
+NATIVE_SPUR2="${MOE_NATIVE_SPUR2:-qwen3.8:27b}"
 JUDGE_MODEL_SPUR2="${MOE_JUDGE_MODEL_SPUR2:-hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M}"
 JUDGE_NODE="${MOE_JUDGE_NODE:-N04-RTX}"
 NUM_ROUNDS="${MOE_BENCHMARK_NUM_ROUNDS:-5}"

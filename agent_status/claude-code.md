@@ -5058,3 +5058,13 @@ Notes:
 - Smoke test (n=1 per template, /27 question): Spur 2 fine-tuned failed with `orchestration_failed` (planner-9b chose `vlsm_subnet_calc`
   without `cidr` three times, fail-closed contract); Spur 1 fine-tuned: "withheld by the quality gate"; two further requests returned an
   empty body (cause not established). Not conclusive at n=1, but it repeats the earlier Spur 2 finding (invented/incomplete mcp_tool).
+
+## 2026-09-19 update: native baselines, default planner, student:4b removal
+- Operator confirmed the native baselines: Spur 1 `olmo31-32b-instruct-base-fixed:latest`, Spur 2 `qwen3.8:27b` (runner and matrix generator updated).
+- Default planner: `.env` `PLANNER_MODEL=hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M` (was `qwen3-planner:q4km`, on no node);
+  `langgraph-orchestrator` recreated from the same image (sha256:8e0830c9...), healthy, startup log shows the new planner. The code
+  edits below take effect at the next image build (the image is not rebuilt).
+- `moe-sovereign-student:4b` removed: 49 user templates repointed (not deleted; the planner field was the only reference and the
+  13 templates of other users include the Hermes ones), functional references in code/config/installer/scripts removed, history kept.
+  47 orphaned permission rows deleted. Backup in `benchmarks/results/runbook/student4b_and_orphans_backup_20260919.json`.
+- Not done: Valkey `user:apikey:*` caches were not refreshed for the deleted permission rows (they only point at templates that no longer exist).

@@ -12,7 +12,6 @@ from pathlib import Path
 GGUF_DIR = Path("/opt/deployment/moe-sovereign/moe-infra/models/gguf")
 
 MODELS = [
-    ("moe-sovereign-student:4b", "moe-sovereign-student-4b-Q4_K_M.gguf", 0.1),
     ("moe-expert-coder:4b", "moe-expert-coder-4b-Q4_K_M.gguf", 0.05),
     ("moe-expert-precision:4b", "moe-expert-precision-4b-Q4_K_M.gguf", 0.0),
     ("moe-expert-graphrag:4b", "moe-expert-graphrag-4b-Q4_K_M.gguf", 0.05),

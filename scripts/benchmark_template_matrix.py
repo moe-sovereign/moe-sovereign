@@ -38,7 +38,7 @@ TRACKS = {
         ],
     },
     "Spur 2 (open weight)": {
-        "native_default": "qwen3.6:27b",
+        "native_default": "qwen3.8:27b",
         "rows": [
             ("Pre-Finetune, GraphRAG", "Open-Weight Base (Pre-Finetune)", None),
             ("Pre-Finetune, no GraphRAG", "Open-Weight Base (Pre-Finetune) - No-GraphRAG", None),
@@ -90,8 +90,8 @@ NOTES = """## Findings and open points
 7. **Planner taxonomy (unverified effect):** the planners were trained on a fixed taxonomy (`legal_advisor`, `agentic_coder`, ...);
    `security`, `governance` and `compounding_knowledge` are not part of it. The planner must generalise to them; this is not measured.
 8. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
-   prompt) at temperature 0.2. The model defaults above follow the operator's earlier statement (Qwen3.6-27B for
-   Open Weight, OLMo 3.1 for Open Source) and are not yet confirmed.
+   prompt) at temperature 0.2. Confirmed by the operator on 2026-09-19: Spur 1 `olmo31-32b-instruct-base-fixed:latest`,
+   Spur 2 `qwen3.8:27b` (the base model of the Spur 2 judge).
 9. **Design per track: 7 conditions** = 3 pre-finetune templates + 3 fine-tuned templates (GraphRAG, no GraphRAG,
    GraphRAG + debate) + 1 native baseline. Each pre-finetune template is compared with its fine-tuned counterpart.
 10. **Not part of the matrix:** the Review and Review NoSC variants (review-wave arms), the `LUMI-G Ensemble` hybrids and
@@ -170,7 +170,7 @@ def main() -> None:
           "- **C5** exactly eight experts", ""]
     csv_rows = []
     for track, spec in TRACKS.items():
-        md += [f"## {track}", "", f"Native baseline (single dense LLM without orchestration, default of `run_spur1_and_spur2.sh`): `{spec['native_default']}` on N04-RTX (**to be confirmed**).", "",
+        md += [f"## {track}", "", f"Native baseline (single dense LLM without orchestration, default of `run_spur1_and_spur2.sh`): `{spec['native_default']}` on N04-RTX (confirmed by the operator on 2026-09-19).", "",
                "| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |",
                "|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|"]
         for role, name, counterpart in spec["rows"]:

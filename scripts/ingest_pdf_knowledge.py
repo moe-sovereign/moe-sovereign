@@ -3,12 +3,12 @@
 scripts/ingest_pdf_knowledge.py — AI-Powered PDF Developer Documentation & Knowledgebase Importer.
 
 Extracts text, code blocks, AST signatures, architectural concepts, and semantic triples
-from PDF files using the Sovereign Student Planner LLM (moe-sovereign-student:4b) and ingests into:
+from PDF files using the Sovereign Student Planner LLM (moe-sovereign-planner-olmo3-7b) and ingests into:
   1. Neo4j Knowledge Graph (:Document, :Page, :Chunk, :CodeEntity, :Concept, plus extracted relational triples)
   2. ChromaDB Vector Store (collection: moe_pdf_knowledge with rich metadata & AI summaries)
 
 Usage:
-  # Ingest single PDF with default AI extraction (moe-sovereign-student:4b on N04-RGTX):
+  # Ingest single PDF with default AI extraction (moe-sovereign-planner-olmo3-7b on N04-RGTX):
   python3 scripts/ingest_pdf_knowledge.py --path /path/to/fastapi_guide.pdf
 
   # Ingest directory of PDFs:
@@ -69,7 +69,7 @@ def _get_chroma_config():
 
 def _get_ai_config():
     endpoint = os.getenv("PLANNER_URL") or os.getenv("OLLAMA_RGTX_URL") or "http://192.168.155.224:11435"
-    model = os.getenv("PLANNER_MODEL") or "moe-sovereign-student:4b"
+    model = os.getenv("PLANNER_MODEL") or "hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M"
     return endpoint.rstrip("/"), model
 
 def _hash_id(text: str) -> str:
@@ -138,7 +138,7 @@ def extract_concepts_heuristic(text: str) -> List[str]:
             found.add(kw)
     return sorted(list(found))
 
-# ── AI-Powered Knowledge Extraction via moe-sovereign-student:4b ───────────────
+# ── AI-Powered Knowledge Extraction via the Sovereign planner LLM ───────────────
 async def extract_ai_knowledge(
     client: httpx.AsyncClient,
     text: str,
@@ -397,7 +397,7 @@ async def main_async():
     parser.add_argument("--path", "-p", required=True, help="Path to a PDF file or directory containing PDFs")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI extraction, use regex-only fallback")
     parser.add_argument("--ai-endpoint", default=None, help="Inference endpoint for AI extraction (default: http://192.168.155.224:11435)")
-    parser.add_argument("--ai-model", default=None, help="LLM for extraction (default: moe-sovereign-student:4b)")
+    parser.add_argument("--ai-model", default=None, help="LLM for extraction (default: PLANNER_MODEL)")
     parser.add_argument("--concurrency", type=int, default=4, help="Concurrent AI extraction requests")
     parser.add_argument("--dry-run", action="store_true", help="Parse PDF without writing to DBs")
     args = parser.parse_args()
