@@ -5003,3 +5003,20 @@ Notes:
   removal takes effect at the next admin restart (database.py is bind-mounted).
 - Not done (needs operator decision): align prompts with the training prompts, replace global default planner
   qwen3-planner:q4km, 49 user templates with student:4b (owners decide).
+
+## 2026-09-19T10:00:24Z — Benchmark templates: aligned prompts, 3 pre-finetune + 3 fine-tuned + baseline per track — done (benchmark NOT started)
+Plan / progress:
+- Operator clarified the design: every track has THREE pre-finetune and THREE fine-tuned expert templates plus one native
+  baseline (7 conditions). Harness, runner and matrix now use three pre/fine pairs (finetuning_system_delta per pair).
+- System prompts aligned in 14 templates (scripts/align_benchmark_template_prompts.py, backup in
+  benchmarks/results/runbook/template_prompts_backup.json): experts = training role prompt of the assigned domain expert,
+  judge = training judge prompt, planner = training preamble + category block + empty-plan guard. 20 prompt slots, one
+  variant each. Spur 2 fine-tuned data_analyst now served by the datainfra expert (as in Spur 1).
+- Matrix: docs/system/benchmark-template-matrix-2026-09-19.md (Spur 2 all sound; Spur 1 fine-tuned x3 NOT sound: forced
+  second code_reviewer model + review_lenses added outside the design).
+- Real-request check, one request per template: Spur1 pre OK (gate pending), Spur1 fine-tuned planner returned [] and then an
+  unrelated plan (blocked by the quality gate), Spur2 pre blocked by the quality gate (missing_required_code), Spur2
+  fine-tuned OK. n=1 each: cause not established.
+Notes:
+- The planned A/B (old vs new planner prompt on tmpl-smollm3-nograph, 6 requests per arm) was blocked by the permission
+  system (Modify Shared Resources); nothing was changed. Needs the operator's decision.
