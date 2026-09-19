@@ -2,15 +2,16 @@
 """
 run_scientific_benchmark.py -- Scientific Multidisciplinary Benchmark Runner for MoE Sovereign
 
-Evaluates:
-  1. MoE Sovereign Compound AI (Student 4B Planner on N04-RGTX + 8x 4B domain Experts +
-     Sovereign-Judge 27B on N04-RTX + Full MCP Tooling + GraphRAG)
-  2. MoE Sovereign Compound AI + Debate (adds multi-agent deliberation before the Judge verdict)
-  3. MoE Sovereign Ablation (No GraphRAG Knowledge Base)
-  4. Native Single LLM Baseline (Direct Qwen3.8-27B on N04-RTX, no orchestration/tools/GraphRAG)
-     -- the "bigger brother": a dense 27B model with none of the compound-AI scaffolding, so the
-     benchmark can test whether the 4B-SLM + GraphRAG + Judge architecture matches or exceeds a
-     much larger monolithic model on the same tasks.
+Evaluates (per track; the templates are configured through MOE_BENCHMARK_TEMPLATE_* variables):
+  1. compound_ai: the fine-tuned ensemble (fine-tuned planner on N04-RGTX, fine-tuned domain experts,
+     fine-tuned judge on N04-RTX, MCP tooling, GraphRAG). All models are the hf.co/h3rb3rn fine-tunes,
+     e.g. Spur 2: Qwen3.5-9B planner, Qwen3.5-4B experts, Qwen3.8-27B judge.
+  2. compound_ai_debate: the same ensemble plus multi-agent deliberation before the judge verdict
+  3. ablation_no_graphrag: the same ensemble without the GraphRAG knowledge base
+  4. prefinetune_ai (optional, MOE_BENCHMARK_TEMPLATE_PREFINETUNE): ONE template with the models before
+     fine-tuning; compare with compound_ai to isolate the system-level effect of the fine-tuned weights
+  5. native_baseline: a large dense base model called directly (no orchestration/tools/GraphRAG) -- the
+     "bigger brother" the compound system has to match or exceed.
 
 Generates:
   - Detailed per-task execution traces
@@ -995,10 +996,10 @@ async def main():
     print("🚀 MOE SOVEREIGN SCIENTIFIC MULTIDISCIPLINARY BENCHMARK")
     print(f"Dataset: {DATASET_PATH.name}")
     # Dynamically resolve planner template reference instead of obsolete hardcoded student:4b
-    print(f"Planner Template: {TEMPLATES['compound_ai']} @ N04-RGTX (port 11435)")
-    print(f"Judge Model:   {JUDGE_MODEL} @ N04-RTX (port 11434)")
-    print(f"Expert Models: {NATIVE_MODEL} @ N04-RTX")
-    print(f"Baseline:      Native {NATIVE_MODEL} (Direct Inference)")
+    print(f"Fine-tuned Template: {TEMPLATES['compound_ai']}")
+    print(f"Pre-Finetune Template: {TEMPLATES['prefinetune_ai'] or '(disabled)'}")
+    print(f"Judge Model:   {JUDGE_MODEL} @ {JUDGE_NODE}")
+    print(f"Baseline:      Native {NATIVE_MODEL} @ {JUDGE_NODE} (Direct Inference)")
     print("=" * 80)
 
     if not DATASET_PATH.exists():
