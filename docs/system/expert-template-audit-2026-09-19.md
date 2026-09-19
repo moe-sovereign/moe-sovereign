@@ -1,0 +1,103 @@
+# Expert template audit (2026-09-19)
+
+**Status:** validated for the measured facts (database, Ollama and log state on 2026-09-19); *planned* for every
+recommendation in section 6; nothing in section 6 marked "pending" has been applied.
+**Method:** all rows of `admin_expert_templates` (58) and `user_expert_templates` (52) were read from the database,
+every referenced `model@endpoint` was checked against the endpoint's `/api/tags` (or the owner's private API
+connections), usage was taken from `routing_telemetry` and `usage_log`, and every planner, judge and expert system
+prompt was compared with the prompts used to train the fine-tuned models.
+**Limits:** `routing_telemetry` wrote no rows between 2026-09-14 and 2026-09-18 (defect fixed on 2026-09-18), so "never
+used" is a lower bound for that window; `usage_log` was used as a second source for dynamic templates. Model
+availability is only verifiable for Ollama endpoints; templates that use cloud endpoints through a user's private
+connection are reported as "ok" if the connection exists and is active. Other users' template owners are anonymised
+in `expert-template-inventory-2026-09-19.csv`.
+
+## 1. Inventory
+
+| Family | Count | Health | Note |
+|---|---:|---|---|
+| Dynamic templates (`moe-dyn-*`, auto-generated) | 34 | all broken | created 2026-09-03..11, never used; planner `qwen3-planner:q4km` exists on no node |
+| Spur 1 fine-tuned (`LUMI-G OLMo + SmolLM3 Sovereign Ensemble` + Deliberation, No-GraphRAG, Review, Review NoSC) | 5 | ok | benchmark family |
+| Spur 1 pre-finetune (`LUMI-G Base (Pre-Finetune)` + 2 variants) | 3 | ok | reference family |
+| `LUMI-G Ensemble` + 2 variants | 3 | ok | hybrid: SmolLM3 experts, planner-9B, OLMo judge; no clear purpose |
+| Spur 2 pre-finetune (`Open-Weight Base (Pre-Finetune)` + 2 variants) | 3 | ok | planner now base Qwen3.5-9B |
+| Spur 2 fine-tuned (`Open-Weight Finetuned Ensemble` + 2 variants) | 3 | ok | created 2026-09-19 |
+| `moe-frontier-*` | 3 | broken | 15 expert names do not exist on any node; duplicates of the Spur 2 fine-tuned family |
+| `MoE Sovereign ...` (old Qwen benchmark, seeded by the admin service) | 4 | broken | planner `moe-sovereign-student:4b` without endpoint |
+| User templates (5 owners) | 52 | 36 broken, 16 ok | see the CSV; 39 belong to the operator, 13 to other users |
+
+Only 17 of 58 admin templates and 16 of 52 user templates are usable today. No user template has been used since
+2026-08-29 other than the old benchmark copies.
+
+## 2. Why nobody can see through them
+
+1. **Auto-generated clutter.** The dynamic router writes a new `moe-dyn-<uuid>` template per unmatched request pattern;
+   29 of the 30 IDs found in `usage_log` are already gone and the 34 that remain were never reused.
+2. **Templates re-created on every start.** `seed_default_admin_templates()` (`admin_ui/database.py`, called from the
+   admin lifespan) upserts the four `MoE Sovereign ...` templates with `moe-sovereign-student:4b`, so deleting or
+   editing them does not persist.
+3. **Family sprawl without a naming rule.** Base, fine-tuned, hybrid, frontier and review variants coexist and only
+   the name distinguishes them.
+4. **Dead references.** `qwen3-planner` appears in 37 templates and in the global default `PLANNER_MODEL`, although
+   the model is present on no node; `moe-sovereign-student:4b` appears in 53 templates; `gpt-oss` (10), `gemma` (11),
+   `Nemotron` (6) and `H200` (3) appear in user templates for cloud connections.
+5. **Shared model stores.** Ollama instances on one host share a single model store, so a model tag cannot be
+   removed "per instance" (found while removing `sovereign-judge:27b`).
+
+## 3. System prompt audit
+
+| Check | Result |
+|---|---|
+| Distinct planner / judge / expert prompts over 110 templates | 34 / 29 / 192 (122 expert prompts are shared by more than one slot) |
+| Templates without planner or judge prompt | 7 (they fall back to the code defaults in `prompts.py`) |
+| Expert slots without system prompt | 0 of 779 |
+| Planner prompt names a category the template does not have | 1 template |
+| Models carry a baked-in system prompt | no (`/api/show` returns an empty `system` for planner-9B, judge-27B, coder-4B and security-3B) |
+
+### Training/serving mismatch (fine-tuned families)
+
+The fine-tuned models were trained with fixed, long role prompts (`CHATML_SYSTEM_PROMPTS` in
+`scripts/generate_expert_ensemble_datasets.py`, `PLANNER_SYSTEM_PROMPT` in `scripts/generate_planner_dataset.py`). The
+templates send unrelated short prompts instead:
+
+| Prompt | Runtime (template) | Training | Text similarity |
+|---|---|---|---:|
+| Expert (Spur 1 fine-tuned, 8 categories) | mean 107 chars, e.g. "You are a senior principal systems engineer and code reviewer." | mean 341 chars, e.g. "You are the MoE Sovereign Expert for Systems Programming, Low-Level Concurrency, and Kernel Architecture. ..." | 0.06 |
+| Expert (Spur 2, 15 categories) | mean 62 chars | mean 338 chars | 0.08 |
+| Planner (Spur 1 / Spur 2 / hybrid) | 2491 / 531 / 1303 chars | 12,789 chars (rendered with a category block and a `MANDATORY:` suffix) | 0.02 |
+| Judge | 215 chars ("You are a specialized synthesis judge ...") | 304 chars ("You are the MoE Sovereign Paraconsistent Quality Gate & Judge ...") | 0.11 |
+
+Consequences: the fine-tuned models run off-distribution relative to their training prompt, which understates any
+measured fine-tuning effect. The runtime additionally caps the planner role at `PLANNER_ROLE_MAX_CHARS` (8000), below
+the 12,789-character training prompt, and appends its own blocks (task budget, tool catalog, JSON instructions) that
+the training data does not contain. The pre-finetune reference templates use the same generic prompts, so a
+weights-only comparison is fair only if both families use the same prompts.
+
+## 4. Applied so far
+
+| Change | Status |
+|---|---|
+| 34 dynamic + 3 user templates repointed from the removed `sovereign-judge:27b` to `hf.co/h3rb3rn/sovereign-judge-27b` | applied |
+| `qwen3.5:4b` planner replaced (Open-Weight base: base `qwen3.5:9b`; frontier: `moe-sovereign-planner-9b`) | applied |
+| Spur 2 fine-tuned template family created, `qwen3.5:9b` and `moe-expert-coder-4b:Q4_K_M` pulled to N04 | applied |
+| Deleting the 34 dynamic templates | **not applied** (blocked by the permission system; backup of all 34 rows exists) |
+
+## 5. Not verified
+
+- Whether the global default planner `qwen3-planner:q4km` is silently replaced by a fallback at runtime.
+- Whether the planner trained on the full category set behaves correctly with the 8- or 15-category subsets in the
+  templates (`VALID_CATEGORIES` in the training script versus template categories).
+- The effect of aligned prompts on scores; this must be measured (see section 6, item 2).
+
+## 6. Recommendations (planned)
+
+1. Delete the 34 dynamic templates (dead, never used, backup exists) and stop the router from persisting templates
+   whose planner does not exist.
+2. **Align prompts with training** in the fine-tuned and pre-finetune benchmark templates: experts get the role prompt
+   from `CHATML_SYSTEM_PROMPTS`, the judge gets the training judge prompt, the planner gets the training prompt
+   rendered for the template's categories. Run it as an A/B arm against the current generic prompts.
+3. Replace the global default planner (`PLANNER_MODEL`) with an existing fine-tuned planner and remove
+   `moe-sovereign-student:4b` from the templates and from `seed_default_admin_templates()`.
+4. Delete or repair the three `moe-frontier-*` templates and decide on the `LUMI-G Ensemble` hybrids.
+5. Adopt a naming rule (`<track>-<stage>-<variant>`) and add a `description` to every admin template; user templates of
+   other users are theirs to decide.

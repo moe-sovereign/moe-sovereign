@@ -1,0 +1,111 @@
+id,kind,owner,name,family,active,health,problems,telemetry_uses,last_used,created
+moe-dyn-7ed6709fab06,admin,admin,Dynamic Template 09c122,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-252f900335a6,admin,admin,Dynamic Template 0c80db,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-f71755cc9291,admin,admin,Dynamic Template 0c88b7,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-92e2e90e6539,admin,admin,Dynamic Template 1911b1,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-ba49cbeb095a,admin,admin,Dynamic Template 1ccb6b,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-41112b140db8,admin,admin,Dynamic Template 20b01e,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-d9f5332a9751,admin,admin,Dynamic Template 265b74,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-3e63de90f085,admin,admin,Dynamic Template 353418,dynamic (auto-generated),True,broken,model-missing=5,0,-,2026-09-03
+moe-dyn-b1e79dc0616c,admin,admin,Dynamic Template 3f3a7a,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-4c881d5e1389,admin,admin,Dynamic Template 402efd,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-a1bebd47217b,admin,admin,Dynamic Template 513c79,dynamic (auto-generated),True,broken,model-missing=5,0,-,2026-09-03
+moe-dyn-08a8ed9feab6,admin,admin,Dynamic Template 541a2d,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-2ab6dbd00650,admin,admin,Dynamic Template 5783df,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-115a4bfc5591,admin,admin,Dynamic Template 583e9b,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-391316d58ec1,admin,admin,Dynamic Template 5b17c2,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-747af7881460,admin,admin,Dynamic Template 5bf78f,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-7ca4e4b14ab4,admin,admin,Dynamic Template 63960f,dynamic (auto-generated),True,broken,model-missing=7,0,-,2026-09-03
+moe-dyn-28bda14ea308,admin,admin,Dynamic Template 770919,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-b8e4b7a89deb,admin,admin,Dynamic Template 84fc0a,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-4d0de69b09bb,admin,admin,Dynamic Template 88ed07,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-eb413aeb94b1,admin,admin,Dynamic Template 90930f,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-c21d5e086c83,admin,admin,Dynamic Template 974053,dynamic (auto-generated),True,broken,model-missing=5,0,-,2026-09-03
+moe-dyn-301d3ec5d6f4,admin,admin,Dynamic Template 9dadda,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-66e15e2f44eb,admin,admin,Dynamic Template 9e3a1c,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-8b7b0943b527,admin,admin,Dynamic Template 9e4ff5,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-158f64a6e9e7,admin,admin,Dynamic Template a56042,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-96260f5d3324,admin,admin,Dynamic Template a57a01,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-ae7c01a0a079,admin,admin,Dynamic Template a6c96b,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-b6d9a471cc9d,admin,admin,Dynamic Template addcf7,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-5b57e92a7212,admin,admin,Dynamic Template b891c3,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-38b3e96b2ce8,admin,admin,Dynamic Template caaab3,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-af561fa40c26,admin,admin,Dynamic Template f4da56,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-0dd94765daf8,admin,admin,Dynamic Template f6ec15,dynamic (auto-generated),True,broken,model-missing=3,0,-,2026-09-03
+moe-dyn-d49dac45053f,admin,admin,Dynamic Template fc3888,dynamic (auto-generated),True,broken,model-missing=5,0,-,2026-09-11
+tmpl-frontier-ensemble-deliberation,admin,admin,moe-frontier-ensemble-deliberation,frontier,True,broken,model-missing=15,0,-,2026-09-02
+tmpl-frontier-ensemble-no-graphrag,admin,admin,moe-frontier-ensemble-no-graphrag,frontier,True,broken,model-missing=15,0,-,2026-09-02
+tmpl-frontier-ensemble-v1,admin,admin,moe-frontier-expert-ensemble,frontier,True,broken,model-missing=15,0,-,2026-09-02
+tmpl-0ec81b11,admin,admin,LUMI-G Ensemble,lumi-g-ensemble-hybrid,True,ok,,3,2026-09-14,2026-09-13
+tmpl-f1fe952c,admin,admin,LUMI-G Ensemble - Deliberation,lumi-g-ensemble-hybrid,True,ok,,0,-,2026-09-13
+tmpl-565c9fb4,admin,admin,LUMI-G Ensemble - No-GraphRAG,lumi-g-ensemble-hybrid,True,ok,,0,-,2026-09-13
+tmpl-sovereign-benchmark-no-graphrag,admin,admin,MoE Sovereign Ablation (No GraphRAG),moe-sovereign-old-benchmark,True,broken,no-endpoint=2,99,2026-08-28,2026-09-10
+tmpl-sovereign-compound-ai,admin,admin,MoE Sovereign Compound AI,moe-sovereign-old-benchmark,True,broken,no-endpoint=2,0,-,2026-09-10
+tmpl-sovereign-benchmark-deliberation,admin,admin,MoE Sovereign Deliberation Benchmark,moe-sovereign-old-benchmark,True,broken,no-endpoint=2,110,2026-08-28,2026-09-10
+tmpl-sovereign-scientific-benchmark,admin,admin,MoE Sovereign Scientific Benchmark,moe-sovereign-old-benchmark,True,broken,no-endpoint=2,190,2026-08-29,2026-09-10
+tmpl-11f532fc,admin,admin,LUMI-G OLMo + SmolLM3 Sovereign Ensemble,spur1-finetuned,True,ok,,1,2026-09-18,2026-09-13
+tmpl-smollm3-delib,admin,admin,LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation,spur1-finetuned,True,ok,,0,-,2026-09-17
+tmpl-smollm3-nograph,admin,admin,LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG,spur1-finetuned,True,ok,,0,-,2026-09-17
+tmpl-smollm3-review,admin,admin,LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Review,spur1-finetuned,True,ok,,1,2026-09-18,2026-09-18
+tmpl-smollm3-review-nosc,admin,admin,LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Review NoSC,spur1-finetuned,True,ok,,0,-,2026-09-18
+tmpl-7be691d7,admin,admin,LUMI-G Base (Pre-Finetune),spur1-pre-finetune,True,ok,,0,-,2026-09-14
+tmpl-a026a606,admin,admin,LUMI-G Base (Pre-Finetune) - Deliberation,spur1-pre-finetune,True,ok,,0,-,2026-09-14
+tmpl-37d31274,admin,admin,LUMI-G Base (Pre-Finetune) - No-GraphRAG,spur1-pre-finetune,True,ok,,0,-,2026-09-14
+tmpl-ow-ft,admin,admin,Open-Weight Finetuned Ensemble,spur2-finetuned,True,ok,,2,2026-09-19,2026-09-19
+tmpl-ow-ft-delib,admin,admin,Open-Weight Finetuned Ensemble - Deliberation,spur2-finetuned,True,ok,,0,-,2026-09-19
+tmpl-ow-ft-nograph,admin,admin,Open-Weight Finetuned Ensemble - No-GraphRAG,spur2-finetuned,True,ok,,0,-,2026-09-19
+tmpl-95dbac05,admin,admin,Open-Weight Base (Pre-Finetune),spur2-pre-finetune,True,ok,,1,2026-09-19,2026-09-14
+tmpl-d3b31c32,admin,admin,Open-Weight Base (Pre-Finetune) - Deliberation,spur2-pre-finetune,True,ok,,0,-,2026-09-14
+tmpl-db16e336,admin,admin,Open-Weight Base (Pre-Finetune) - No-GraphRAG,spur2-pre-finetune,True,ok,,0,-,2026-09-14
+user:d71bcf15caff4467a8ea461bc21e958c,user,horndev,cc-aihub-specialist-v1,cc-profile,True,ok,,2,2026-06-15,2026-06-09
+user:86e328530f994b3b8da7c3e86f1c65ca,user,horndev,cc-cloud-specialist-v1,cc-profile,True,broken,model-missing=2,0,-,2026-06-08
+user:fae5bc62adb84c6182d628bbbf36434a,user,horndev,cc-expert-local-deep,cc-profile,True,broken,model-missing=12;unknown-endpoint=1,0,-,2026-04-20
+user:7bd4ca2001894945bc7a6eb35b69632b,user,horndev,cc-expert-sonnet-deep,cc-profile,True,broken,model-missing=2,0,-,2026-04-28
+user:1dc50bcad8c748dab467bfcdf220147b,user,horndev,cc-m10-n11-specialist-v1,cc-profile,True,broken,unknown-endpoint=11,0,-,2026-06-20
+user:cc-rtx-specialist-v1,user,horndev,cc-rtx-specialist-v1,cc-profile,True,broken,model-missing=12;unknown-endpoint=1,9,2026-06-11,2026-06-06
+user:c9cc1982f53540c1bac5530036402cfe,user,horndev,cc-rtx-specialist-v2 north,cc-profile,True,ok,,0,-,2026-06-20
+user:e5d2b78c5a3a484f9591ad829e8ad197,user,horndev,CHEXT-Gemini-Thinking,chext,True,broken,model-missing=3;no-endpoint=12,3,2026-04-25,2026-05-20
+user:e8eb55ff47924e8195b4b3d19310eb28,user,horndev,hermes-kanban-worker,hermes,True,broken,model-missing=4,47,2026-06-03,2026-06-03
+user:d12f8e55c3d24b9fb63f52778c4fa677,user,horndev,hermes-openrouter-free,hermes,True,ok,,0,-,2026-06-05
+user:ac00523f90214a1d991f50f4c1540acf,user,horndev,hermes-sovereign,hermes,True,broken,model-missing=5,3,2026-06-02,2026-06-02
+user:b446e9e7ea97401bb073ddadeb0f1663,user,other-user-1,hermes-sovereign,hermes,True,broken,model-missing=3,3,2026-06-02,2026-06-04
+user:411e14023d0d4d34aad8a40acfbcd5ac,user,horndev,hermes-tool-agent,hermes,True,broken,model-missing=4,1,2026-06-03,2026-06-02
+user:ad3b8cc93ece4970b676ee893fa65e1f,user,other-user-1,hermes-tool-agent,hermes,True,broken,model-missing=2,1,2026-06-03,2026-06-04
+user:632a757ac045457eb083c9ab1b6ea735,user,horndev,moe-aihub-free-gremium-deep-wcc,moe-aihub,True,broken,model-missing=1,78,2026-07-24,2026-05-20
+user:42df3990049d4e33b0e86019dd72c08e,user,horndev,moe-aihub-free-gremium-deep-wocc,moe-aihub,True,ok,,16,2026-04-27,2026-05-20
+user:945ce341a873438089e8e58ca8a20030,user,horndev,moe-aihub-free-nextgen,moe-aihub,True,ok,,2,2026-04-22,2026-05-20
+user:ac40f05e3ca54cee8b59e2daf7993cdb,user,horndev,moe-aihub-sovereign,moe-aihub,True,ok,,11,2026-06-01,2026-05-21
+user:a5fc17402fec4bbcaa5d19863424a3c0,user,horndev,moe-aihub-sovereign-agentic,moe-aihub,True,ok,,0,-,2026-06-05
+user:3414a68ac570428884e9137b3ef57d15,user,horndev,moe-n04-rgtx-gemma4-12b-256k,moe-n04,True,broken,model-missing=10,1,2026-07-13,2026-07-09
+user:2aa61a4e85c940759db554caca83bf65,user,other-user-2,moe-n04-rgtx-gemma4-12b-256k,moe-n04,True,broken,model-missing=10,1,2026-07-13,2026-07-12
+user:c53e5c303baf40608dacf6b9f0b61a5f,user,other-user-2,moe-n04-rtx-ornith-35b-256k,moe-n04,True,broken,model-missing=10,1,2026-08-30,2026-07-26
+user:660629d8bd0c468698ab15b92df2866f,user,horndev,moe-n04-rtx-qwen3.6:35b-256k,moe-n04,True,ok,,42,2026-08-01,2026-07-04
+user:98194437dbd24fe5a3bcb0ee19faa999,user,other-user-2,moe-n04-rtx-qwen3.6:35b-256k,moe-n04,True,ok,,42,2026-08-01,2026-07-12
+user:f27427d54dfa464fafe8c45dcdc5d298,user,horndev,moe-n04-rtx-qwen3.6:35b-256k-debate-v1,moe-n04,True,ok,,0,-,2026-08-07
+user:58851282076f4bc4958050cedac77702,user,horndev,moe-n04rtx-specialist,moe-n04,True,broken,model-missing=14,8,2026-06-05,2026-06-05
+user:7161ef6c9a6b4c57b1be3ccae66596f2,user,philipp.horn,moe-overhead-qwen3-coder-480b,moe-overhead,True,broken,no-endpoint=1;unknown-endpoint=9,0,-,2026-05-08
+user:acb117b2a98a4a5e89b234e4ca104dc1,user,philipp.horn,moe-overhead-qwen3.5-35b-local,moe-overhead,True,ok,,0,-,2026-05-08
+user:24ea7e4c64ff4b4a8e206ad75db62cd8,user,other-user-3,moe-overhead-sonnet46,moe-overhead,True,broken,no-endpoint=1,0,-,2026-05-13
+user:5901e87cdf65491286d27667395ae6d2,user,horndev,moe-overhead-sonnet46,moe-overhead,True,broken,no-endpoint=1;model-missing=1,0,-,2026-05-20
+user-horndev-tmpl-sovereign-benchmark-no-graphrag,user,horndev,MoE Sovereign Ablation (No GraphRAG),moe-sovereign-old-benchmark,True,broken,model-missing=7;unknown-endpoint=6,99,2026-08-28,2026-08-29
+user-horndev-tmpl-sovereign-benchmark-deliberation,user,horndev,MoE Sovereign Deliberation Benchmark,moe-sovereign-old-benchmark,True,broken,model-missing=7;unknown-endpoint=6,110,2026-08-28,2026-08-29
+user-horndev-tmpl-sovereign-scientific-benchmark,user,horndev,MoE Sovereign Scientific Benchmark,moe-sovereign-old-benchmark,True,broken,model-missing=7;unknown-endpoint=6,190,2026-08-29,2026-08-29
+user:996db2a738ee4a42ba955cf6de4ead9b,user,horndev,moe-json-output,other,True,broken,model-missing=2,87,2026-06-03,2026-06-02
+user:38b76f04b7af453d823d7f50e7452dd4,user,horndev,moe-local-sovereign,other,True,broken,model-missing=2,28,2026-06-01,2026-05-21
+user:d967b61176de4f02bbe59dc7bcee8f41,user,horndev,moe-local-sovereign-hybrid,other,True,broken,model-missing=15,10,2026-06-02,2026-06-01
+user:fc6ae13136ce4afb977e754b471f06ff,user,other-user-1,moe-mail-classify,other,True,broken,model-missing=2,1,2026-06-02,2026-06-04
+user:3de4455e39d5488dab6282301f657ed9,user,horndev,moe-mail-classify,other,True,broken,model-missing=4,1,2026-06-02,2026-06-02
+user:9ab3ee5938464bafae42d25a2e13dfa4,user,horndev,moe-memory-aihub-hybrid,other,True,broken,model-missing=9,2,2026-04-27,2026-04-28
+user:729129dcfab54fb39333992ef1f02cfa,user,horndev,moe-memory-aihub-nosm,other,True,broken,model-missing=9,0,-,2026-05-20
+user:0002001e60c94aaebda69c2d883dd6cf,user,horndev,moe-mixed-api,other,True,ok,,1,2026-05-20,2026-05-12
+user:a4a61e43f4a94593a939e4cd2b147e7c,user,other-user-1,moe-mixed-api,other,True,broken,unknown-endpoint=1,1,2026-05-20,2026-06-04
+user:0b68cee1412c4adaae9ff5b950475ec4,user,horndev,moe-ollama-sovereign,other,True,ok,,0,-,2026-05-20
+user:cc3251f7ab0a40beb615744ead499c27,user,other-user-1,moe-ollama-sovereign,other,True,broken,unknown-endpoint=9,0,-,2026-06-04
+user:c2e0aed221ce4607b9d898e86a84ab04,user,horndev,moe-openrouter-free,other,True,ok,,0,-,2026-06-05
+user:cd652f3e04e04767931ea92ad803402d,user,horndev,moe-quality-balanced,other,True,broken,model-missing=8,9,2026-06-02,2026-06-02
+user:9392df06c2dc451995fa834281560b48,user,horndev,moe-quality-baseline,other,True,broken,model-missing=20,1,2026-06-02,2026-06-02
+user:542b62e5adc44f1aaeefb9439ed8e149,user,horndev,moe-quality-optimal,other,True,broken,model-missing=8,4,2026-06-03,2026-06-02
+user:9136cbab74294a00bb4bb21dfffc199b,user,other-user-1,moe-quality-optimal-cloud-free,other,True,ok,,0,-,2026-06-04
+user:d5e4ef3f2c7947d69d8ceccd092a9d35,user,horndev,moe-quality-optimal-v2,other,True,broken,model-missing=9,0,-,2026-06-04
+user:f7c267b9ba3341a3a84eea81cf162357,user,horndev,moe-quality-specialist,other,True,broken,model-missing=9,3,2026-06-02,2026-06-02
+user:fd81ba006c2f45ee96da8171307baa94,user,other-user-3,sovereign-code-max,other,True,ok,,0,-,2026-05-13
