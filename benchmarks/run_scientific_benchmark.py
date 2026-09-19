@@ -14,7 +14,7 @@ Evaluates:
 
 Generates:
   - Detailed per-task execution traces
-  - Deterministic + LLM-as-a-Judge evaluations via sovereign-judge:27b
+  - Deterministic + LLM-as-a-Judge evaluations via the fine-tuned sovereign judges (hf.co/h3rb3rn/sovereign-judge-*)
   - Formatted JSON and Markdown artifacts in benchmarks/results/
 """
 
@@ -68,7 +68,7 @@ def _redis_password() -> Optional[str]:
     return None
 API_KEY = os.environ.get("MOE_API_KEY", "YOUR_API_KEY_HERE")
 
-JUDGE_MODEL = os.environ.get("MOE_JUDGE_MODEL", "sovereign-judge:27b")
+JUDGE_MODEL = os.environ.get("MOE_JUDGE_MODEL", "hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M")
 NATIVE_MODEL = os.environ.get("MOE_BENCHMARK_NATIVE_MODEL", "qwen3.8:27b")
 # Node for the "model@node" native-passthrough route on the MoE Sovereign API
 # (services/pipeline/chat.py) -- both the judge (scoring) and the native
