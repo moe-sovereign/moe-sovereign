@@ -4946,3 +4946,24 @@ Plan / progress:
 Notes:
 - Nothing of the other agent's work was reverted or committed by this session. The benchmark must not be restarted until
   the owner of the system state is decided (see user decision).
+
+## 2026-09-19T06:13:09Z — sovereign-judge:27b removed, judge switched to hf.co/h3rb3rn/sovereign-judge-27b — done
+Plan / progress:
+- User request: delete the outdated Ollama tag sovereign-judge:27b, use only the new fine-tunes from Hugging Face
+  (account h3rb3rn: 20 repos = 2 judges, 2 planners, 8 SmolLM3-3B experts, 8 Qwen3.5-4B experts).
+- Deleted via /api/delete on N04-RGTX and N02-M60-01. MISTAKE: Ollama instances on the same host share one model
+  store, so the tag also vanished on N04-RTX (default judge endpoint) and all N02-M60 instances; I had assumed
+  per-instance stores. The default judge (.env JUDGE_MODEL) was unavailable until the switch below (~10-15 min).
+- Fix-forward: 34 dynamic templates (moe-dyn-*) and 3 user templates of horndev repointed to
+  hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M (backup of old values: benchmarks/results/runbook/judge_repoint_backup_20260919.txt);
+  .env JUDGE_MODEL switched (old .env copy in /opt/tmp/env.before-judge-switch.*); langgraph-orchestrator recreated from
+  image moe-sovereign-orchestrator:hotpatched-20260919 (docker commit of the running container, keeps the files another
+  agent copied in) so ONLY the judge changed; clean image kept as :clean-bf2a5c7e. Verified: healthy, env correct,
+  real judge call OK (valid JSON, verdicts), model loaded on N04-RTX.
+- Benchmark tooling: harness default and runner default (Spur 2 judge) now hf.co/h3rb3rn/sovereign-judge-27b;
+  Spur 1 judge stays hf.co/h3rb3rn/sovereign-judge-olmo31-32b. Commit e8c116dc (local).
+Notes:
+- Left as is: scripts/setup_sovereign_judge_27b.sh and models/moe-sovereign-judge-27b/README.md still describe building
+  the removed tag; dynamic templates still use planner qwen3-planner:q4km.
+- Open: Spur 2 fine-tuned Qwen template does not exist yet (coder-4b Q4_K_M not pulled on N04/N02); baseline model choice;
+  variant A/B/C decision and freeze of the other agent. Benchmark NOT restarted.
