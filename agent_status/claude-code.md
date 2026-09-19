@@ -5079,3 +5079,10 @@ Notes:
   (= previous `:local`). The container already ran the other agent's uncommitted code before the rebuild (graph/planner.py incl. the
   "MULTI-DISCIPLINARY CO-EVALUATION" prompt block, graph/expert.py, contracts, routing, config): it applies to every condition of the benchmark,
   is not in the training prompt and is not committed. Smoke test after the rebuild: Spur 1 fine-tuned template answered, planner routed to code_reviewer.
+
+## 2026-09-19 in_progress: scientific benchmark run (one round per track), started 20260919T210536Z
+- Lease: Spur 1 then Spur 2, 7 conditions each, `benchmarks/run_spur1_and_spur2.sh` with MOE_BENCHMARK_NUM_ROUNDS=1 (expected ~25-30 h per track).
+- DO NOT during the run: restart/recreate/rebuild `langgraph-orchestrator`, change any `LUMI-G*` / `Open-Weight*` admin template, change `.env`
+  planner/judge settings, or unload models on N04-RTX/N04-RGTX/N04-TM10/N02-M60. Any of it invalidates the run.
+- `benchmarks/integrity_watch.py` logs container/git/template changes to `benchmarks/results/integrity_20260919T210536Z.log` (check it after the run).
+- Runtime carries another agent's uncommitted planner/expert changes (see the entry above); they apply to all conditions equally.
