@@ -5068,3 +5068,14 @@ Notes:
   13 templates of other users include the Hermes ones), functional references in code/config/installer/scripts removed, history kept.
   47 orphaned permission rows deleted. Backup in `benchmarks/results/runbook/student4b_and_orphans_backup_20260919.json`.
 - Not done: Valkey `user:apikey:*` caches were not refreshed for the deleted permission rows (they only point at templates that no longer exist).
+
+## 2026-09-19 update: dynamic-expert escape hatch closed, baseline model list
+- Finding: `_sanitize_plan` accepted the category "dynamic" for every template and `graph/expert.py` then built an ad-hoc expert on any model of any
+  endpoint (bypasses pinned model@endpoint rosters; the planner already did not offer it to such templates, the empty-plan guard text names it).
+  0 of 36 telemetry rows of the benchmark templates used it. Fix (commit a0523d8c, only the sanitizer hunk staged; the other agent's uncommitted
+  planner changes stay in the work tree): "dynamic" is valid only without a template or when the template defines it; otherwise it maps to
+  "general". Tests: tests/test_planner_dynamic_pinned_roster.py, full suite 1374 passed.
+- Deployed: image rebuilt (GIT_REVISION=a0523d8c; /health shows it), rollback tag `moe-sovereign-orchestrator:pre-dynamic-fix-20260919`
+  (= previous `:local`). The container already ran the other agent's uncommitted code before the rebuild (graph/planner.py incl. the
+  "MULTI-DISCIPLINARY CO-EVALUATION" prompt block, graph/expert.py, contracts, routing, config): it applies to every condition of the benchmark,
+  is not in the training prompt and is not committed. Smoke test after the rebuild: Spur 1 fine-tuned template answered, planner routed to code_reviewer.
