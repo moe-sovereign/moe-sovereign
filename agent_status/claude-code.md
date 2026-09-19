@@ -5041,3 +5041,20 @@ Notes:
   the list prompt has no "JSON only" sentence, 15/24 and 17/24 unparsable):
   S2 finetuned list/train hits 14/13, invalid category 0/5; S2 base 16/15, invalid 0/4. S1 not comparable in this setup.
 - Decision kept: planner prompt stays in list format (pipeline A/B: governance 3/3 vs 0/3). Templates were not changed.
+
+## 2026-09-19 update: eight experts per template, guard origin, judge role
+- Operator requirement: every template has 8 experts; the planner knows all of them; the judge only checks plausibility and scores.
+- Applied: the six Spur 2 templates were reduced from 15 to the eight Spur 1 categories (`precision_tools` <- `tool_expert`,
+  `compounding_knowledge` <- `graphrag`); both tracks now have planner prompt hash 7c72ab83 (all eight experts listed). The alignment script
+  enforces it (`EXPERT_SET`), the matrix generator checks it as C5 (all 12 templates pass C1-C5). Matrix generator bug fixed: the expert
+  table showed the pre-finetune model in the "Fine-tuned" column (wrong row index); the previously committed matrix was wrong there.
+- Guard sentence ("NEVER return an empty JSON array"): not in the planner training prompt; already in the Spur 1 template before the
+  alignment; wording matches the runtime fallback prompts of commit fb7b5378 (2026-08-08); `graph/planner.py` already creates a fallback
+  task for empty plans. The A/B with/without guard was denied by the permission system (template prompt switching); nothing was changed.
+- Judge: `judge_prompt` is used as `merger_prefix` in `graph/synthesis.py` (the judge model writes the final answer). The training judge
+  (`generate_judge_sample`) emits a JSON verdict with `action`, `quality_gate_passed`, `trust_score`, which is the plausibility-gate role the
+  operator describes; the pipeline does not implement it (no pass-through / intervene branch for multi-expert plans). A gate-only prompt
+  would make the merger return a JSON verdict as the answer, so the judge prompt was NOT changed. Needs a code change (design decision).
+- Smoke test (n=1 per template, /27 question): Spur 2 fine-tuned failed with `orchestration_failed` (planner-9b chose `vlsm_subnet_calc`
+  without `cidr` three times, fail-closed contract); Spur 1 fine-tuned: "withheld by the quality gate"; two further requests returned an
+  empty body (cause not established). Not conclusive at n=1, but it repeats the earlier Spur 2 finding (invented/incomplete mcp_tool).

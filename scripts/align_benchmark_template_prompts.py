@@ -9,6 +9,7 @@ must receive the SAME prompts, otherwise the comparison mixes a weights effect w
 What it sets, identically in every target template:
   * experts[cat].system_prompt  = training role prompt of the domain role assigned to the category
   * judge_prompt                = training judge prompt
+  * experts                     = exactly the eight domain experts (EXPERT_SET); Spur 2 templates are reduced from 15
   * planner_prompt              = the original descriptive category list (validated by A/B test, see below) for the
                                   template's own categories, in a fixed order, plus the "never return an empty array" guard
 
@@ -51,6 +52,15 @@ TARGETS = [
     "Open-Weight Finetuned Ensemble - Deliberation",
     "Open-Weight Finetuned Ensemble - No-GraphRAG",
 ]
+
+# Every benchmark template has exactly these eight experts (the eight fine-tuned domain roles). Templates that carry more
+# categories (Spur 2 had 15) are reduced to them; value = the existing category whose model/endpoint/tool slot is kept.
+EXPERT_SET = {
+    "general": "general", "research": "research", "security": "security", "governance": "governance",
+    "data_analyst": "data_analyst", "code_reviewer": "code_reviewer",
+    "precision_tools": "tool_expert",          # Spur 2 name of the precision expert
+    "compounding_knowledge": "graphrag",       # Spur 2 name of the knowledge-graph expert
+}
 
 # category -> training role of the fine-tuned domain expert that serves it (same rule in both tracks)
 CATEGORY_ROLE = {
@@ -153,6 +163,19 @@ def planner_prompt(categories: list[str]) -> str:
     return PLANNER_HEADER + "\n" + "\n".join(lines) + "\n" + EMPTY_PLAN_GUARD
 
 
+def reduce_to_expert_set(experts: dict, name: str) -> dict:
+    """Return the eight-expert dict for a template (unchanged if it already has exactly the set)."""
+    if set(experts) == set(EXPERT_SET):
+        return experts
+    out = {}
+    for new_cat, old_cat in EXPERT_SET.items():
+        source = new_cat if new_cat in experts else old_cat
+        if source not in experts:
+            raise SystemExit(f"{name}: neither {new_cat!r} nor {old_cat!r} present, cannot build the eight-expert set")
+        out[new_cat] = experts[source]
+    return out
+
+
 def h(text: str) -> str:
     return hashlib.sha1((text or "").strip().encode()).hexdigest()[:8]
 
@@ -176,7 +199,10 @@ def main() -> None:
         cfg = json.loads(row["config_json"])
         backup.append({"id": row["id"], "name": row["name"], "config_json": row["config_json"]})
         new = json.loads(row["config_json"])
+        new["experts"] = reduce_to_expert_set(new["experts"], row["name"])
         cats = list(new["experts"].keys())
+        if len(cats) != 8:
+            raise SystemExit(f"{row['name']}: {len(cats)} experts, every benchmark template must have 8")
         unknown = [c for c in cats if c not in CATEGORY_ROLE]
         if unknown:
             raise SystemExit(f"{row['name']}: category without role mapping: {unknown}")
@@ -189,8 +215,10 @@ def main() -> None:
         new["judge_prompt"] = judge
         new["planner_prompt"] = planner_prompt(cats)
         changed = [k for k in ("planner_prompt", "judge_prompt") if new[k] != cfg.get(k)]
-        changed += [f"experts.{c}" for c in cats if new["experts"][c]["system_prompt"] != cfg["experts"][c].get("system_prompt")]
-        changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if new["experts"][c]["models"] != cfg["experts"][c]["models"]]
+        if set(cfg["experts"]) != set(cats):
+            changed.append(f"expert set {len(cfg['experts'])} -> {len(cats)}")
+        changed += [f"experts.{c}" for c in cats if c in cfg["experts"] and new["experts"][c]["system_prompt"] != cfg["experts"][c].get("system_prompt")]
+        changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if c in cfg["experts"] and new["experts"][c]["models"] != cfg["experts"][c]["models"]]
         print(f"{row['name'][:58]:58s} categories={len(cats):2d} changes={len(changed):2d} planner={h(new['planner_prompt'])} judge={h(judge)}")
         if changed:
             updates.append((row["id"], json.dumps(new, ensure_ascii=False)))

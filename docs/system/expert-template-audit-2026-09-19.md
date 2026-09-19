@@ -84,6 +84,7 @@ weights-only comparison is fair only if both families use the same prompts.
 | 34 dynamic templates and their 34 permission rows deleted (never used, all broken; backup `benchmarks/results/runbook/dynamic_templates_backup_20260919.json`) | applied (2026-09-19, operator approval) |
 | Seed `seed_default_admin_templates()` removed from `admin_ui/database.py` and `admin_ui/app.py`; the four seeded `MoE Sovereign ...` templates (planner `moe-sovereign-student:4b`) and their 16 permission rows deleted (backup `moe_sovereign_seeded_templates_backup_20260919.json`) | applied; takes effect in the running admin process at its next restart |
 | Harness defaults for the three template variables now point at the Spur 1 fine-tuned templates | applied |
+| Spur 2 templates reduced from 15 to the eight Spur 1 categories (operator requirement: every template has 8 experts); backup `benchmarks/results/runbook/template_prompts_backup_20260919T130053Z.json` | applied (2026-09-19) |
 | Prompts of 14 benchmark templates aligned by `scripts/align_benchmark_template_prompts.py`: experts and judge use the training role prompts, the planner uses the original descriptive category list (not the training prompt, see below); backup of the pre-alignment rows in `benchmarks/results/runbook/template_prompts_backup_original_pre_alignment_20260919.json` | applied (2026-09-19, operator approval) |
 
 ## 5. Not verified

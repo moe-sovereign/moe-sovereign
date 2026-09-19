@@ -55,3 +55,29 @@ def test_planner_prompt_lists_every_category_but_dynamic(al):
 def test_unknown_category_is_rejected(al):
     with pytest.raises(ValueError):
         al.planner_prompt(["general", "no_such_category"])
+
+
+def test_expert_set_is_the_eight_spur1_categories(al):
+    assert len(al.EXPERT_SET) == 8
+    assert set(al.EXPERT_SET) == set(SPUR1)
+    assert set(al.EXPERT_SET) <= set(al.CATEGORY_ROLE)
+
+
+def test_fifteen_expert_template_is_reduced_to_the_eight(al):
+    fifteen = {c: {"models": [c]} for c in [
+        "code_reviewer", "systems_programming", "research", "web_researcher", "general", "reasoning", "math", "data_analyst",
+        "tool_expert", "technical_support", "dynamic", "security", "governance", "science", "graphrag"]}
+    out = al.reduce_to_expert_set(fifteen, "t")
+    assert list(out) == list(al.EXPERT_SET)
+    assert out["precision_tools"] is fifteen["tool_expert"] and out["compounding_knowledge"] is fifteen["graphrag"]
+    assert al.planner_prompt(list(out)) == al.planner_prompt(SPUR1)
+
+
+def test_template_that_already_has_the_eight_is_untouched(al):
+    eight = {c: {} for c in SPUR1}
+    assert al.reduce_to_expert_set(eight, "t") is eight
+
+
+def test_missing_source_expert_is_rejected(al):
+    with pytest.raises(SystemExit):
+        al.reduce_to_expert_set({"general": {}}, "t")

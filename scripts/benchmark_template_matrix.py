@@ -8,6 +8,7 @@ every planner / judge / expert assignment and checks the comparability criteria 
   C2  planner, judge and expert system prompts are identical between the counterparts
   C3  every referenced model exists on its endpoint
   C4  privacy local_only, cache off, web research off
+  C5  exactly eight experts
 
 Usage (host only):  python3 scripts/benchmark_template_matrix.py [--out docs/system/benchmark-template-matrix.md]
 """
@@ -60,7 +61,7 @@ NOTES = """## Findings and open points
    all six pairs now pass C1 to C4. They are not part of the benchmark design and can re-appear if another agent edits
    the templates again: re-run this script before every benchmark start. `review_lenses` still exist in the Review and
    Review NoSC arms (intended) and in the three `LUMI-G Ensemble` hybrids (outside the matrix).
-2. **Spur 2 is comparable.** All six templates pass C1 to C4.
+2. **Spur 2 is comparable.** All six templates pass C1 to C5.
 3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`. Experts: each category gets the
    training role prompt of its assigned domain expert; judge: the training judge prompt. **Planner: not the training
    prompt.** An A/B test (9 planner calls per variant, 2026-09-19) showed that the training preamble with a
@@ -69,21 +70,31 @@ NOTES = """## Findings and open points
    therefore the original descriptive list ("- category: description" plus the empty-plan guard) for each template's own
    categories in a fixed order; for Spur 1 it is byte-identical to the validated original. The same category has the
    same expert prompt hash in both tracks. Expert-prompt alignment itself has no A/B evidence yet.
-4. **Model assignment aligned across tracks:** `data_analyst` was served by the precision expert in Spur 2 and by the
-   data-infrastructure expert in Spur 1; Spur 2 now follows Spur 1. Questionable but unchanged: Spur 2 `science` and
-   `dynamic` are served by the GraphRAG and data-infrastructure experts.
-5. **Differences between the tracks that are inherent, not defects:** category sets (8 vs 15), planner context
+4. **Every template has exactly eight experts (C5, operator requirement 2026-09-19).** Spur 2 carried 15 categories; it
+   now has the eight Spur 1 categories. `precision_tools` keeps the slot of the former `tool_expert` and
+   `compounding_knowledge` the slot of the former `graphrag` (models, endpoints, MCP tool lists unchanged); the categories
+   `systems_programming`, `web_researcher`, `reasoning`, `math`, `technical_support`, `dynamic` and `science` were removed.
+   Both planners therefore list the same eight experts with the same text (prompt hash 7c72ab83 in both tracks). Backup:
+   `benchmarks/results/runbook/template_prompts_backup_20260919T130053Z.json`. Spur 2 keeps its MCP tool lists per expert;
+   the Spur 1 experts have none (not a C1 criterion, but a structural difference).
+5. **Empty-plan guard in the planner prompt.** The sentence "You MUST always produce at least one task. NEVER return an
+   empty JSON array." is not part of the planner training prompt (`generate_planner_dataset.py` rejects empty plans as a
+   training sample). It was already in the Spur 1 fine-tuned template before the alignment (byte-identical) and its
+   wording matches the runtime fallback prompts added on 2026-08-08 (commit `fb7b5378`, for a planner that returned `[]`);
+   the date it entered the template cannot be established from Git because templates live in the database. The runtime
+   also creates a fallback task for an empty plan (`graph/planner.py`), so the guard is redundant for pipeline
+   correctness. Whether removing it changes routing was not measured (A/B blocked, see the status log).
+6. **Differences between the tracks that are inherent, not defects:** planner context
    (65536 vs 32768), judge context (65536 vs 262144) and different judges. Absolute scores must not be compared across
    tracks; compare each track with its own baseline.
-6. **Planner taxonomy (unverified effect):** the planners were trained on a fixed taxonomy; `security`, `governance`,
-   `compounding_knowledge` (Spur 1) and `systems_programming`, `web_researcher`, `tool_expert`, `graphrag` (Spur 2) are
-   not part of it. The planner must generalise to them; this is not measured.
-7. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
+7. **Planner taxonomy (unverified effect):** the planners were trained on a fixed taxonomy (`legal_advisor`, `agentic_coder`, ...);
+   `security`, `governance` and `compounding_knowledge` are not part of it. The planner must generalise to them; this is not measured.
+8. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
    prompt) at temperature 0.2. The model defaults above follow the operator's earlier statement (Qwen3.6-27B for
    Open Weight, OLMo 3.1 for Open Source) and are not yet confirmed.
-8. **Design per track: 7 conditions** = 3 pre-finetune templates + 3 fine-tuned templates (GraphRAG, no GraphRAG,
+9. **Design per track: 7 conditions** = 3 pre-finetune templates + 3 fine-tuned templates (GraphRAG, no GraphRAG,
    GraphRAG + debate) + 1 native baseline. Each pre-finetune template is compared with its fine-tuned counterpart.
-9. **Not part of the matrix:** the Review and Review NoSC variants (review-wave arms), the `LUMI-G Ensemble` hybrids and
+10. **Not part of the matrix:** the Review and Review NoSC variants (review-wave arms), the `LUMI-G Ensemble` hybrids and
    the `moe-frontier-*` templates.
 """.splitlines()
 
@@ -155,12 +166,13 @@ def main() -> None:
           "- **C1** identical structure (categories, flags, context windows, endpoints, number of models per category); only model names differ",
           "- **C2** identical planner, judge and expert system prompts",
           "- **C3** every referenced model is present on its endpoint",
-          "- **C4** `local_only`, cache off, web research off", ""]
+          "- **C4** `local_only`, cache off, web research off",
+          "- **C5** exactly eight experts", ""]
     csv_rows = []
     for track, spec in TRACKS.items():
         md += [f"## {track}", "", f"Native baseline (single dense LLM without orchestration, default of `run_spur1_and_spur2.sh`): `{spec['native_default']}` on N04-RTX (**to be confirmed**).", "",
-               "| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | Verdict |",
-               "|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|---|"]
+               "| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |",
+               "|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|"]
         for role, name, counterpart in spec["rows"]:
             t = tpl[name]
             cfg = t["cfg"]
@@ -184,16 +196,17 @@ def main() -> None:
                                 notes.append(f"`{cat}` sets `{extra}`")
                 c2 = (h(cfg["planner_prompt"]) == h(ref["planner_prompt"]) and h(cfg["judge_prompt"]) == h(ref["judge_prompt"])
                       and all(h(ec["system_prompt"]) == h(ref["experts"][c]["system_prompt"]) for c, ec in cfg["experts"].items()))
-            checks = [x for x in (c1, c2) if x is not None] + [c3, c4]
-            verdict = "pre-finetune" if counterpart is None and c3 and c4 else ("sound" if all(checks) else "**not sound**: " + ("; ".join(notes) or "see checks"))
+            c5 = len(cfg["experts"]) == 8
+            checks = [x for x in (c1, c2) if x is not None] + [c3, c4, c5]
+            verdict = "pre-finetune" if counterpart is None and c3 and c4 and c5 else ("sound" if all(checks) else "**not sound**: " + ("; ".join(notes) or "see checks"))
             mark = lambda v: "-" if v is None else ("yes" if v else "**NO**")
             md.append(f"| {role} | `{name}` (`{t['id']}`) | `{pm.split('/')[-1]}` @{pe} ctx {cfg.get('planner_num_ctx')} | `{jm.split('/')[-1]}` @{je} ctx {cfg.get('judge_num_ctx')} | "
                       f"{'on' if cfg.get('enable_graphrag') else 'off'} | {'on' if 'deliberation_policy' in cfg else 'off'} | "
-                      f"{h(cfg['planner_prompt'])} / {h(cfg['judge_prompt'])} | {mark(c1)} | {mark(c2)} | {mark(c3)} | {mark(c4)} | {verdict} |")
+                      f"{h(cfg['planner_prompt'])} / {h(cfg['judge_prompt'])} | {mark(c1)} | {mark(c2)} | {mark(c3)} | {mark(c4)} | {mark(c5)} | {verdict} |")
         md += ["", f"### {track}: expert assignment (category -> model @ endpoint)", "",
                "| Category | Training role prompt | Pre-Finetune reference | Fine-tuned |", "|---|---|---|---|"]
-        pre_cfg = tpl[spec["rows"][0][1]]["cfg"]
-        ft_cfg = tpl[spec["rows"][1][1]]["cfg"]
+        pre_cfg = tpl[spec["rows"][1][1]]["cfg"]   # pre-finetune, no GraphRAG
+        ft_cfg = tpl[spec["rows"][4][1]]["cfg"]    # fine-tuned, no GraphRAG
         for cat in pre_cfg["experts"]:
             pre_m = "; ".join(f"`{m['model'].split('/')[-1]}` @{m['endpoint']}" for m in pre_cfg["experts"][cat]["models"])
             ft_m = "; ".join(f"`{m['model'].split('/')[-1]}` @{m['endpoint']}" + (" (forced)" if m.get("forced") else "") for m in ft_cfg["experts"][cat]["models"])

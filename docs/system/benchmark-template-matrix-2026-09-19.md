@@ -8,65 +8,59 @@ Design per track: 3 pre-finetune templates, 3 fine-tuned templates and 1 native 
 - **C2** identical planner, judge and expert system prompts
 - **C3** every referenced model is present on its endpoint
 - **C4** `local_only`, cache off, web research off
+- **C5** exactly eight experts
 
 ## Spur 1 (open source)
 
 Native baseline (single dense LLM without orchestration, default of `run_spur1_and_spur2.sh`): `olmo31-32b-instruct-base-fixed:latest` on N04-RTX (**to be confirmed**).
 
-| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | Verdict |
-|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | sound |
+| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
+|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
+| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 1 (open source): expert assignment (category -> model @ endpoint)
 
 | Category | Training role prompt | Pre-Finetune reference | Fine-tuned |
 |---|---|---|---|
-| `general` | d675e123 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-02 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-02 |
-| `security` | 0e981d9d | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-03 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-03 |
-| `research` | 85289ded | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-04 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-04 |
-| `governance` | 8ff953dd | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-05 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-05 |
-| `compounding_knowledge` | 2dcc7cc8 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-06 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-06 |
-| `precision_tools` | 915b98f7 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-07 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-07 |
-| `data_analyst` | 64567ed0 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-08 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-08 |
-| `code_reviewer` | 1c1872c1 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-09 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-09 |
+| `general` | d675e123 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-02 | `smollm3-expert-omni-3b:Q4_K_M` @N02-M60-02 |
+| `security` | 0e981d9d | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-03 | `smollm3-expert-security-3b:Q4_K_M` @N02-M60-03 |
+| `research` | 85289ded | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-04 | `smollm3-expert-research-3b:Q4_K_M` @N02-M60-04 |
+| `governance` | 8ff953dd | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-05 | `smollm3-expert-governance-3b:Q4_K_M` @N02-M60-05 |
+| `compounding_knowledge` | 2dcc7cc8 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-06 | `smollm3-expert-graphrag-3b:Q4_K_M` @N02-M60-06 |
+| `precision_tools` | 915b98f7 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-07 | `smollm3-expert-precision-3b:Q4_K_M` @N02-M60-07 |
+| `data_analyst` | 64567ed0 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-08 | `smollm3-expert-datainfra-3b:Q4_K_M` @N02-M60-08 |
+| `code_reviewer` | 1c1872c1 | `HuggingFaceTB_SmolLM3-3B-GGUF:Q4_K_M` @N02-M60-09 | `smollm3-expert-coder-3b:Q4_K_M` @N02-M60-09 |
 
 ## Spur 2 (open weight)
 
 Native baseline (single dense LLM without orchestration, default of `run_spur1_and_spur2.sh`): `qwen3.6:27b` on N04-RTX (**to be confirmed**).
 
-| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | Verdict |
-|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | dd4700dc / 627b2c29 | - | - | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | dd4700dc / 627b2c29 | yes | yes | yes | yes | sound |
+| Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
+|---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
+| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 2 (open weight): expert assignment (category -> model @ endpoint)
 
 | Category | Training role prompt | Pre-Finetune reference | Fine-tuned |
 |---|---|---|---|
-| `code_reviewer` | 1c1872c1 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `systems_programming` | 1c1872c1 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `research` | 85289ded | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `web_researcher` | 85289ded | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `general` | d675e123 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `reasoning` | d675e123 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `math` | 915b98f7 | `qwen3.5:4b` @N04-TM10-02 | `qwen3.5:4b` @N04-TM10-02 |
-| `data_analyst` | 64567ed0 | `qwen3.5:4b` @N04-TM10-02 | `qwen3.5:4b` @N04-TM10-02 |
-| `tool_expert` | 915b98f7 | `qwen3.5:4b` @N04-TM10-02 | `qwen3.5:4b` @N04-TM10-02 |
-| `technical_support` | 64567ed0 | `qwen3.5:4b` @N04-TM10-03 | `qwen3.5:4b` @N04-TM10-03 |
-| `dynamic` | 64567ed0 | `qwen3.5:4b` @N04-TM10-03 | `qwen3.5:4b` @N04-TM10-03 |
-| `security` | 0e981d9d | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `governance` | 8ff953dd | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `science` | 2dcc7cc8 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
-| `graphrag` | 2dcc7cc8 | `qwen3.5:4b` @N04-TM10-01 | `qwen3.5:4b` @N04-TM10-01 |
+| `general` | d675e123 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-omni-4b:Q4_K_M` @N04-TM10-01 |
+| `research` | 85289ded | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-research-4b:Q4_K_M` @N04-TM10-01 |
+| `security` | 0e981d9d | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-security-4b:Q4_K_M` @N04-TM10-01 |
+| `governance` | 8ff953dd | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-governance-4b:Q4_K_M` @N04-TM10-01 |
+| `data_analyst` | 64567ed0 | `qwen3.5:4b` @N04-TM10-02 | `moe-expert-datainfra-4b:Q4_K_M` @N04-TM10-02 |
+| `code_reviewer` | 1c1872c1 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-coder-4b:Q4_K_M` @N04-TM10-01 |
+| `precision_tools` | 915b98f7 | `qwen3.5:4b` @N04-TM10-02 | `moe-expert-precision-4b:Q4_K_M` @N04-TM10-02 |
+| `compounding_knowledge` | 2dcc7cc8 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-graphrag-4b:Q4_K_M` @N04-TM10-01 |
 
 ## Findings and open points
 
