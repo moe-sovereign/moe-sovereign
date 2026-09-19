@@ -5095,3 +5095,15 @@ Notes:
   `run_spur1_and_spur2.sh` exits it finds the two sidecars, scores the expert answers and then runs the replay (per-category cap 8; both judges;
   estimated 15-20 h after the run). It uses the GPUs: do not start other GPU work on N04/N02 while it runs.
 - Offline-tested only (unit tests, dry run on an old sidecar, live template/model mapping); the judge and generation steps have not run against models yet.
+
+## 2026-09-20 incident during the run: judge reload hang on N04-RTX (resolved), parallelism findings
+- Symptom: first Spur 1 request (compound_ai, sysprog-01) stuck 75 min in the THINKING node (judge call); `benchmark_stuck` warnings in the orchestrator log.
+- Cause (reproduced): with the Spur 2 judge (`sovereign-judge-27b`, 18 GB, ctx 16384) resident, a request for the Spur 1 judge with `num_ctx=65536`
+  (template judge_num_ctx; the warm model had 16384) never completed the reload; the same model at 16384 answered in 0.7 s.
+- Fix: unloaded the idle `sovereign-judge-27b` on N04-RTX (`keep_alive: 0`); the OLMo judge then reloaded at 65536 and the request continued.
+  Consequence: the wall clock of that first cell (Spur 1 / compound_ai / sci-sysprog-01) includes ~75 min of stall and is NOT a valid latency value.
+  Risk: the same reload hang can recur at the Spur 1 -> Spur 2 switch; check the run for stalls (no new sidecar line for > 45 min).
+- Attempt to stop/restart the run was denied by the permission system; the run continues untouched.
+- Parallelism: Spur 1 experts run concurrently on separate instances (measured 4 experts, stage 61 s vs 197 s sequential = 3.2x). Spur 2 after the 8-expert
+  reduction: 6 categories on N04-TM10-01 (6 GPUs, semaphore 6), data_analyst + precision_tools serial on N04-TM10-02 (1 GPU), TM10-03/04 idle
+  (they served the removed technical_support/dynamic). Proposal: precision_tools -> N04-TM10-03 in all six Spur 2 templates (needs operator approval).
