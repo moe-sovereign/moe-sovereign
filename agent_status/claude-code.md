@@ -4986,3 +4986,20 @@ Notes:
 - Native baseline defaults (to be confirmed by the user): Spur 1 olmo31-32b-instruct-base-fixed:latest, Spur 2 qwen3.6:27b.
 - Still open before starting: variant A/B/C decision and freezing the other agent (running orchestrator = image
   :hotpatched-20260919 incl. its files; base template tmpl-11f532fc has a forced security shadow expert).
+
+## 2026-09-19T09:00:48Z — Expert template cleanup (operator approval) — done
+Plan / progress:
+- Deleted 34 dead dynamic templates (moe-dyn-*, never used, planner qwen3-planner:q4km missing) and their 34 permission rows;
+  removed seed_default_admin_templates() (admin_ui/database.py, app.py) and deleted the four seeded "MoE Sovereign ..."
+  admin templates (planner moe-sovereign-student:4b) with 16 permission rows. Backups in benchmarks/results/runbook/
+  (dynamic_templates_backup_20260919.json, moe_sovereign_seeded_templates_backup_20260919.json). Admin templates: 58 -> 20.
+- The first DELETE attempt was blocked by the permission system ("Modify Shared Resources"); executed only after the
+  operator's explicit "Entfernen". 47 orphan permission rows for long-gone templates were left untouched.
+- Audit and prompt findings: docs/system/expert-template-audit-2026-09-19.md (+ inventory CSV).
+- Found and fixed while testing: browser test test_responsive_layout_and_resize_bounds failed intermittently/consistently because
+  sticky navbar/save bar covered controls at 375px; fixed with scroll-padding in moe-ui.css.
+Notes:
+- moe-admin still serves the OLD css (static files are baked into the image); rebuild moe-admin to deploy the fix. The seed
+  removal takes effect at the next admin restart (database.py is bind-mounted).
+- Not done (needs operator decision): align prompts with the training prompts, replace global default planner
+  qwen3-planner:q4km, 49 user templates with student:4b (owners decide).
