@@ -81,3 +81,10 @@ def test_template_that_already_has_the_eight_is_untouched(al):
 def test_missing_source_expert_is_rejected(al):
     with pytest.raises(SystemExit):
         al.reduce_to_expert_set({"general": {}}, "t")
+
+
+def test_instance_placement_is_one_expert_per_ascending_m60_instance(al):
+    assert set(al.EXPERT_ENDPOINTS) == set(SPUR1)
+    ports = sorted(int(v.rsplit("-", 1)[1]) for v in al.EXPERT_ENDPOINTS.values())
+    assert ports == list(range(2, 10)) and len(set(al.EXPERT_ENDPOINTS.values())) == 8
+    assert (al.PLANNER_ENDPOINT, al.JUDGE_ENDPOINT) == ("N04-RGTX", "N04-RTX")

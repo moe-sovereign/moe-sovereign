@@ -9,6 +9,7 @@ must receive the SAME prompts, otherwise the comparison mixes a weights effect w
 What it sets, identically in every target template:
   * experts[cat].system_prompt  = training role prompt of the domain role assigned to the category
   * judge_prompt                = training judge prompt
+  * endpoints                   = expert i on N02-M60-02..09 (1:1 in both tracks), planner N04-RGTX, judge N04-RTX
   * experts                     = exactly the eight domain experts (EXPERT_SET); Spur 2 templates are reduced from 15
   * planner_prompt              = the original descriptive category list (validated by A/B test, see below) for the
                                   template's own categories, in a fixed order, plus the "never return an empty array" guard
@@ -61,6 +62,16 @@ EXPERT_SET = {
     "precision_tools": "tool_expert",          # Spur 2 name of the precision expert
     "compounding_knowledge": "graphrag",       # Spur 2 name of the knowledge-graph expert
 }
+
+# Instance placement, identical in both tracks (operator requirement 2026-09-20): one Ollama instance per expert on the
+# N02-M60 host in ascending port order (11435..11442), judge on N04-RTX (:11434), planner on N04-RGTX (:11435).
+EXPERT_ENDPOINTS = {
+    "general": "N02-M60-02", "security": "N02-M60-03", "research": "N02-M60-04", "governance": "N02-M60-05",
+    "compounding_knowledge": "N02-M60-06", "precision_tools": "N02-M60-07", "data_analyst": "N02-M60-08",
+    "code_reviewer": "N02-M60-09",
+}
+PLANNER_ENDPOINT = "N04-RGTX"
+JUDGE_ENDPOINT = "N04-RTX"
 
 # category -> training role of the fine-tuned domain expert that serves it (same rule in both tracks)
 CATEGORY_ROLE = {
@@ -212,12 +223,20 @@ def main() -> None:
             for slot in new["experts"][cat]["models"]:
                 if slot.get("role") != "always":
                     slot["model"] = model
+        for cat, ec in new["experts"].items():
+            for slot in ec["models"]:
+                if slot.get("role") != "always":  # the second model of the review-wave arms keeps its own instance
+                    slot["endpoint"] = EXPERT_ENDPOINTS[cat]
+        for key, endpoint in (("planner_model", PLANNER_ENDPOINT), ("judge_model", JUDGE_ENDPOINT)):
+            new[key] = new[key].rsplit("@", 1)[0] + "@" + endpoint
         new["judge_prompt"] = judge
         new["planner_prompt"] = planner_prompt(cats)
         changed = [k for k in ("planner_prompt", "judge_prompt") if new[k] != cfg.get(k)]
         if set(cfg["experts"]) != set(cats):
             changed.append(f"expert set {len(cfg['experts'])} -> {len(cats)}")
         changed += [f"experts.{c}" for c in cats if c in cfg["experts"] and new["experts"][c]["system_prompt"] != cfg["experts"][c].get("system_prompt")]
+        changed += [f"endpoint.{c}" for c in cats if c in cfg["experts"] and
+                    [s["endpoint"] for s in new["experts"][c]["models"]] != [s["endpoint"] for s in cfg["experts"][c]["models"]]]
         changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if c in cfg["experts"] and new["experts"][c]["models"] != cfg["experts"][c]["models"]]
         print(f"{row['name'][:58]:58s} categories={len(cats):2d} changes={len(changed):2d} planner={h(new['planner_prompt'])} judge={h(judge)}")
         if changed:

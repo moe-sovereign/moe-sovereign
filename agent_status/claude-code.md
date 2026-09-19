@@ -5107,3 +5107,12 @@ Notes:
 - Parallelism: Spur 1 experts run concurrently on separate instances (measured 4 experts, stage 61 s vs 197 s sequential = 3.2x). Spur 2 after the 8-expert
   reduction: 6 categories on N04-TM10-01 (6 GPUs, semaphore 6), data_analyst + precision_tools serial on N04-TM10-02 (1 GPU), TM10-03/04 idle
   (they served the removed technical_support/dynamic). Proposal: precision_tools -> N04-TM10-03 in all six Spur 2 templates (needs operator approval).
+
+## 2026-09-20 update: Open Weight instance placement 1:1 with Open Source (operator)
+- The six Open-Weight templates now use one instance per expert on N02-M60-02..09 (same category->instance mapping as Spur 1: general 02, security 03, research 04,
+  governance 05, compounding_knowledge 06, precision_tools 07, data_analyst 08, code_reviewer 09), judge N04-RTX (:11434), planner N04-RGTX (:11435, same host as N04-RTX).
+  Applied with `scripts/align_benchmark_template_prompts.py --apply` (EXPERT_ENDPOINTS; role "always" slots of the Review arms are left alone); backup
+  `benchmarks/results/runbook/template_prompts_backup_20260919T224408Z.json`. The Spur 1 templates were not touched (dry run: 0 changes) while Spur 1 runs.
+- Model store: `hf.co/h3rb3rn/moe-expert-coder-4b:Q4_K_M` was the only Qwen expert missing on N02; pulled via the free instance N02-M60-01 (instances of a host share one
+  model store). Smoke on N02-M60-01 (not used by the run): coder fine-tune 21.8 tok/s, qwen3.5:4b 18.1 tok/s at num_ctx 32768, both complete. Nothing was loaded on M60-02..09.
+- The integrity log shows the six Spur 2 template hashes changing at this point: expected, Spur 2 had not started.

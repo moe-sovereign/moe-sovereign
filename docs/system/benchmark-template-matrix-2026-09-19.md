@@ -1,4 +1,4 @@
-# Benchmark template matrix (2026-09-19)
+# Benchmark template matrix (2026-09-20)
 
 **Status:** validated against the live database and the Ollama endpoints at generation time (`python3 scripts/benchmark_template_matrix.py`). Regenerate after every template change.
 
@@ -53,14 +53,14 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Category | Training role prompt | Pre-Finetune reference | Fine-tuned |
 |---|---|---|---|
-| `general` | d675e123 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-omni-4b:Q4_K_M` @N04-TM10-01 |
-| `research` | 85289ded | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-research-4b:Q4_K_M` @N04-TM10-01 |
-| `security` | 0e981d9d | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-security-4b:Q4_K_M` @N04-TM10-01 |
-| `governance` | 8ff953dd | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-governance-4b:Q4_K_M` @N04-TM10-01 |
-| `data_analyst` | 64567ed0 | `qwen3.5:4b` @N04-TM10-02 | `moe-expert-datainfra-4b:Q4_K_M` @N04-TM10-02 |
-| `code_reviewer` | 1c1872c1 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-coder-4b:Q4_K_M` @N04-TM10-01 |
-| `precision_tools` | 915b98f7 | `qwen3.5:4b` @N04-TM10-02 | `moe-expert-precision-4b:Q4_K_M` @N04-TM10-02 |
-| `compounding_knowledge` | 2dcc7cc8 | `qwen3.5:4b` @N04-TM10-01 | `moe-expert-graphrag-4b:Q4_K_M` @N04-TM10-01 |
+| `general` | d675e123 | `qwen3.5:4b` @N02-M60-02 | `moe-expert-omni-4b:Q4_K_M` @N02-M60-02 |
+| `research` | 85289ded | `qwen3.5:4b` @N02-M60-04 | `moe-expert-research-4b:Q4_K_M` @N02-M60-04 |
+| `security` | 0e981d9d | `qwen3.5:4b` @N02-M60-03 | `moe-expert-security-4b:Q4_K_M` @N02-M60-03 |
+| `governance` | 8ff953dd | `qwen3.5:4b` @N02-M60-05 | `moe-expert-governance-4b:Q4_K_M` @N02-M60-05 |
+| `data_analyst` | 64567ed0 | `qwen3.5:4b` @N02-M60-08 | `moe-expert-datainfra-4b:Q4_K_M` @N02-M60-08 |
+| `code_reviewer` | 1c1872c1 | `qwen3.5:4b` @N02-M60-09 | `moe-expert-coder-4b:Q4_K_M` @N02-M60-09 |
+| `precision_tools` | 915b98f7 | `qwen3.5:4b` @N02-M60-07 | `moe-expert-precision-4b:Q4_K_M` @N02-M60-07 |
+| `compounding_knowledge` | 2dcc7cc8 | `qwen3.5:4b` @N02-M60-06 | `moe-expert-graphrag-4b:Q4_K_M` @N02-M60-06 |
 
 ## Findings and open points
 
