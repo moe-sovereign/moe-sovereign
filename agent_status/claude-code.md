@@ -5020,3 +5020,14 @@ Plan / progress:
 Notes:
 - The planned A/B (old vs new planner prompt on tmpl-smollm3-nograph, 6 requests per arm) was blocked by the permission
   system (Modify Shared Resources); nothing was changed. Needs the operator's decision.
+
+## 2026-09-19 update: prompt alignment finished (commit ec0f781d)
+- A/B (operator-approved, 9 planner calls per variant, tmpl-smollm3-nograph): original list format 0 empty / GDPR->governance 3/3;
+  training preamble v1 1 empty / 0/3; v2 0 empty / 0/3; Agy rule prompt 0 empty / 1/3. Planner therefore keeps the original list
+  format (Spur 1 hash 7c72ab83 byte-identical to the tested original, Spur 2 dd4700dc); experts and judge use the training prompts.
+- 14 templates aligned, 12 benchmark templates pass C1-C4 (matrix regenerated). Backup mishap (`--apply` overwrote the backup) fixed:
+  original rows recovered, script now timestamps backups and refuses to overwrite.
+- Spur 2 planner sanity check (n=3 per template, 6 outputs, raw outputs not attributed to a template): 0 empty plans, code and mutex
+  routed to code_reviewer, GDPR once to governance and once to precision_tools with an invented mcp_tool (the case the prompt forbids).
+  Too small to conclude anything about planner-9b vs base qwen3.5:9b; needs a per-template run before the benchmark.
+- Not started: benchmark (native baselines unconfirmed, other agent's hot-patched orchestrator still running).
