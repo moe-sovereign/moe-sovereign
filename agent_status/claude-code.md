@@ -5031,3 +5031,13 @@ Notes:
   routed to code_reviewer, GDPR once to governance and once to precision_tools with an invented mcp_tool (the case the prompt forbids).
   Too small to conclude anything about planner-9b vs base qwen3.5:9b; needs a per-template run before the benchmark.
 - Not started: benchmark (native baselines unconfirmed, other agent's hot-patched orchestrator still running).
+
+## 2026-09-19 update: planner prompt vs training format, direct check (no DB change)
+- Operator asked to adapt the prompt to the fine-tuned LLMs. Check of the training taxonomy: `VALID_CATEGORIES` / `_CANONICAL_LLM_CATEGORIES`
+  in `generate_planner_dataset.py` contain no `governance`, `security` or `compounding_knowledge` (they use e.g. `legal_advisor`), so a
+  training-format prompt with the template categories is off-distribution for those names either way. The full training prompt is
+  ~12.9k chars; the runtime caps the planner role at 8000 (`PLANNER_ROLE_MAX_CHARS`).
+- Direct Ollama check, 12 questions x 2 repeats per cell, temperature 0.2, no runtime JSON wrapper (so the S1 numbers are confounded:
+  the list prompt has no "JSON only" sentence, 15/24 and 17/24 unparsable):
+  S2 finetuned list/train hits 14/13, invalid category 0/5; S2 base 16/15, invalid 0/4. S1 not comparable in this setup.
+- Decision kept: planner prompt stays in list format (pipeline A/B: governance 3/3 vs 0/3). Templates were not changed.
