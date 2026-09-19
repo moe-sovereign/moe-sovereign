@@ -52,13 +52,14 @@ TRACKS = {
 
 NOTES = """## Findings and open points
 
-1. **Spur 1 fine-tuned variants are not comparable to their reference (C1).** In all three variants (`tmpl-11f532fc`,
-   `tmpl-smollm3-nograph`, `tmpl-smollm3-delib`) the category `code_reviewer` has a second, forced security model
-   (`role: always`) and `review_lenses: ["security"]`; the reference has one model. With `MOE_REVIEW_WAVE_ENABLED`
-   (default on in the deployed orchestrator) only the fine-tuned arm would run extra review calls, so a score difference
-   would mix the weights effect with an architecture effect. These additions are not part of the benchmark design; the
-   same `review_lenses` also sit in the three `LUMI-G Ensemble` hybrids. Fix: remove the second `code_reviewer` model
-   and the `review_lenses` key from the three variants (not applied, needs the operator's decision).
+1. **Spur 1 fine-tuned variants were not comparable and have been corrected (2026-09-19).** In all three variants
+   (`tmpl-11f532fc`, `tmpl-smollm3-nograph`, `tmpl-smollm3-delib`) the category `code_reviewer` had a second, forced
+   security model (`role: always`) and `review_lenses: ["security"]`; the reference has one model. With
+   `MOE_REVIEW_WAVE_ENABLED` (default on in the deployed orchestrator) only the fine-tuned arm would have run extra
+   review calls. Both additions were removed (backup `benchmarks/results/runbook/spur1_finetuned_before_cleanup_20260919.json`);
+   all six pairs now pass C1 to C4. They are not part of the benchmark design and can re-appear if another agent edits
+   the templates again: re-run this script before every benchmark start. `review_lenses` still exist in the Review and
+   Review NoSC arms (intended) and in the three `LUMI-G Ensemble` hybrids (outside the matrix).
 2. **Spur 2 is comparable.** All six templates pass C1 to C4.
 3. **System prompts are aligned (C2)** by `scripts/align_benchmark_template_prompts.py`: each expert category gets the
    training role prompt of its assigned domain expert, the judge gets the training judge prompt, and the planner gets the
