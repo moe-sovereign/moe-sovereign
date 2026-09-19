@@ -9,6 +9,7 @@ must receive the SAME prompts, otherwise the comparison mixes a weights effect w
 What it sets, identically in every target template:
   * experts[cat].system_prompt  = training role prompt of the domain role assigned to the category
   * judge_prompt                = training judge prompt
+  * context / tools             = expert context_window 48128, planner/judge num_ctx 65536, expert mcp_tools empty (same effective prompts)
   * endpoints                   = expert i on N02-M60-02..09 (1:1 in both tracks), planner N04-RGTX, judge N04-RTX
   * experts                     = exactly the eight domain experts (EXPERT_SET); Spur 2 templates are reduced from 15
   * planner_prompt              = the original descriptive category list (validated by A/B test, see below) for the
@@ -72,6 +73,22 @@ EXPERT_ENDPOINTS = {
 }
 PLANNER_ENDPOINT = "N04-RGTX"
 JUDGE_ENDPOINT = "N04-RTX"
+# Context windows follow one rule (operator, 2026-09-20): planner and judge get the maximum the model supports, experts the largest
+# context that fits into the VRAM of their GPU (8 GB Maxwell, f16 KV cache) without a throughput loss. Measured values (see
+# docs/system/benchmark-template-matrix-2026-09-19.md): Qwen3.5-4B expert 98304 (6.1 GB, 11.9 tok/s; 114688 -> 6.8 tok/s, 131072 -> 0.3 tok/s,
+# 196608 -> 33% CPU offload), SmolLM3-3B expert 65536 (its native maximum, 6.9 GB, 8.7 tok/s). Native maxima: OLMo 3 7B / OLMo 3.1 32B 65536,
+# Qwen3.5-9B / Qwen3.8-27B 262144.
+CONTEXT = {
+    "spur1": {"expert": 65536, "planner": 65536, "judge": 65536},
+    "spur2": {"expert": 98304, "planner": 262144, "judge": 262144},
+}
+# `mcp_tools` only controls the "Available Tools" text block appended to the expert system prompt (services/helpers.py); an empty list
+# selects the per-category default block, so equal categories give equal effective prompts. The tools themselves are executed by the planner path.
+
+
+def track_of(template_name: str) -> str:
+    return "spur1" if template_name.startswith("LUMI-G") else "spur2"
+
 
 # category -> training role of the fine-tuned domain expert that serves it (same rule in both tracks)
 CATEGORY_ROLE = {
@@ -194,11 +211,13 @@ def h(text: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--tracks", default="spur1,spur2", help="only touch these tracks, e.g. spur2 while spur1 is being benchmarked")
     stamp = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     ap.add_argument("--backup", default=str(ROOT / f"benchmarks/results/runbook/template_prompts_backup_{stamp}.json"))
     args = ap.parse_args()
     roles = canonical_prompts()
     judge = roles["judge"]
+    wanted_tracks = {x.strip() for x in args.tracks.split(",")}
     names = ", ".join("'" + n.replace("'", "''") + "'" for n in TARGETS)
     rows = json.loads(psql(f"select json_agg(t) from (select id, name, config_json from admin_expert_templates "
                            f"where name in ({names}) order by name) t") or "[]")
@@ -227,6 +246,11 @@ def main() -> None:
             for slot in ec["models"]:
                 if slot.get("role") != "always":  # the second model of the review-wave arms keeps its own instance
                     slot["endpoint"] = EXPERT_ENDPOINTS[cat]
+        ctx = CONTEXT[track_of(row["name"])]
+        for ec in new["experts"].values():
+            ec["context_window"] = ctx["expert"]
+            ec["mcp_tools"] = []
+        new["planner_num_ctx"], new["judge_num_ctx"] = ctx["planner"], ctx["judge"]
         for key, endpoint in (("planner_model", PLANNER_ENDPOINT), ("judge_model", JUDGE_ENDPOINT)):
             new[key] = new[key].rsplit("@", 1)[0] + "@" + endpoint
         new["judge_prompt"] = judge
@@ -235,12 +259,18 @@ def main() -> None:
         if set(cfg["experts"]) != set(cats):
             changed.append(f"expert set {len(cfg['experts'])} -> {len(cats)}")
         changed += [f"experts.{c}" for c in cats if c in cfg["experts"] and new["experts"][c]["system_prompt"] != cfg["experts"][c].get("system_prompt")]
+        changed += [k for k in ("planner_num_ctx", "judge_num_ctx") if new[k] != cfg.get(k)]
+        changed += [f"expert_ctx_tools.{c}" for c in cats if c in cfg["experts"] and
+                    (new["experts"][c]["context_window"], new["experts"][c]["mcp_tools"]) !=
+                    (cfg["experts"][c].get("context_window"), cfg["experts"][c].get("mcp_tools"))]
         changed += [f"endpoint.{c}" for c in cats if c in cfg["experts"] and
                     [s["endpoint"] for s in new["experts"][c]["models"]] != [s["endpoint"] for s in cfg["experts"][c]["models"]]]
         changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if c in cfg["experts"] and new["experts"][c]["models"] != cfg["experts"][c]["models"]]
         print(f"{row['name'][:58]:58s} categories={len(cats):2d} changes={len(changed):2d} planner={h(new['planner_prompt'])} judge={h(judge)}")
-        if changed:
+        if changed and track_of(row["name"]) in wanted_tracks:
             updates.append((row["id"], json.dumps(new, ensure_ascii=False)))
+        elif changed:
+            print(f"   (skipped, track not selected: {len(changed)} pending changes)")
     if not args.apply:
         print(f"\ndry run: {len(updates)} of {len(rows)} templates would change (use --apply)")
         return

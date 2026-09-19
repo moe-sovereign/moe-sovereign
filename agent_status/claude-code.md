@@ -5116,3 +5116,12 @@ Notes:
 - Model store: `hf.co/h3rb3rn/moe-expert-coder-4b:Q4_K_M` was the only Qwen expert missing on N02; pulled via the free instance N02-M60-01 (instances of a host share one
   model store). Smoke on N02-M60-01 (not used by the run): coder fine-tune 21.8 tok/s, qwen3.5:4b 18.1 tok/s at num_ctx 32768, both complete. Nothing was loaded on M60-02..09.
 - The integrity log shows the six Spur 2 template hashes changing at this point: expected, Spur 2 had not started.
+
+## 2026-09-20 update: tool hints and context windows (operator)
+- Expert `mcp_tools` emptied in the six Open-Weight templates (`mcp_tools` only selects the tool-hint text block of the expert prompt; empty = per-category default,
+  so equal categories give equal effective prompts). The matrix now checks the effective prompt and a "Cross-track parity" table: 0 differences (except models/contexts).
+- Context rule: planner/judge = model maximum, experts = largest context fitting the 8 GB GPU. Spur 2 templates set to planner 262144, judge 262144, experts 98304 (measured on
+  idle N04-TM10-03: 98304 = 6.1 GB / 11.9 tok/s; 114688 = 6.8 tok/s; 131072 = 0.3 tok/s; 196608 = CPU offload). SmolLM3 experts fit 65536 (native max, 6.9 GB, 8.7 tok/s).
+- NOT applied yet (Spur 1 is running, templates must not change): Spur 1 experts 48128 -> 65536. Run `python3 scripts/align_benchmark_template_prompts.py --apply --tracks spur1` after the run.
+- OPEN before Spur 2: Qwen3.5-9B planner at 262144 needs ~16 GB on N04-RGTX (18 GB); unverified there (test on TM10-01 showed 56 % CPU offload). If it does not fit, lower planner_num_ctx
+  in the Spur 2 templates. The Spur 1 -> Spur 2 phase switch can hang on a model reload (see incident above): unload idle models on N04-RTX/RGTX if the run stalls.

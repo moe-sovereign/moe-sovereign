@@ -19,6 +19,7 @@ import csv
 import hashlib
 import json
 import subprocess
+import sys
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -84,9 +85,22 @@ NOTES = """## Findings and open points
    the date it entered the template cannot be established from Git because templates live in the database. The runtime
    also creates a fallback task for an empty plan (`graph/planner.py`), so the guard is redundant for pipeline
    correctness. Whether removing it changes routing was not measured (A/B blocked, see the status log).
-6. **Differences between the tracks that are inherent, not defects:** planner context
-   (65536 vs 32768), judge context (65536 vs 262144) and different judges. Absolute scores must not be compared across
-   tracks; compare each track with its own baseline.
+6. **Instance placement and expert prompts are identical in both tracks (operator, 2026-09-20):** one expert per instance N02-M60-02..09 in
+   ascending port order, judge N04-RTX (:11434), planner N04-RGTX (:11435, same host); expert `mcp_tools` are empty in both tracks. `mcp_tools`
+   only selects the "Available Tools" text block appended to the expert system prompt (`services/helpers.py`), the tools themselves are run by
+   the planner path; with an empty list the block depends only on the category, so equal categories give equal effective prompts. The
+   "Cross-track parity" table above checks this on the live templates.
+   **Context windows follow one rule (operator, 2026-09-20): planner and judge = maximum of the model, experts = largest context that fits the VRAM of
+   their GPU.** Native maxima (Ollama `/api/show`): OLMo 3 7B and OLMo 3.1 32B 65536, Qwen3.5-9B and Qwen3.8-27B 262144, SmolLM3-3B 65536, Qwen3.5-4B 262144.
+   Expert VRAM measurement on idle 8 GB Maxwell GPUs (f16 KV cache, 2026-09-20): Qwen3.5-4B fine-tune 65536 = 5.0 GB / 12.1 tok/s, 98304 = 6.1 GB / 11.9 tok/s,
+   114688 = 6.7 GB / 6.8 tok/s, 131072 = 7.3 GB / 0.3 tok/s, 196608 = 33 % CPU offload; SmolLM3-3B fine-tune 48128 = 5.7 GB / 8.7 tok/s, 65536 = 6.9 GB / 8.7 tok/s.
+   Chosen: Qwen experts 98304 (last size without throughput loss), SmolLM3 experts 65536 (native maximum, fits). Spur 1 templates still carry 48128 for
+   the experts because the templates must not change during the running benchmark: apply `align_benchmark_template_prompts.py --apply --tracks spur1`
+   after the run. Not verified on the target GPU: Qwen3.5-9B planner at 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on N04-RGTX (18 GB); a
+   load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload), so this must be checked on N04-RGTX after Spur 1. The templates only
+   set the cap: the orchestrator requests a context adapted to the prompt size, so short prompts do not allocate the full window.
+   **Remaining inherent differences:** the models, the judges (each track is judged by its own fine-tuned judge) and the context windows above. Absolute scores must not
+   be compared across tracks; compare each track with its own baseline.
 7. **Planner taxonomy (unverified effect):** the planners were trained on a fixed taxonomy (`legal_advisor`, `agentic_coder`, ...);
    `security`, `governance` and `compounding_knowledge` are not part of it. The planner must generalise to them; this is not measured.
 8. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
@@ -135,6 +149,44 @@ def structure(cfg: dict) -> dict:
         for m in ec.get("models", []):
             m.pop("model", None)
     return c
+
+
+def effective_expert_prompt(cat: str, ec: dict) -> str:
+    """System prompt as sent to the expert: template text plus the tool hint block services/helpers.py appends
+    (per-category default block for an empty ``mcp_tools`` list, otherwise a block of the explicit tool names)."""
+    sys.path.insert(0, str(ROOT))
+    import tool_injector
+
+    tools = ec.get("mcp_tools") or []
+    hint = ("explicit:" + ",".join(tools)) if tools else tool_injector.get_tool_block(cat)
+    return (ec.get("system_prompt") or "").strip() + "\n#tool-hint:" + hint
+
+
+def cross_track_diffs(a: dict, b: dict) -> list:
+    """Every difference between an Open Source and an Open Weight template except the model names."""
+    out = []
+    sa, sb = structure(a), structure(b)
+    for k in sorted((set(sa) | set(sb)) - {"experts", "name", "id", "description", "planner_num_ctx", "judge_num_ctx"}):
+        if sa.get(k) != sb.get(k):
+            out.append(f"{k}: {json.dumps(sa.get(k))[:40]} vs {json.dumps(sb.get(k))[:40]}")
+    for k in ("planner_model", "judge_model"):
+        if split_model(a[k])[1] != split_model(b[k])[1]:
+            out.append(f"{k} endpoint: {split_model(a[k])[1]} vs {split_model(b[k])[1]}")
+    for k in ("planner_prompt", "judge_prompt"):
+        if h(a[k]) != h(b[k]):
+            out.append(f"{k} differs")
+    if set(a["experts"]) != set(b["experts"]):
+        out.append("expert categories differ")
+    for cat in sorted(set(a["experts"]) & set(b["experts"])):
+        ea, eb = a["experts"][cat], b["experts"][cat]
+        for k in sorted((set(sa["experts"][cat]) | set(sb["experts"][cat])) - {"models", "context_window"}):
+            if sa["experts"][cat].get(k) != sb["experts"][cat].get(k):
+                out.append(f"expert {cat}.{k} differs")
+        if [(m["endpoint"], m.get("role")) for m in ea["models"]] != [(m["endpoint"], m.get("role")) for m in eb["models"]]:
+            out.append(f"expert {cat} endpoint/role differs")
+        if h(effective_expert_prompt(cat, ea)) != h(effective_expert_prompt(cat, eb)):
+            out.append(f"expert {cat} effective prompt differs")
+    return out
 
 
 def main() -> None:
@@ -195,7 +247,7 @@ def main() -> None:
                             if extra in ec and extra not in r_ec:
                                 notes.append(f"`{cat}` sets `{extra}`")
                 c2 = (h(cfg["planner_prompt"]) == h(ref["planner_prompt"]) and h(cfg["judge_prompt"]) == h(ref["judge_prompt"])
-                      and all(h(ec["system_prompt"]) == h(ref["experts"][c]["system_prompt"]) for c, ec in cfg["experts"].items()))
+                      and all(h(effective_expert_prompt(c, ec)) == h(effective_expert_prompt(c, ref["experts"][c])) for c, ec in cfg["experts"].items()))
             c5 = len(cfg["experts"]) == 8
             checks = [x for x in (c1, c2) if x is not None] + [c3, c4, c5]
             verdict = "pre-finetune" if counterpart is None and c3 and c4 and c5 else ("sound" if all(checks) else "**not sound**: " + ("; ".join(notes) or "see checks"))
@@ -213,6 +265,18 @@ def main() -> None:
             md.append(f"| `{cat}` | {h(pre_cfg['experts'][cat]['system_prompt'])} | {pre_m} | {ft_m} |")
             csv_rows.append(dict(track=track, category=cat, prompt_hash=h(pre_cfg["experts"][cat]["system_prompt"]), pre_finetune=pre_m, finetuned=ft_m))
         md.append("")
+    md += ["## Cross-track parity (Open Source vs Open Weight)", "",
+           "Everything except the model names and the per-model context windows must be identical between the tracks: categories, expert/planner/judge "
+           "instances, flags, planner/judge prompts and the effective expert prompt (template text plus tool hint block). Context windows follow the rule "
+           "\"planner and judge = maximum of the model, experts = largest context that fits the 8 GB GPU\" and are listed per track.", "",
+           "| Condition | Differences | Context planner / judge / expert (Spur 1 vs Spur 2) |", "|---|---|---|"]
+    rows1, rows2 = TRACKS["Spur 1 (open source)"]["rows"], TRACKS["Spur 2 (open weight)"]["rows"]
+    for (role, n1, _), (_, n2, _) in zip(rows1, rows2):
+        d = cross_track_diffs(tpl[n1]["cfg"], tpl[n2]["cfg"])
+        c1, c2 = tpl[n1]["cfg"], tpl[n2]["cfg"]
+        ctx = lambda c: f"{c.get('planner_num_ctx')} / {c.get('judge_num_ctx')} / {sorted({e.get('context_window') for e in c['experts'].values()})[0]}"
+        md.append(f"| {role} | {'none' if not d else '**' + str(len(d)) + '**: ' + '; '.join(d[:6])} | {ctx(c1)} vs {ctx(c2)} |")
+    md.append("")
     md += NOTES
     out.write_text("\n".join(md) + "\n")
     with open(out.with_suffix(".csv"), "w", newline="") as f:

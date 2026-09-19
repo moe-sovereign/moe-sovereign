@@ -42,12 +42,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 32768 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 32768 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 2 (open weight): expert assignment (category -> model @ endpoint)
 
@@ -61,6 +61,19 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 | `code_reviewer` | 1c1872c1 | `qwen3.5:4b` @N02-M60-09 | `moe-expert-coder-4b:Q4_K_M` @N02-M60-09 |
 | `precision_tools` | 915b98f7 | `qwen3.5:4b` @N02-M60-07 | `moe-expert-precision-4b:Q4_K_M` @N02-M60-07 |
 | `compounding_knowledge` | 2dcc7cc8 | `qwen3.5:4b` @N02-M60-06 | `moe-expert-graphrag-4b:Q4_K_M` @N02-M60-06 |
+
+## Cross-track parity (Open Source vs Open Weight)
+
+Everything except the model names and the per-model context windows must be identical between the tracks: categories, expert/planner/judge instances, flags, planner/judge prompts and the effective expert prompt (template text plus tool hint block). Context windows follow the rule "planner and judge = maximum of the model, experts = largest context that fits the 8 GB GPU" and are listed per track.
+
+| Condition | Differences | Context planner / judge / expert (Spur 1 vs Spur 2) |
+|---|---|---|
+| Pre-Finetune, GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Pre-Finetune, no GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Pre-Finetune, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Fine-tuned, GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Fine-tuned, no GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Fine-tuned, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
 
 ## Findings and open points
 
@@ -95,9 +108,22 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
    the date it entered the template cannot be established from Git because templates live in the database. The runtime
    also creates a fallback task for an empty plan (`graph/planner.py`), so the guard is redundant for pipeline
    correctness. Whether removing it changes routing was not measured (A/B blocked, see the status log).
-6. **Differences between the tracks that are inherent, not defects:** planner context
-   (65536 vs 32768), judge context (65536 vs 262144) and different judges. Absolute scores must not be compared across
-   tracks; compare each track with its own baseline.
+6. **Instance placement and expert prompts are identical in both tracks (operator, 2026-09-20):** one expert per instance N02-M60-02..09 in
+   ascending port order, judge N04-RTX (:11434), planner N04-RGTX (:11435, same host); expert `mcp_tools` are empty in both tracks. `mcp_tools`
+   only selects the "Available Tools" text block appended to the expert system prompt (`services/helpers.py`), the tools themselves are run by
+   the planner path; with an empty list the block depends only on the category, so equal categories give equal effective prompts. The
+   "Cross-track parity" table above checks this on the live templates.
+   **Context windows follow one rule (operator, 2026-09-20): planner and judge = maximum of the model, experts = largest context that fits the VRAM of
+   their GPU.** Native maxima (Ollama `/api/show`): OLMo 3 7B and OLMo 3.1 32B 65536, Qwen3.5-9B and Qwen3.8-27B 262144, SmolLM3-3B 65536, Qwen3.5-4B 262144.
+   Expert VRAM measurement on idle 8 GB Maxwell GPUs (f16 KV cache, 2026-09-20): Qwen3.5-4B fine-tune 65536 = 5.0 GB / 12.1 tok/s, 98304 = 6.1 GB / 11.9 tok/s,
+   114688 = 6.7 GB / 6.8 tok/s, 131072 = 7.3 GB / 0.3 tok/s, 196608 = 33 % CPU offload; SmolLM3-3B fine-tune 48128 = 5.7 GB / 8.7 tok/s, 65536 = 6.9 GB / 8.7 tok/s.
+   Chosen: Qwen experts 98304 (last size without throughput loss), SmolLM3 experts 65536 (native maximum, fits). Spur 1 templates still carry 48128 for
+   the experts because the templates must not change during the running benchmark: apply `align_benchmark_template_prompts.py --apply --tracks spur1`
+   after the run. Not verified on the target GPU: Qwen3.5-9B planner at 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on N04-RGTX (18 GB); a
+   load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload), so this must be checked on N04-RGTX after Spur 1. The templates only
+   set the cap: the orchestrator requests a context adapted to the prompt size, so short prompts do not allocate the full window.
+   **Remaining inherent differences:** the models, the judges (each track is judged by its own fine-tuned judge) and the context windows above. Absolute scores must not
+   be compared across tracks; compare each track with its own baseline.
 7. **Planner taxonomy (unverified effect):** the planners were trained on a fixed taxonomy (`legal_advisor`, `agentic_coder`, ...);
    `security`, `governance` and `compounding_knowledge` are not part of it. The planner must generalise to them; this is not measured.
 8. **Native baseline:** called through the orchestrator route `model@N04-RTX` with the user prompt only (no system
