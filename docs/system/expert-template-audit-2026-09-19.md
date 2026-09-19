@@ -1,7 +1,8 @@
 # Expert template audit (2026-09-19)
 
-**Status:** validated for the measured facts (database, Ollama and log state on 2026-09-19); *planned* for every
-recommendation in section 6; nothing in section 6 marked "pending" has been applied.
+**Status:** validated for the measured facts (database, Ollama and log state on 2026-09-19, i.e. before the removals
+listed in section 4; the inventory CSV shows that earlier state); *planned* for every recommendation in section 6 that
+section 4 does not list as applied.
 **Method:** all rows of `admin_expert_templates` (58) and `user_expert_templates` (52) were read from the database,
 every referenced `model@endpoint` was checked against the endpoint's `/api/tags` (or the owner's private API
 connections), usage was taken from `routing_telemetry` and `usage_log`, and every planner, judge and expert system
@@ -24,7 +25,7 @@ in `expert-template-inventory-2026-09-19.csv`.
 | Spur 2 fine-tuned (`Open-Weight Finetuned Ensemble` + 2 variants) | 3 | ok | created 2026-09-19 |
 | `moe-frontier-*` | 3 | broken | 15 expert names do not exist on any node; duplicates of the Spur 2 fine-tuned family |
 | `MoE Sovereign ...` (old Qwen benchmark, seeded by the admin service) | 4 | broken | planner `moe-sovereign-student:4b` without endpoint |
-| User templates (5 owners) | 52 | 36 broken, 16 ok | see the CSV; 39 belong to the operator, 13 to other users |
+| User templates (5 owners) | 52 | 36 broken, 16 ok | see the CSV; 39 belong to the operator, 13 to other users; 49 still use `moe-sovereign-student:4b` |
 
 Only 17 of 58 admin templates and 16 of 52 user templates are usable today. No user template has been used since
 2026-08-29 other than the old benchmark copies.
@@ -80,7 +81,9 @@ weights-only comparison is fair only if both families use the same prompts.
 | 34 dynamic + 3 user templates repointed from the removed `sovereign-judge:27b` to `hf.co/h3rb3rn/sovereign-judge-27b` | applied |
 | `qwen3.5:4b` planner replaced (Open-Weight base: base `qwen3.5:9b`; frontier: `moe-sovereign-planner-9b`) | applied |
 | Spur 2 fine-tuned template family created, `qwen3.5:9b` and `moe-expert-coder-4b:Q4_K_M` pulled to N04 | applied |
-| Deleting the 34 dynamic templates | **not applied** (blocked by the permission system; backup of all 34 rows exists) |
+| 34 dynamic templates and their 34 permission rows deleted (never used, all broken; backup `benchmarks/results/runbook/dynamic_templates_backup_20260919.json`) | applied (2026-09-19, operator approval) |
+| Seed `seed_default_admin_templates()` removed from `admin_ui/database.py` and `admin_ui/app.py`; the four seeded `MoE Sovereign ...` templates (planner `moe-sovereign-student:4b`) and their 16 permission rows deleted (backup `moe_sovereign_seeded_templates_backup_20260919.json`) | applied; takes effect in the running admin process at its next restart |
+| Harness defaults for the three template variables now point at the Spur 1 fine-tuned templates | applied |
 
 ## 5. Not verified
 
@@ -91,13 +94,13 @@ weights-only comparison is fair only if both families use the same prompts.
 
 ## 6. Recommendations (planned)
 
-1. Delete the 34 dynamic templates (dead, never used, backup exists) and stop the router from persisting templates
-   whose planner does not exist.
+1. Stop the dynamic router from persisting templates whose planner does not exist (the 34 dead ones are deleted).
 2. **Align prompts with training** in the fine-tuned and pre-finetune benchmark templates: experts get the role prompt
    from `CHATML_SYSTEM_PROMPTS`, the judge gets the training judge prompt, the planner gets the training prompt
    rendered for the template's categories. Run it as an A/B arm against the current generic prompts.
-3. Replace the global default planner (`PLANNER_MODEL`) with an existing fine-tuned planner and remove
-   `moe-sovereign-student:4b` from the templates and from `seed_default_admin_templates()`.
+3. Replace the global default planner (`PLANNER_MODEL`, currently `qwen3-planner:q4km`, present on no node) with an
+   existing fine-tuned planner; requires an orchestrator restart. The 49 user templates that use
+   `moe-sovereign-student:4b` belong to their owners.
 4. Delete or repair the three `moe-frontier-*` templates and decide on the `LUMI-G Ensemble` hybrids.
 5. Adopt a naming rule (`<track>-<stage>-<variant>`) and add a `description` to every admin template; user templates of
    other users are theirs to decide.

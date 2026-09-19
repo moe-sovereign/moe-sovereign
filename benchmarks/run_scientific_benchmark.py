@@ -82,17 +82,17 @@ SUITE = os.environ.get("BENCHMARK_SUITE", "sovereign")
 
 # Template names configured in database (admin_expert_templates). Overridable
 # via env vars so this harness can target a different template family (e.g.
-# the LUMI-G ensemble) without editing source; defaults preserve the
-# historical qwen-based template names for existing callers.
+# the Open-Weight ensemble) without editing source; the defaults are the Spur 1
+# (open source) fine-tuned templates.
 TEMPLATES = {
     "compound_ai": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI", "MoE Sovereign Scientific Benchmark"
+        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble"
     ),
     "compound_ai_debate": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE", "MoE Sovereign Deliberation Benchmark"
+        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation"
     ),
     "ablation_no_graphrag": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "MoE Sovereign Ablation (No GraphRAG)"
+        "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG"
     ),
     # Optional reference arm: the same ensemble built from the models BEFORE fine-tuning
     # (e.g. "LUMI-G Base (Pre-Finetune)"). Empty = condition disabled. Comparing it with
