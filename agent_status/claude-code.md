@@ -5086,3 +5086,12 @@ Notes:
   planner/judge settings, or unload models on N04-RTX/N04-RGTX/N04-TM10/N02-M60. Any of it invalidates the run.
 - `benchmarks/integrity_watch.py` logs container/git/template changes to `benchmarks/results/integrity_20260919T210536Z.log` (check it after the run).
 - Runtime carries another agent's uncommitted planner/expert changes (see the entry above); they apply to all conditions equally.
+
+## 2026-09-20 update: expert evaluation after the run (queued)
+- `benchmarks/score_expert_answers.py` grades the expert answers given inside the templates; `benchmarks/replay_expert_prompts.py` sends the SAME recorded
+  expert prompts (system role prompt + sub-task, verbatim from ai_io_audit_log) to the experts of all four sets (Open Source / Open Weight x pre-finetune /
+  fine-tuned) and reports paired differences per category (mean +- SE, W/T/L, exact sign test), cross-judged by both track judges.
+- `benchmarks/post_run_expert_pipeline.sh` is running in wait mode (started while the benchmark runs, log `benchmarks/results/post_run_*.log`): after
+  `run_spur1_and_spur2.sh` exits it finds the two sidecars, scores the expert answers and then runs the replay (per-category cap 8; both judges;
+  estimated 15-20 h after the run). It uses the GPUs: do not start other GPU work on N04/N02 while it runs.
+- Offline-tested only (unit tests, dry run on an old sidecar, live template/model mapping); the judge and generation steps have not run against models yet.

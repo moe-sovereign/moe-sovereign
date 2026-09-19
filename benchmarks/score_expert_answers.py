@@ -77,6 +77,20 @@ def subtask_of(request_body: Any) -> str:
     return re.sub(r"^/no_think\s*", "", str(text)).strip()
 
 
+def clean_messages(request_body: Any) -> List[Dict[str, str]]:
+    """The recorded chat messages of an expert call, with message reprs unwrapped (used verbatim by the replay)."""
+    out = []
+    for m in (request_body or {}).get("messages", []):
+        content = m.get("content", "")
+        if isinstance(content, str) and content.startswith("{'role'"):
+            try:
+                content = ast.literal_eval(content).get("content", content)
+            except (ValueError, SyntaxError):
+                pass
+        out.append({"role": m.get("role", "user"), "content": str(content)})
+    return out
+
+
 def load_sidecar(path: Path) -> List[Dict[str, Any]]:
     rows = []
     for line in path.read_text().splitlines():
@@ -112,6 +126,8 @@ def collect(label: str, sidecar: Path, include_refinement: bool) -> List[Dict[st
                 "category": (a.get("request_body") or {}).get("expert_category") or "unknown",
                 "model": a["model"], "endpoint": a["endpoint"], "status": a["status"],
                 "subtask": subtask_of(a.get("request_body")),
+                "request_messages": clean_messages(a.get("request_body")),
+                "request_options": (a.get("request_body") or {}).get("options") or {},
                 "answer": answer_of(a.get("response_body")),
                 "completion_tokens": a.get("completion_tokens"),
                 "seconds": _seconds(a.get("started_at"), a.get("completed_at")),
