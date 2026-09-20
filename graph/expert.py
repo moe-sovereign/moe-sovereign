@@ -140,6 +140,25 @@ def _tier2_escalation_decision(cost_tier_t1: bool, t1_confs: list, has_tier2: bo
     return "t2_escalated"
 
 
+def _ollama_chat_messages(messages) -> list:
+    """Chat messages for Ollama's native /api/chat from dict or LangChain messages, roles preserved.
+
+    Dict messages used to fall through to role "user" with content ``str(message)``, so the model received the Python
+    repr of the system prompt inside a user turn (every expert call recorded in ai_io_audit_log since July 2026).
+    """
+    out = []
+    for m in messages:
+        if isinstance(m, dict):
+            role = m.get("role", "user")
+            out.append({"role": role if role in ("system", "user", "assistant", "tool") else "user",
+                        "content": m.get("content", "")})
+            continue
+        mtype = getattr(m, "type", "")
+        role = "assistant" if mtype == "ai" else "system" if mtype == "system" else "user"
+        out.append({"role": role, "content": m.content if hasattr(m, "content") else str(m)})
+    return out
+
+
 async def expert_worker(state_: AgentState):
     if state_.get("cache_hit"):
         return {"expert_results": []}
@@ -688,13 +707,7 @@ async def expert_worker(state_: AgentState):
                 # Modelfile default (8192) instead of 32768 — evicting the CC tool model and
                 # forcing a 90-second reload on the next CC request.
                 if api_type == "ollama":
-                    _native_msgs = []
-                    for _m in messages:
-                        _role = ("assistant" if (hasattr(_m, "type") and _m.type == "ai") else
-                                 "system"    if (hasattr(_m, "type") and _m.type == "system") else
-                                 "user")
-                        _native_msgs.append({"role": _role,
-                                             "content": _m.content if hasattr(_m, "content") else str(_m)})
+                    _native_msgs = _ollama_chat_messages(messages)
                     _ollama_base = url.rstrip("/").removesuffix("/v1")
                     _native_opts: dict = {"num_predict": _expert_max_tokens}
                     if _expert_ctx_for_api > 0:

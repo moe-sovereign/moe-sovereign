@@ -5136,3 +5136,12 @@ Notes:
 - Power: `benchmarks/power_monitor.py` was NOT running. Started two monitors for the rest of the run: `--host N04-RTX` (run-id bench-20260919-210551-n04) and `--host N02-M60`
   (run-id bench-20260919-210551-n02), 10 s interval, CSVs in benchmarks/results. Retroactive N04 data comes from Prometheus (`node_gpu_power_draw_watts`, instance 192.168.155.224:9100, 15 s);
   the N02-M60 expert host has no history before the monitor start, so the compound energy of the first ~9 h is understated (experts missing).
+
+## 2026-09-20 finding: expert prompts reach Ollama as dict reprs (code fixed, NOT deployed)
+- `graph/expert.py` built the native /api/chat messages with `hasattr(m, "type")` / `hasattr(m, "content")`; the messages are dicts, so every message got role "user" and
+  content `str(dict)`: the model received "{'role': 'system', 'content': '...role prompt...'}" as user text, no real system message. ai_io_audit_log: 100 % of expert calls since 2026-07
+  (0 % with a system role). Introduced with c25a92e7 (2026-06-08). Affects both tracks, pre-finetune and fine-tuned alike.
+- Related structure gaps (not changed): planner gets its whole prompt as ONE user message (training: system + user); judge/merger gets a hard-coded generic
+  system prompt ("Sovereign Judge 27B (Qwen3.8-27B fine-tuned)", also for the OLMo judges) and the template judge_prompt as user text; merger role differs from the judge's training role.
+- Fix: `_ollama_chat_messages()` keeps roles for dicts and LangChain messages; tests in tests/test_expert_native_messages.py; full suite 1390 passed. Only that hunk of graph/expert.py is
+  committed (foreign uncommitted changes stay in the work tree). Deploy after the benchmark: the running run measures the defective path for all conditions equally.
