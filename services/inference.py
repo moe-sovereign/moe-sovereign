@@ -802,6 +802,7 @@ async def _invoke_judge_with_retry(
                 # Augmented Tool Path (services/pipeline/anthropic.py,
                 # services/pipeline/chat.py's _retry_tool_agent_fallback) but was never
                 # applied to the judge/planner path that competes with it on the same node.
+                _judge_ctx_reused = False
                 try:
                     async with httpx.AsyncClient(timeout=2.0) as _ps_cl:
                         _ps_r = await _ps_cl.get(
@@ -818,9 +819,15 @@ async def _invoke_judge_with_retry(
                                     _loaded_ctx, _ctx, _jm,
                                 )
                                 _ctx = _loaded_ctx
+                                _judge_ctx_reused = True
                                 break
                 except Exception:
                     pass  # non-fatal — fall through to the configured num_ctx
+                if _ctx > 0 and not _judge_ctx_reused:
+                    # The request needs a larger context than the one loaded (or the model is not loaded): Ollama reloads
+                    # it, and while a second large model holds the VRAM that reload can hang for hours (observed:
+                    # 75 min on N04-RTX). Free exactly the VRAM that is missing first, like the planner path does.
+                    await _evict_competing_models(_ollama_base, _jm, ctx=_ctx)
                 _opts: dict = {}
                 if _ctx > 0:
                     _opts["num_ctx"] = _ctx

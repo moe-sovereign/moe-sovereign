@@ -2408,6 +2408,12 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             _ns_opts: dict = {}
             if _native_num_ctx > 0:
                 _ns_opts["num_ctx"] = _native_num_ctx
+            else:
+                # No explicit context: reuse the one the model is already loaded with instead of forcing a reload.
+                from services.ollama_warm_ctx import loaded_ctx as _loaded_ctx
+                _warm_ctx = await _loaded_ctx(_ns_base, _native_endpoint.get("token"), _native_endpoint["model"])
+                if _warm_ctx > 0:
+                    _ns_opts["num_ctx"] = _warm_ctx
             _ns_eff_max = request.max_tokens or request.max_completion_tokens
             if _ns_eff_max:
                 _ns_opts["num_predict"] = _ns_eff_max
