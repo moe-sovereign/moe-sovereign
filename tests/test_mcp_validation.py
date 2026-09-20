@@ -572,3 +572,9 @@ def test_calculate_reads_caret_as_power_but_still_rejects_other_operators():
 def test_calculate_leaves_valid_expressions_untouched():
     assert calculate("(2+3)*4") == "(2+3)*4 = 20"
     assert calculate("10/4") == "10/4 = 2.5"
+
+
+def test_calculate_drops_surplus_closing_parentheses_at_the_end_only():
+    assert calculate("(2+3)*4)") == "(2+3)*4 = 20"
+    assert calculate("((1+1)*3))") == "((1+1)*3) = 6"
+    assert calculate("2+3)*4").startswith("Error")   # a stray parenthesis in the middle is not guessed

@@ -146,6 +146,9 @@ def calculate(expression: str) -> str:
     _missing_close = _repaired.count("(") - _repaired.count(")")
     if _missing_close > 0:
         _repaired = _repaired + ")" * _missing_close
+    while _missing_close < 0 and _repaired.rstrip().endswith(")"):  # one closing parenthesis too many at the very end
+        _repaired = _repaired.rstrip()[:-1]
+        _missing_close += 1
     if _repaired != expr:
         expr = _repaired
         expression = expr.strip()
