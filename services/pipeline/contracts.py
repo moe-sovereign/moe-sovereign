@@ -188,11 +188,46 @@ def tool_schema_contract_hash(schema: Mapping[str, Any] | None) -> str:
     return declared or canonical_json_hash(dict(schema))
 
 
+def _close_open_json(text: str):
+    """Close the brackets a truncated JSON text left open; None when it ends inside a string or is unbalanced."""
+    stack: list[str] = []
+    in_str = esc = False
+    for ch in text:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch in "[{":
+            stack.append("]" if ch == "[" else "}")
+        elif ch in "]}":
+            if not stack or stack.pop() != ch:
+                return None
+    if in_str:
+        return None
+    return text + "".join(reversed(stack))
+
+
 def _first_json(text: str):
     dec = json.JSONDecoder()
     positions = sorted(
         pos for pos in (text.find("["), text.find("{")) if pos >= 0
     )
+    if positions and text[positions[0]] == "[":
+        # A truncated top-level array (missing closing brackets) is repaired as a whole instead of falling back to
+        # its first inner object, which silently reduced a multi-task plan to its first task.
+        closed = _close_open_json(text[positions[0]:].rstrip())
+        if closed is not None:
+            try:
+                repaired = json.loads(closed)
+                if isinstance(repaired, list):
+                    return repaired
+            except (json.JSONDecodeError, ValueError):
+                pass
     for start in positions:
         pos = start
         opener = text[start]
@@ -209,6 +244,11 @@ def parse_plan(raw: str) -> PlannerPlan:
     plan = PlannerPlan(raw=raw or "")
     cleaned = re.sub(r"<think>.*?</think>", "", raw or "", flags=re.S)
     obj = _first_json(cleaned)
+    _array_at, _object_at = cleaned.find("["), cleaned.find("{")
+    if _array_at >= 0 and (_object_at < 0 or _array_at < _object_at) and not isinstance(obj, list):
+        # The answer is a JSON array that does not parse as a whole; one of its inner objects is not the plan.
+        logger.warning("contracts: planner array is malformed JSON (chars=%d); rejecting instead of keeping a partial plan", len(raw or ""))
+        return plan
     if isinstance(obj, dict) and "tasks" not in obj and ("task" in obj or "category" in obj or "instruction" in obj or "description" in obj or "mcp_tool" in obj):
         tasks = [obj]
     else:
