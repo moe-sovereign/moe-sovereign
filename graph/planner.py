@@ -121,6 +121,13 @@ def _planner_ctx_budget(state_num_ctx: int = 0) -> dict:
     }
 
 
+# The compact (retry) planner prompt used to ask only for "task" and "category"; a small planner then answered every retry
+# without "mcp_tool", so each retry of a plan with precision tasks failed the contract and recovery was exhausted.
+COMPACT_PRECISION_RULE = (
+    'Every object with category "precision_tools" MUST also have "mcp_tool" (string) and "mcp_args" (object).'
+)
+
+
 def _sanitize_plan(raw: list, fallback_input: str,
                    user_expert_cats: set | None = None) -> list:
     """
@@ -874,6 +881,7 @@ async def planner_node(state_: AgentState):
             f"\n\nIMPORTANT: Answer EXCLUSIVELY with a JSON array of objects. "
             f"No text, no explanations, no markdown.\n"
             f"Each object MUST have \"task\" (string) and \"category\" (string).\n"
+            f"{COMPACT_PRECISION_RULE}\n"
             f"TASK BUDGET: {task_budget_text}.\n\n"
             f"VALID CATEGORIES FOR LLM EXPERTS: {expert_categories}\n"
             f"NOTE: \"precision_tools\" is ALWAYS a valid category for any calculation "
