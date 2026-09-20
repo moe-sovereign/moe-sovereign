@@ -96,8 +96,10 @@ NOTES = """## Findings and open points
    114688 = 6.7 GB / 6.8 tok/s, 131072 = 7.3 GB / 0.3 tok/s, 196608 = 33 % CPU offload; SmolLM3-3B fine-tune 48128 = 5.7 GB / 8.7 tok/s, 65536 = 6.9 GB / 8.7 tok/s.
    Chosen: Qwen experts 98304 (last size without throughput loss), SmolLM3 experts 65536 (native maximum, fits). Spur 1 templates still carry 48128 for
    the experts because the templates must not change during the running benchmark: apply `align_benchmark_template_prompts.py --apply --tracks spur1`
-   after the run. Not verified on the target GPU: Qwen3.5-9B planner at 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on N04-RGTX (18 GB); a
-   load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload), so this must be checked on N04-RGTX after Spur 1. The templates only
+   after the run. Not verified on the target GPU: the Qwen3.5-9B planner at its maximum of 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on
+   N04-RGTX (18 GB); a load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload). The Spur 2 planner is therefore provisionally
+   capped at 131072 (about 11 GB by the same formula, operator agreed 2026-09-20); after Spur 1 finishes, test 262144 on N04-RGTX (fully in VRAM, no throughput loss) and raise
+   `CONTEXT["spur2"]["planner"]` if it fits. The templates only
    set the cap: the orchestrator requests a context adapted to the prompt size, so short prompts do not allocate the full window.
    **Remaining inherent differences:** the models, the judges (each track is judged by its own fine-tuned judge) and the context windows above. Absolute scores must not
    be compared across tracks; compare each track with its own baseline.

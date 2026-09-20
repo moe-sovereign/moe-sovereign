@@ -5125,3 +5125,6 @@ Notes:
 - NOT applied yet (Spur 1 is running, templates must not change): Spur 1 experts 48128 -> 65536. Run `python3 scripts/align_benchmark_template_prompts.py --apply --tracks spur1` after the run.
 - OPEN before Spur 2: Qwen3.5-9B planner at 262144 needs ~16 GB on N04-RGTX (18 GB); unverified there (test on TM10-01 showed 56 % CPU offload). If it does not fit, lower planner_num_ctx
   in the Spur 2 templates. The Spur 1 -> Spur 2 phase switch can hang on a model reload (see incident above): unload idle models on N04-RTX/RGTX if the run stalls.
+
+## 2026-09-20 update: Spur 2 planner context capped at 131072 (operator "Ja")
+- `CONTEXT["spur2"]["planner"]` = 131072 (provisional, ~11 GB by formula) in all six Open-Weight templates; 262144 (~16 GB) to be tested on N04-RGTX after Spur 1, then raise it if it fits.

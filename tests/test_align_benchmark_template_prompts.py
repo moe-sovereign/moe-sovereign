@@ -92,5 +92,5 @@ def test_instance_placement_is_one_expert_per_ascending_m60_instance(al):
 
 def test_context_windows_follow_the_per_model_maximum_rule(al):
     assert al.CONTEXT["spur1"] == {"expert": 65536, "planner": 65536, "judge": 65536}   # OLMo 3 / 3.1 native maximum, SmolLM3 native maximum
-    assert al.CONTEXT["spur2"] == {"expert": 98304, "planner": 262144, "judge": 262144}  # Qwen3.5/3.8 native maximum, expert = VRAM limit
+    assert al.CONTEXT["spur2"] == {"expert": 98304, "planner": 131072, "judge": 262144}  # judge = Qwen3.8 maximum, expert = VRAM limit, planner provisionally capped (262144 unverified on N04-RGTX)
     assert al.track_of("LUMI-G Base (Pre-Finetune)") == "spur1" and al.track_of("Open-Weight Finetuned Ensemble") == "spur2"

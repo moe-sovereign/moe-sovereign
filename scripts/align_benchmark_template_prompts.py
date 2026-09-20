@@ -77,10 +77,10 @@ JUDGE_ENDPOINT = "N04-RTX"
 # context that fits into the VRAM of their GPU (8 GB Maxwell, f16 KV cache) without a throughput loss. Measured values (see
 # docs/system/benchmark-template-matrix-2026-09-19.md): Qwen3.5-4B expert 98304 (6.1 GB, 11.9 tok/s; 114688 -> 6.8 tok/s, 131072 -> 0.3 tok/s,
 # 196608 -> 33% CPU offload), SmolLM3-3B expert 65536 (its native maximum, 6.9 GB, 8.7 tok/s). Native maxima: OLMo 3 7B / OLMo 3.1 32B 65536,
-# Qwen3.5-9B / Qwen3.8-27B 262144.
+# Qwen3.5-9B / Qwen3.8-27B 262144 (the Spur 2 planner is provisionally capped at 131072 until 262144 is verified on N04-RGTX).
 CONTEXT = {
     "spur1": {"expert": 65536, "planner": 65536, "judge": 65536},
-    "spur2": {"expert": 98304, "planner": 262144, "judge": 262144},
+    "spur2": {"expert": 98304, "planner": 131072, "judge": 262144},  # planner: provisional cap, 262144 (~16 GB) not yet verified on N04-RGTX (18 GB)
 }
 # `mcp_tools` only controls the "Available Tools" text block appended to the expert system prompt (services/helpers.py); an empty list
 # selects the per-category default block, so equal categories give equal effective prompts. The tools themselves are executed by the planner path.

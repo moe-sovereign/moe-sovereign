@@ -42,12 +42,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 262144 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 262144 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 2 (open weight): expert assignment (category -> model @ endpoint)
 
@@ -68,12 +68,12 @@ Everything except the model names and the per-model context windows must be iden
 
 | Condition | Differences | Context planner / judge / expert (Spur 1 vs Spur 2) |
 |---|---|---|
-| Pre-Finetune, GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
-| Pre-Finetune, no GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
-| Pre-Finetune, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
-| Fine-tuned, GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
-| Fine-tuned, no GraphRAG | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
-| Fine-tuned, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 262144 / 262144 / 98304 |
+| Pre-Finetune, GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Pre-Finetune, no GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Pre-Finetune, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Fine-tuned, GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Fine-tuned, no GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Fine-tuned, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
 
 ## Findings and open points
 
@@ -119,8 +119,10 @@ Everything except the model names and the per-model context windows must be iden
    114688 = 6.7 GB / 6.8 tok/s, 131072 = 7.3 GB / 0.3 tok/s, 196608 = 33 % CPU offload; SmolLM3-3B fine-tune 48128 = 5.7 GB / 8.7 tok/s, 65536 = 6.9 GB / 8.7 tok/s.
    Chosen: Qwen experts 98304 (last size without throughput loss), SmolLM3 experts 65536 (native maximum, fits). Spur 1 templates still carry 48128 for
    the experts because the templates must not change during the running benchmark: apply `align_benchmark_template_prompts.py --apply --tracks spur1`
-   after the run. Not verified on the target GPU: Qwen3.5-9B planner at 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on N04-RGTX (18 GB); a
-   load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload), so this must be checked on N04-RGTX after Spur 1. The templates only
+   after the run. Not verified on the target GPU: the Qwen3.5-9B planner at its maximum of 262144 needs about 16 GB (9B weights plus 34 KB KV per token) on
+   N04-RGTX (18 GB); a load test on an idle multi-GPU instance placed only 7 GB on the GPU (56 % CPU offload). The Spur 2 planner is therefore provisionally
+   capped at 131072 (about 11 GB by the same formula, operator agreed 2026-09-20); after Spur 1 finishes, test 262144 on N04-RGTX (fully in VRAM, no throughput loss) and raise
+   `CONTEXT["spur2"]["planner"]` if it fits. The templates only
    set the cap: the orchestrator requests a context adapted to the prompt size, so short prompts do not allocate the full window.
    **Remaining inherent differences:** the models, the judges (each track is judged by its own fine-tuned judge) and the context windows above. Absolute scores must not
    be compared across tracks; compare each track with its own baseline.
