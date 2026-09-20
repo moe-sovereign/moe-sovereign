@@ -2333,9 +2333,12 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             _ns_msgs.append(_nd)
         _NS_THINKING_PREFIXES = ("qwen3", "gemma4", "qwq")
         _ns_model = _native_endpoint["model"].lower()
+        # Plain chat (no tools) to any Ollama model also goes through native /api/chat: the OpenAI-compatible /v1 endpoint
+        # ignores options.num_ctx (verified on Ollama 0.34.1), so such calls always ran with the server default context
+        # and forced a reload whenever the model was loaded with another one (the 32B judge: 111 s per call).
         _ns_use_native = (
             _ep_api_type == "ollama"
-            and any(t in _ns_model for t in _NS_THINKING_PREFIXES)
+            and (any(t in _ns_model for t in _NS_THINKING_PREFIXES) or not request.tools)
         )
         if _ns_use_native:
             # Native Ollama /api/chat with think:false — mirrors the streaming path.

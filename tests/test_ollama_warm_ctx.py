@@ -37,3 +37,11 @@ def test_native_passthrough_reuses_the_loaded_context_when_none_is_given():
     import services.pipeline.chat as chat
 
     assert "loaded_ctx as _loaded_ctx" in inspect.getsource(chat)
+
+
+def test_plain_ollama_chat_uses_native_api_so_that_num_ctx_is_honoured():
+    import inspect
+
+    import services.pipeline.chat as chat
+
+    assert "or not request.tools)" in inspect.getsource(chat)
