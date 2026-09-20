@@ -5128,3 +5128,11 @@ Notes:
 
 ## 2026-09-20 update: Spur 2 planner context capped at 131072 (operator "Ja")
 - `CONTEXT["spur2"]["planner"]` = 131072 (provisional, ~11 GB by formula) in all six Open-Weight templates; 262144 (~16 GB) to be tested on N04-RGTX after Spur 1, then raise it if it fits.
+
+## 2026-09-20 interim result, power capture
+- Interim (Spur 1, one round, 4 of 8 tasks, n=3-4 per condition, not a conclusion): overall score native 9.70, prefinetune_ablation 9.09, prefinetune_ai 9.04, compound_ai 8.85,
+  prefinetune_debate 8.29, compound_debate 8.25, ablation_no_graphrag 6.97 (graphrag-01: 4.55). The first compound_ai cell (sysprog-01) latency is invalid (75 min judge stall).
+- Expert answers: 60 collected (`expert_outputs_spur1.jsonl`), heuristics only (no empty answers, CORE_FINDING/CONFIDENCE format 96-97 %); LLM-judge scoring of the experts stays post-run.
+- Power: `benchmarks/power_monitor.py` was NOT running. Started two monitors for the rest of the run: `--host N04-RTX` (run-id bench-20260919-210551-n04) and `--host N02-M60`
+  (run-id bench-20260919-210551-n02), 10 s interval, CSVs in benchmarks/results. Retroactive N04 data comes from Prometheus (`node_gpu_power_draw_watts`, instance 192.168.155.224:9100, 15 s);
+  the N02-M60 expert host has no history before the monitor start, so the compound energy of the first ~9 h is understated (experts missing).
