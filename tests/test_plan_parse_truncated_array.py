@@ -31,3 +31,15 @@ def test_single_object_and_wrapped_plans_still_parse():
     assert len(parse_plan(TASK % "solo").tasks) == 1
     assert len(parse_plan('{"tasks": [%s, %s]}' % (TASK % "a", TASK % "b")).tasks) == 2
     assert len(parse_plan("Plan:\n```json\n[%s]\n```" % (TASK % "a")).tasks) == 1
+
+
+def test_one_closing_brace_too_many_after_a_long_expression_is_repaired():
+    raw = "[" + (TASK % "a")[:-1] + "}, " + TASK % "b" + "]"   # task a ends with an extra }
+    plan = parse_plan(raw)
+    assert plan.valid and [t.instruction for t in plan.tasks] == ["a", "b"]
+
+
+def test_array_bracket_written_before_the_object_is_closed_is_repaired():
+    raw = "[" + TASK % "a" + ', {"task": "b", "category": "precision_tools", "mcp_tool": "calculate", "mcp_args": {"expression": "2*3"}]'
+    plan = parse_plan(raw)
+    assert plan.valid and [t.instruction for t in plan.tasks] == ["a", "b"]
