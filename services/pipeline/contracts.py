@@ -189,11 +189,18 @@ def tool_schema_contract_hash(schema: Mapping[str, Any] | None) -> str:
 
 
 def _close_open_json(text: str):
-    """Close the brackets a truncated JSON text left open; None when it ends inside a string or is unbalanced."""
+    """Balance the brackets of a JSON text a small model wrote sloppily.
+
+    Missing closers are appended and a closer that does not match the innermost open bracket is dropped (typical: one
+    ``}`` too many after a long expression, or ``]`` written before the object was closed). Returns None when the text
+    ends inside a string. The caller accepts the result only if it parses as JSON.
+    """
     stack: list[str] = []
+    out: list[str] = []
     in_str = esc = False
     for ch in text:
         if in_str:
+            out.append(ch)
             if esc:
                 esc = False
             elif ch == "\\":
@@ -202,14 +209,20 @@ def _close_open_json(text: str):
                 in_str = False
         elif ch == '"':
             in_str = True
+            out.append(ch)
         elif ch in "[{":
             stack.append("]" if ch == "[" else "}")
+            out.append(ch)
         elif ch in "]}":
-            if not stack or stack.pop() != ch:
-                return None
+            if stack and stack[-1] == ch:
+                stack.pop()
+                out.append(ch)
+            # else: mismatching closer, dropped
+        else:
+            out.append(ch)
     if in_str:
         return None
-    return text + "".join(reversed(stack))
+    return "".join(out) + "".join(reversed(stack))
 
 
 def _first_json(text: str):
