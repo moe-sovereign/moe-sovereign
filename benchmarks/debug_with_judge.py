@@ -55,6 +55,8 @@ def evidence(entry: dict, task: dict, planner_prompt: str) -> str:
         "PLANNER ATTEMPTS (raw output, in order):\n" + "\n".join(f"--- attempt {i + 1} ---\n{a[:2500]}" for i, a in enumerate(attempts)),
         "TOOL RESULTS AND PIPELINE EVENTS:\n" + "\n".join(mcp_lines(cid)) if cid else "TOOL RESULTS: none recorded",
         "FINAL ANSWER (start):\n" + (entry.get("final_response") or "")[:1200],
+        "REFERENCE VALUES (for your diagnosis only: use them to find which figures deviate and by what factor; never copy them "
+        "or any of their digits into a rule):\n" + json.dumps(task.get("expected_answer"), ensure_ascii=False),
     ]
     return "\n\n".join(parts)
 

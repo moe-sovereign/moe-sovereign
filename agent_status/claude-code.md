@@ -5145,3 +5145,12 @@ Notes:
   system prompt ("Sovereign Judge 27B (Qwen3.8-27B fine-tuned)", also for the OLMo judges) and the template judge_prompt as user text; merger role differs from the judge's training role.
 - Fix: `_ollama_chat_messages()` keeps roles for dicts and LangChain messages; tests in tests/test_expert_native_messages.py; full suite 1390 passed. Only that hunk of graph/expert.py is
   committed (foreign uncommitted changes stay in the work tree). Deploy after the benchmark: the running run measures the defective path for all conditions equally.
+
+## 2026-09-21 optimisation loop result (task sci-precision-02, template LUMI-G OLMo + SmolLM3 ... No-GraphRAG, models/pinning unchanged)
+- Code fixes (all committed, deployed): expert chat roles (073ec790), plan parser repair/reject (0d5104cc, ee812901), compact retry prompt keeps mcp_tool (93a085f2),
+  judge warm reuse + VRAM free before reload (1de953c8), native /api/chat for plain model@node (13f315f8), MCP calculate paren/^ repair (76c6a52e, b297ecc8),
+  plan limit counts model tasks (0577d7e4), MAX_PLANNER_TOKENS=4096 (.env).
+- Effect: pipeline failures ~50 % -> ~5 %, typical latency 830-1300 s -> ~100 s. Correctness: planner still writes unit/dimension errors (MWh*price, CO2 factors) in ~75 % of runs; "all 6 figures right" ~25 %.
+- Prompt-level levers (planner rules, advice rule, merger plausibility rule) did NOT robustly help (10-run validation of the best-looking config: mean 4.0); removed the advice rule again (backup restored).
+- Open levers needing a decision: dedicated MCP energy/cost tool, planner self-consistency vote, dimension-consistent training data for the next planner, replan-on-implausible-magnitude.
+- Template currently carries the tuned planner_prompt/judge_prompt (original in benchmarks/results/opt/backup_original_*.json); other templates untouched.
