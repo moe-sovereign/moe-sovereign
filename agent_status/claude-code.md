@@ -5154,3 +5154,8 @@ Notes:
 - Prompt-level levers (planner rules, advice rule, merger plausibility rule) did NOT robustly help (10-run validation of the best-looking config: mean 4.0); removed the advice rule again (backup restored).
 - Open levers needing a decision: dedicated MCP energy/cost tool, planner self-consistency vote, dimension-consistent training data for the next planner, replan-on-implausible-magnitude.
 - Template currently carries the tuned planner_prompt/judge_prompt (original in benchmarks/results/opt/backup_original_*.json); other templates untouched.
+
+## 2026-09-22 in_progress: Open Weight benchmark, one round (yardstick for Open Source), started 20260921T221522Z
+- Spur 2 only (`MOE_RUN_SPUR1=0`, 1 round), 7 conditions x 8 tasks, judge evaluation deferred per task, all 14 templates carry identical prompts (matrix: 6 sound, parity none).
+- DO NOT during the run: restart/rebuild the orchestrator or mcp-precision, edit any LUMI-G*/Open-Weight* template, change .env or unload models on N04/N02. Integrity log: benchmarks/results/integrity_20260921T221522Z.log.
+- Foreign keys seen earlier: odysseus_ki-vm-node05 (sweeps all templates), Dolibarr (qwen3.6:35b@N04-RTX evicts the judge). Check benchmarks/run_health_check.py.
