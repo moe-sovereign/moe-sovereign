@@ -63,3 +63,13 @@ with unit relations (10-run validation 4.0), added planning limits (mean 4.1). O
 The 7B planner writes dimension errors in about three quarters of the runs (cost = MWh x price per kWh, gram/tonne factors).
 Levers that need a decision: a dedicated parameter-based MCP tool for energy/cost/emissions, a planner self-consistency vote,
 dimension-consistent calculation decompositions in the next planner training data, a re-plan when magnitudes are implausible.
+
+## Same task on the Open Weight template (2026-09-21)
+
+`Open-Weight Finetuned Ensemble - No-GraphRAG` (planner `moe-sovereign-planner-9b`, experts Qwen3.5-4B fine-tunes on N02-M60, judge
+`sovereign-judge-27b`) with the same planner/judge prompt blocks and the same code/infrastructure fixes, 10 runs
+(`benchmarks/results/opt/sp2_run1.json`). All 10 runs: all six figures correct (deterministic score 10), no pipeline failure, mean
+score 9.3 (LLM-judge component graded by the Spur 2 judge, which is not comparable to the Spur 1 judge), median request time 108 s;
+9 of 10 runs needed a planner retry (first attempt structurally invalid), the retry then produced a correct plan.
+Comparison, same code: Spur 1 mean 5.0 (10 of 48 runs with all figures correct, 4 of 48 pipeline failures).
+Before the fixes only Spur 1 was measured (mean 2.7); there is no Spur 2 measurement without the fixes.
