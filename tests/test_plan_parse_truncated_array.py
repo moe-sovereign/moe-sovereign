@@ -43,3 +43,19 @@ def test_array_bracket_written_before_the_object_is_closed_is_repaired():
     raw = "[" + TASK % "a" + ', {"task": "b", "category": "precision_tools", "mcp_tool": "calculate", "mcp_args": {"expression": "2*3"}]'
     plan = parse_plan(raw)
     assert plan.valid and [t.instruction for t in plan.tasks] == ["a", "b"]
+
+
+def _calc(n):
+    return {"task": f"c{n}", "category": "precision_tools", "mcp_tool": "calculate", "mcp_args": {"expression": f"{n}+1"}}
+
+
+def test_plan_limit_counts_model_tasks_and_lets_deterministic_mcp_calls_exceed_it():
+    from services.pipeline.contracts import validate_plan_tasks
+
+    schemas = {"calculate": {"required": ["expression"]}}
+    nine_calcs = [_calc(i) for i in range(9)]
+    assert not [i for i in validate_plan_tasks(nine_calcs, schemas, max_tasks=8) if i.code == "too_many_tasks"]
+    too_many_models = [{"task": f"m{i}", "category": "general"} for i in range(9)]
+    assert [i for i in validate_plan_tasks(too_many_models, schemas, max_tasks=8) if i.code == "too_many_tasks"]
+    absurd = [_calc(i) for i in range(25)]
+    assert [i for i in validate_plan_tasks(absurd, schemas, max_tasks=8) if i.code == "too_many_tasks"]

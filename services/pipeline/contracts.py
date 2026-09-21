@@ -1272,19 +1272,24 @@ def validate_plan_tasks(
                 message="plan must contain at least one task",
             )
         ]
-    if max_tasks is not None and len(tasks) > max_tasks:
-        issues.append(
-            PlannerContractIssue(
-                task_index=-1,
-                code="too_many_tasks",
-                field="tasks",
-                message=(
-                    f"plan contains {len(tasks)} tasks but the executable "
-                    f"maximum is {max_tasks}; combine compatible non-precision "
-                    "work without omitting any requested outcome"
-                ),
+    if max_tasks is not None:
+        # The limit bounds model work. Deterministic MCP calls (tasks that name an mcp_tool) run in parallel, cost no
+        # model call and are needed one per requested figure, so they only count against a wider total ceiling.
+        model_tasks = [t for t in tasks if not (isinstance(t, dict) and t.get("mcp_tool"))]
+        total_ceiling = max_tasks * 3
+        if len(model_tasks) > max_tasks or len(tasks) > total_ceiling:
+            issues.append(
+                PlannerContractIssue(
+                    task_index=-1,
+                    code="too_many_tasks",
+                    field="tasks",
+                    message=(
+                        f"plan contains {len(tasks)} tasks ({len(model_tasks)} model tasks) but the executable "
+                        f"maximum is {max_tasks} model tasks and {total_ceiling} in total; combine compatible "
+                        "non-precision work without omitting any requested outcome"
+                    ),
+                )
             )
-        )
 
     schemas = tool_schemas or {}
     _task_id_positions = {
