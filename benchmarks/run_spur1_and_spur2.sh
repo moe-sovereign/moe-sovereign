@@ -35,6 +35,10 @@ NATIVE_SPUR2="${MOE_NATIVE_SPUR2:-qwen3.8:27b}"
 JUDGE_MODEL_SPUR2="${MOE_JUDGE_MODEL_SPUR2:-hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M}"
 JUDGE_NODE="${MOE_JUDGE_NODE:-N04-RTX}"
 NUM_ROUNDS="${MOE_BENCHMARK_NUM_ROUNDS:-5}"
+# Track selection: MOE_RUN_SPUR1=0 skips the open source phase, MOE_RUN_SPUR2=0 the open weight phase.
+RUN_SPUR1="${MOE_RUN_SPUR1:-1}"
+RUN_SPUR2="${MOE_RUN_SPUR2:-1}"
+SPUR1_RC="skipped"; SPUR2_RC="skipped"; SPUR1_LOG="-"; SPUR2_LOG="-"
 RESULTS_DIR="$SCRIPT_DIR/results"
 mkdir -p "$RESULTS_DIR"
 
@@ -51,6 +55,7 @@ echo "==========================================================================
 # ==============================================================================
 # SPUR 1: OPEN SOURCE (OLMo + SmolLM3)
 # ==============================================================================
+if [ "$RUN_SPUR1" = "1" ]; then
 SPUR1_TS=$(date +%Y%m%d-%H%M%S)
 SPUR1_LOG="$RESULTS_DIR/lumig_spur1_opensource_${SPUR1_TS}.log"
 
@@ -79,6 +84,9 @@ python3 "$SCRIPT_DIR/run_scientific_benchmark.py" --fresh > "$SPUR1_LOG" 2>&1
 SPUR1_RC=$?
 echo "📍 Phase 1 (Spur 1) finished with exit code: $SPUR1_RC at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+fi
+
+if [ "$RUN_SPUR1" = "1" ] && [ "$RUN_SPUR2" = "1" ]; then
 # Brief pause between tracks to allow inference nodes and caches to settle
 echo "Sleeping 30s before initiating Spur 2..."
 sleep 30
@@ -86,6 +94,8 @@ sleep 30
 # ==============================================================================
 # SPUR 2: OPEN WEIGHT (Qwen3.5:4b)
 # ==============================================================================
+fi
+if [ "$RUN_SPUR2" = "1" ]; then
 SPUR2_TS=$(date +%Y%m%d-%H%M%S)
 SPUR2_LOG="$RESULTS_DIR/lumig_spur2_openweight_${SPUR2_TS}.log"
 
@@ -113,6 +123,8 @@ python3 "$SCRIPT_DIR/run_scientific_benchmark.py" --fresh > "$SPUR2_LOG" 2>&1
 
 SPUR2_RC=$?
 echo "📍 Phase 2 (Spur 2) finished with exit code: $SPUR2_RC at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+fi
 
 echo ""
 echo "================================================================================"

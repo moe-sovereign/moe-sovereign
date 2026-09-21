@@ -334,3 +334,23 @@ class TestPrefinetuneConditions:
             ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag"),
         }
         self._reload(monkeypatch)
+
+
+class TestDeferredEvaluation:
+    """The judge evaluation can be deferred and finalised later without changing the scoring formula."""
+
+    def test_finalize_pending_evaluation_updates_the_result_in_place(self, monkeypatch):
+        import asyncio
+
+        import benchmarks.run_scientific_benchmark as rsb
+
+        async def fake_judge(client, test_case, prompt, response_text):
+            assert response_text == "the full answer"
+            return {"score": 8.0, "verdict": "PASS", "reasoning": "ok"}
+
+        monkeypatch.setattr(rsb, "judge_evaluation", fake_judge)
+        res = {"condition": "compound_ai", "deterministic_score": 10.0, "judge_score": 0.0, "score": 0.0, "judge_verdict": "PENDING",
+               "final_response": "the full", "_pending_full_response": "the full answer"}
+        out = asyncio.run(rsb.finalize_pending_evaluation(None, {"prompt": "q"}, res))
+        assert out is res and "_pending_full_response" not in res
+        assert (res["judge_score"], res["judge_verdict"], res["score"]) == (8.0, "PASS", round(0.4 * 10 + 0.6 * 8, 2))

@@ -35,15 +35,19 @@ def test_planner_prompt_is_independent_of_category_order(al):
     assert al.planner_prompt(SPUR1) == al.planner_prompt(list(reversed(SPUR1)))
 
 
-def test_spur1_planner_prompt_is_the_validated_original(al):
-    """The A/B-validated original prompt (1635 chars): list format, original order, empty-plan guard."""
+def test_planner_prompt_is_the_original_list_format_plus_the_precision_block(al):
+    """Original descriptive list (A/B-validated), the optimised precision block and the empty-plan guard, in that order."""
     text = al.planner_prompt(SPUR1)
-    assert len(text) == 1635
     assert text.startswith("You are a specialized planner model in a Mixture of Experts (MoE) system.")
-    order = [line.split(":")[0][2:] for line in text.splitlines() if line.startswith("- ")]
+    order = [line.split(":")[0][2:] for line in text.splitlines() if line.startswith("- ") and ": " in line and line.split(":")[0][2:] in SPUR1]
     assert order == ["general", "security", "research", "governance", "compounding_knowledge", "precision_tools", "data_analyst", "code_reviewer"]
-    assert "NEVER return an empty JSON array" in text
+    assert text.index("PRECISION PLANNING RULES") < text.index('Use "dynamic" only when') < text.index("NEVER return an empty JSON array")
     assert "MULTI-DISCIPLINARY" not in text
+
+
+def test_judge_prompt_is_the_training_prompt_plus_the_synthesis_rules(al):
+    assert al.JUDGE_RULES.startswith("SYNTHESIS RULES:")
+    assert "tool value is correct" in al.JUDGE_RULES
 
 
 def test_planner_prompt_lists_every_category_but_dynamic(al):

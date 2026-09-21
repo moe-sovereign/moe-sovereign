@@ -1,4 +1,4 @@
-# Benchmark template matrix (2026-09-20)
+# Benchmark template matrix (2026-09-22)
 
 **Status:** validated against the live database and the Ollama endpoints at generation time (`python3 scripts/benchmark_template_matrix.py`). Regenerate after every template change.
 
@@ -16,12 +16,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `LUMI-G Base (Pre-Finetune)` (`tmpl-7be691d7`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | off | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `LUMI-G Base (Pre-Finetune) - No-GraphRAG` (`tmpl-37d31274`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | off | off | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `LUMI-G Base (Pre-Finetune) - Deliberation` (`tmpl-a026a606`) | `olmo3-7b-instruct-base-fixed:latest` @N04-RGTX ctx 65536 | `olmo31-32b-instruct-base-fixed:latest` @N04-RTX ctx 65536 | on | on | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble` (`tmpl-11f532fc`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | off | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG` (`tmpl-smollm3-nograph`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | off | off | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation` (`tmpl-smollm3-delib`) | `moe-sovereign-planner-olmo3-7b:Q4_K_M` @N04-RGTX ctx 65536 | `sovereign-judge-olmo31-32b:Q4_K_M` @N04-RTX ctx 65536 | on | on | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 1 (open source): expert assignment (category -> model @ endpoint)
 
@@ -42,12 +42,12 @@ Native baseline (single dense LLM without orchestration, default of `run_spur1_a
 
 | Role | Template (id) | Planner | Judge | GraphRAG | Debate | Prompt hashes planner / judge | C1 | C2 | C3 | C4 | C5 | Verdict |
 |---|---|---|---|:-:|:-:|---|:-:|:-:|:-:|:-:|:-:|---|
-| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | - | - | yes | yes | yes | pre-finetune |
-| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
-| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | 7c72ab83 / 627b2c29 | yes | yes | yes | yes | yes | sound |
+| Pre-Finetune, GraphRAG | `Open-Weight Base (Pre-Finetune)` (`tmpl-95dbac05`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | off | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, no GraphRAG | `Open-Weight Base (Pre-Finetune) - No-GraphRAG` (`tmpl-db16e336`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | off | off | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Pre-Finetune, GraphRAG + debate | `Open-Weight Base (Pre-Finetune) - Deliberation` (`tmpl-d3b31c32`) | `qwen3.5:9b` @N04-RGTX ctx 131072 | `qwen3.8:27b` @N04-RTX ctx 262144 | on | on | dafd04de / ebfbd7b0 | - | - | yes | yes | yes | pre-finetune |
+| Fine-tuned, GraphRAG | `Open-Weight Finetuned Ensemble` (`tmpl-ow-ft`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | off | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, no GraphRAG | `Open-Weight Finetuned Ensemble - No-GraphRAG` (`tmpl-ow-ft-nograph`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | off | off | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
+| Fine-tuned, GraphRAG + debate | `Open-Weight Finetuned Ensemble - Deliberation` (`tmpl-ow-ft-delib`) | `moe-sovereign-planner-9b:Q4_K_M` @N04-RGTX ctx 131072 | `sovereign-judge-27b:Q4_K_M` @N04-RTX ctx 262144 | on | on | dafd04de / ebfbd7b0 | yes | yes | yes | yes | yes | sound |
 
 ### Spur 2 (open weight): expert assignment (category -> model @ endpoint)
 
@@ -68,12 +68,12 @@ Everything except the model names and the per-model context windows must be iden
 
 | Condition | Differences | Context planner / judge / expert (Spur 1 vs Spur 2) |
 |---|---|---|
-| Pre-Finetune, GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
-| Pre-Finetune, no GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
-| Pre-Finetune, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
-| Fine-tuned, GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
-| Fine-tuned, no GraphRAG | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
-| Fine-tuned, GraphRAG + debate | none | 65536 / 65536 / 48128 vs 131072 / 262144 / 98304 |
+| Pre-Finetune, GraphRAG | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
+| Pre-Finetune, no GraphRAG | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
+| Pre-Finetune, GraphRAG + debate | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
+| Fine-tuned, GraphRAG | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
+| Fine-tuned, no GraphRAG | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
+| Fine-tuned, GraphRAG + debate | none | 65536 / 65536 / 65536 vs 131072 / 262144 / 98304 |
 
 ## Findings and open points
 

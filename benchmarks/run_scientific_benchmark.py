@@ -748,8 +748,15 @@ async def run_single_test_condition(
     target_config: str,
     round_num: int,
     run_id: str,
+    defer_eval: bool = False,
 ) -> Dict[str, Any]:
-    """Execute a single test case under a specific configuration condition."""
+    """Execute a single test case under a specific configuration condition.
+
+    defer_eval: skip the judge evaluation and return a result marked ``PENDING``; the caller evaluates it later with
+    ``finalize_pending_evaluation``. Used to run all conditions of a task first and judge all answers afterwards, so
+    the judge model is not swapped out (a ~110 s reload for the 27-32B models) between generation calls, which would
+    inflate the measured latency of the next request.
+    """
     test_id = test_case["id"]
     test_type = test_case["type"]
     scoring_cfg = test_case.get("scoring", {})
@@ -870,6 +877,11 @@ async def run_single_test_condition(
             "verdict": "PIPELINE_FAILED",
             "reasoning": "Skipped judge evaluation: the pipeline call itself failed (turns[].ok is False), so there is no real response to grade.",
         }
+    elif defer_eval:
+        det_score = deterministic_score(final_response, scoring_cfg, expected_answer)
+        judge_score = 0.0
+        combined_score = 0.0
+        judge_res = {"verdict": "PENDING", "reasoning": "Judge evaluation deferred until all conditions of the task ran."}
     else:
         det_score = deterministic_score(final_response, scoring_cfg, expected_answer)
         judge_res = await judge_evaluation(
@@ -908,8 +920,26 @@ async def run_single_test_condition(
         "completion_tokens": total_comp_tok,
         "total_tokens": total_prompt_tok + total_comp_tok,
         "turns": turns_result,
-        "final_response": final_response[:1000]
+        "final_response": final_response[:1000],
+        **({"_pending_full_response": final_response} if judge_res.get("verdict") == "PENDING" else {}),
     }
+
+
+async def finalize_pending_evaluation(client: httpx.AsyncClient, test_case: Dict[str, Any], res: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the deferred judge evaluation of a result created with ``defer_eval=True`` and update it in place."""
+    full_response = res.pop("_pending_full_response", res.get("final_response", ""))
+    judge_res = await judge_evaluation(
+        client=client,
+        test_case=test_case,
+        prompt=test_case.get("prompt") or test_case.get("turns", [{}])[-1].get("prompt", ""),
+        response_text=full_response,
+    )
+    judge_score = float(judge_res.get("score") or judge_res.get("overall_score") or 5.0)
+    res["judge_score"] = judge_score
+    res["judge_verdict"] = judge_res.get("verdict", "N/A")
+    res["judge_reasoning"] = judge_res.get("reasoning", "")
+    res["score"] = round(0.4 * res["deterministic_score"] + 0.6 * judge_score, 2)
+    return res
 
 
 def _write_interim_reports(
@@ -1122,6 +1152,8 @@ async def main():
             print(f"\n--- 🔄 EXECUTING BENCHMARK ROUND {r}/{NUM_ROUNDS} ---", flush=True)
             for tc in test_cases:
                 print(f"\n▶ Task: [{tc['category'].upper()}] {tc['name']} ({tc['complexity']})", flush=True)
+                pending_eval: List[Any] = []
+                _defer_eval = os.environ.get("MOE_BENCHMARK_DEFER_EVAL", "1").strip().lower() not in ("", "0", "false", "no")
                 for cond_name, target_cfg in conditions:
                     run_key = f"r{r}_{tc['id']}_{cond_name}"
 
@@ -1137,8 +1169,13 @@ async def main():
                         continue
 
                     print(f"  • Condition: {cond_name:22} ... ", end="", flush=True)
-                    res = await run_single_test_condition(client, tc, cond_name, target_cfg, round_num=r, run_id=run_id)
+                    res = await run_single_test_condition(client, tc, cond_name, target_cfg, round_num=r, run_id=run_id,
+                                                          defer_eval=_defer_eval)
                     all_results.append(res)
+                    if res.get("judge_verdict") == "PENDING":
+                        pending_eval.append((run_key, res))
+                        print(f"answer stored, judge evaluation follows after the task | {res['total_time_s']}s | {res['total_tokens']} tok", flush=True)
+                        continue
                     print(f"Score: {res['score']:.1f}/10 (Det: {res['deterministic_score']:.1f}, Judge: {res['judge_score']:.1f}) | {res['total_time_s']}s | {res['total_tokens']} tok", flush=True)
 
                     # Update checkpoint only on genuinely valid (non-fallback, non-empty) responses
@@ -1147,6 +1184,17 @@ async def main():
 
                     # Incremental checkpoint save after every single test run
                     _write_interim_reports(run_id, timestamp, conditions, all_results)
+
+                # Deferred judge evaluation: every answer of this task is graded now, one judge model after the other
+                # phase, instead of after each generation call (see run_single_test_condition).
+                for _run_key, _res in pending_eval:
+                    _res = await finalize_pending_evaluation(client, tc, _res)
+                    print(f"  ◦ {_res['condition']:22} judged: Score: {_res['score']:.1f}/10 (Det: {_res['deterministic_score']:.1f}, "
+                          f"Judge: {_res['judge_score']:.1f}) | {_res['total_time_s']}s", flush=True)
+                    if _result_is_valid(_res):
+                        _persist_checkpoint(checkpoint_file, checkpoint_data, completed_runs, _run_key, _res)
+                    _write_interim_reports(run_id, timestamp, conditions, all_results)
+                pending_eval = []
 
                 # All conditions for this task/round have run (or were resumed from
                 # cache) -- verify every active condition landed a valid checkpoint

@@ -155,6 +155,12 @@ EMPTY_PLAN_GUARD = (
     'Minimum valid response: [{"task": "<concrete description of what to do>", "category": "general"}]'
 )
 
+# Optimised blocks (2026-09-21, docs/system/benchmark-optimization-2026-09-21.md): planner rules for calculation tasks and merger
+# rules for the judge prompt. Identical in every benchmark template so that C2 holds; the effect on scores is small and noisy,
+# the blocks are kept because they removed no capability and are the state both tracks were measured with.
+PRECISION_BLOCK = 'PRECISION PLANNING RULES (calculations):\n- Every precision_tools task MUST contain "mcp_tool": "calculate" and "mcp_args": {"expression": "<expression>"}: exactly one string, no other fields, no placeholders.\n- Each expression runs on its own: numbers and operators only, no variable names, no reference to other tasks or earlier results. Write the whole chain inline, keep it flat, and count your parentheses: every "(" needs its ")".\n- Formula sheet: kW * hours = kWh; kWh / 1000 = MWh; cost in EUR = kWh * (EUR per kWh), never MWh * (EUR per kWh); tonnes of CO2 = kWh * (grams per kWh) / 1000000. Keep given numbers in the unit they are stated in and put the conversion into the divisor.\n- Dimension check before you write an expression: energy is kWh = kW*hours*days. An expression for a cost in EUR contains no "/1000" (that would turn the energy into MWh and make the cost 1000 times too small); only MWh figures and gram-to-tonne conversions divide.\n- Yearly increases: year 2 = base * f2, year 3 = base * f2 * f3 (keep every earlier factor). A multi-year total adds each year with its own factors inside one expression; it is never a single year multiplied by the number of years unless the yearly value is constant.\n- Example with other numbers (120 kW, 24 h/day, 365 days, 0.25 EUR/kWh, 300 g CO2/kWh, +3% then +2%): energy in MWh = 120*24*365/1000; cost in EUR = 120*24*365*0.25; year 3 cost = 120*24*365*0.25*1.03*1.02; 3-year cost = 120*24*365*0.25*(1+1.03+1.03*1.02); CO2 in tonnes over 3 years with a constant yearly load = 120*24*365*3*300/1000000.\n- One calculate task per requested figure, at most 6 tasks. No rounding, conversion or summation tasks; the answer rounds. Never add tasks that were not requested and never copy example tasks. The JSON array must be valid and never empty.\n'
+JUDGE_RULES = 'SYNTHESIS RULES: (1) Numbers: use only values that appear in the tool results or verified evidence; copy them exactly and never recompute or "correct" them yourself; if a value is missing, say so. (2) Answer the request directly: one numbered item per requested figure with its value and a one-line formula; no meta commentary, no self-doubt, no alternative solution attempts. (3) Be concise: at most 250 words plus a short results table. (4) If your own arithmetic differs from a tool value, the tool value is correct.'
+
 
 def _load(path: str, name: str):
     spec = importlib.util.spec_from_file_location(name, ROOT / path)
@@ -188,7 +194,7 @@ def planner_prompt(categories: list[str]) -> str:
         if cat not in PLANNER_DESCRIPTIONS:
             raise SystemExit(f"no planner description for category {cat!r}; extend PLANNER_DESCRIPTIONS")
         lines.append(f"- {cat}: {PLANNER_DESCRIPTIONS[cat]}")
-    return PLANNER_HEADER + "\n" + "\n".join(lines) + "\n" + EMPTY_PLAN_GUARD
+    return PLANNER_HEADER + "\n" + "\n".join(lines) + "\n" + PRECISION_BLOCK + EMPTY_PLAN_GUARD
 
 
 def reduce_to_expert_set(experts: dict, name: str) -> dict:
@@ -253,7 +259,7 @@ def main() -> None:
         new["planner_num_ctx"], new["judge_num_ctx"] = ctx["planner"], ctx["judge"]
         for key, endpoint in (("planner_model", PLANNER_ENDPOINT), ("judge_model", JUDGE_ENDPOINT)):
             new[key] = new[key].rsplit("@", 1)[0] + "@" + endpoint
-        new["judge_prompt"] = judge
+        new["judge_prompt"] = judge + "\n\n" + JUDGE_RULES
         new["planner_prompt"] = planner_prompt(cats)
         changed = [k for k in ("planner_prompt", "judge_prompt") if new[k] != cfg.get(k)]
         if set(cfg["experts"]) != set(cats):
@@ -266,7 +272,7 @@ def main() -> None:
         changed += [f"endpoint.{c}" for c in cats if c in cfg["experts"] and
                     [s["endpoint"] for s in new["experts"][c]["models"]] != [s["endpoint"] for s in cfg["experts"][c]["models"]]]
         changed += [f"model.{c}" for c in MODEL_FIXES.get(row["name"], {}) if c in cfg["experts"] and new["experts"][c]["models"] != cfg["experts"][c]["models"]]
-        print(f"{row['name'][:58]:58s} categories={len(cats):2d} changes={len(changed):2d} planner={h(new['planner_prompt'])} judge={h(judge)}")
+        print(f"{row['name'][:58]:58s} categories={len(cats):2d} changes={len(changed):2d} planner={h(new['planner_prompt'])} judge={h(new['judge_prompt'])}")
         if changed and track_of(row["name"]) in wanted_tracks:
             updates.append((row["id"], json.dumps(new, ensure_ascii=False)))
         elif changed:
