@@ -354,3 +354,35 @@ class TestDeferredEvaluation:
         out = asyncio.run(rsb.finalize_pending_evaluation(None, {"prompt": "q"}, res))
         assert out is res and "_pending_full_response" not in res
         assert (res["judge_score"], res["judge_verdict"], res["score"]) == (8.0, "PASS", round(0.4 * 10 + 0.6 * 8, 2))
+
+
+class TestConditionOrder:
+    @staticmethod
+    def _enable_prefinetune(monkeypatch):
+        import benchmarks.run_scientific_benchmark as rsb
+
+        for name in ("prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag"):
+            monkeypatch.setitem(rsb.TEMPLATES, name, "Base " + name)
+        return rsb
+
+    def test_family_order_groups_base_and_fine_tuned_conditions(self, monkeypatch):
+        rsb = self._enable_prefinetune(monkeypatch)
+        names = [c[0] for c in rsb._build_conditions("family")]
+        assert names == [
+            "native_baseline", "prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag",
+            "compound_ai", "compound_ai_debate", "ablation_no_graphrag",
+        ]
+
+    def test_family_order_skips_disabled_prefinetune_templates(self, monkeypatch):
+        import benchmarks.run_scientific_benchmark as rsb
+
+        for name in ("prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag"):
+            monkeypatch.setitem(rsb.TEMPLATES, name, "")
+        assert [c[0] for c in rsb._build_conditions("family")] == [
+            "native_baseline", "compound_ai", "compound_ai_debate", "ablation_no_graphrag",
+        ]
+
+    def test_paired_order_keeps_the_old_interleaving(self, monkeypatch):
+        rsb = self._enable_prefinetune(monkeypatch)
+        names = [c[0] for c in rsb._build_conditions("paired")]
+        assert names[:2] == ["compound_ai", "prefinetune_ai"] and names[-1] == "native_baseline" and len(names) == 7

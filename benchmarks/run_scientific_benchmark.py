@@ -111,6 +111,29 @@ PREFINETUNE_PAIRS = [
     ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag", "no_graphrag"),
 ]
 
+def _build_conditions(order: str = "family") -> List[Any]:
+    """The conditions of one task in run order.
+
+    "family" (default): native baseline, then all pre-finetune templates, then all fine-tuned templates. Every expert
+    category is pinned to one Ollama instance, and the base and the fine-tuned models share those instances, the planner
+    instance and the judge instance; alternating base and fine-tuned conditions (the old "paired" order) swapped the resident
+    models on every instance in every condition (minutes of loading, e.g. 21 min for 1028 tokens) and put the loading time
+    into the measured latency. Grouping by family leaves one swap per family and task.
+    "paired": each fine-tuned condition followed by its pre-finetune counterpart, native last.
+    """
+    if order == "paired":
+        out: List[Any] = []
+        for pre_name, fine_name, _ in PREFINETUNE_PAIRS:
+            out.append((fine_name, TEMPLATES[fine_name]))
+            if TEMPLATES[pre_name]:
+                out.append((pre_name, TEMPLATES[pre_name]))
+        out.append(("native_baseline", NATIVE_MODEL))
+        return out
+    pre = [(pre_name, TEMPLATES[pre_name]) for pre_name, _, _ in PREFINETUNE_PAIRS if TEMPLATES[pre_name]]
+    fine = [(fine_name, TEMPLATES[fine_name]) for _, fine_name, _ in PREFINETUNE_PAIRS]
+    return [("native_baseline", NATIVE_MODEL)] + pre + fine
+
+
 VALID_VERDICTS = {"EXCELLENT", "PASS", "DEFICIENT", "FAIL"}
 
 JUDGE_EVAL_MAX_ATTEMPTS = int(os.environ.get("MOE_JUDGE_EVAL_MAX_ATTEMPTS", "3"))
@@ -1061,13 +1084,7 @@ async def main():
     # native_baseline reinstated: the benchmark's purpose includes proving (or disproving)
     # that the 4B-SLM + GraphRAG + Judge compound system matches its "bigger brother" --
     # a dense large model (NATIVE_MODEL, qwen3.8:27b) with none of the scaffolding.
-    conditions = []
-    for pre_name, fine_name, _ in PREFINETUNE_PAIRS:
-        conditions.append((fine_name, TEMPLATES[fine_name]))
-        if TEMPLATES[pre_name]:
-            # the pre-finetune counterpart runs right after the fine-tuned condition of the same task
-            conditions.append((pre_name, TEMPLATES[pre_name]))
-    conditions.append(("native_baseline", NATIVE_MODEL))
+    conditions = _build_conditions(os.environ.get("MOE_BENCHMARK_ORDER", "family"))
     _cond_filter = os.environ.get("MOE_BENCHMARK_CONDITIONS", "").strip()
     if _cond_filter:
         _wanted_conds = {c.strip() for c in _cond_filter.split(",") if c.strip()}
