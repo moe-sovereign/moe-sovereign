@@ -5159,3 +5159,10 @@ Notes:
 - Spur 2 only (`MOE_RUN_SPUR1=0`, 1 round), 7 conditions x 8 tasks, judge evaluation deferred per task, all 14 templates carry identical prompts (matrix: 6 sound, parity none).
 - DO NOT during the run: restart/rebuild the orchestrator or mcp-precision, edit any LUMI-G*/Open-Weight* template, change .env or unload models on N04/N02. Integrity log: benchmarks/results/integrity_20260921T221522Z.log.
 - Foreign keys seen earlier: odysseus_ki-vm-node05 (sweeps all templates), Dolibarr (qwen3.6:35b@N04-RTX evicts the judge). Check benchmarks/run_health_check.py.
+
+## 2026-09-22 in_progress: Open Weight benchmark restarted after infra outage, started 20260922T105205Z
+- Root cause of the 01:11 run's stall: alternating fine-tuned/base conditions swapped models on every pinned instance every condition (minutes of reload each). Fixed (commit 14b55f5c): conditions now run native_baseline -> all pre-finetune -> all fine-tuned per task (`MOE_BENCHMARK_ORDER=paired` restores old order).
+- Separate infra outage 01:57-10:51: disk `/` hit 100% (moe-docs container leaked ~93GB of orphaned mkdocs_* tmp dirs), Postgres (terra_checkpoints) briefly entered recovery, the orchestrator's one-shot moe_userdb pool init hit that window and stayed permanently broken (no retry) until a manual `docker restart langgraph-orchestrator` at 10:51. All API-key auth without a warm Valkey cache entry 401'd for ~9h. Root cause not yet fixed in code (pool has no reconnect-on-failure loop) — noted as open gap.
+- Also added (commit 557bc467): non-streaming /v1/chat/completions now cancels the LangGraph run on client disconnect (`services/pipeline/disconnect.py`) instead of leaving it running and evicting the next request's models. Verified live.
+- Spur 2 only (`MOE_RUN_SPUR1=0`, 1 round), 7 conditions x 8 tasks, judge evaluation deferred per task, all 14 templates carry identical prompts.
+- DO NOT during the run: restart/rebuild the orchestrator or mcp-precision, edit any LUMI-G*/Open-Weight* template, change .env or unload models on N04/N02.
