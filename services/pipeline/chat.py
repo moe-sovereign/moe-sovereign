@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 import state
+from services.pipeline.disconnect import ClientDisconnected, run_until_disconnect
 import starfleet_config as _starfleet
 import mission_context as _mission_context
 from parsing import _oai_content_to_str, _extract_oai_images
@@ -2935,7 +2936,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
         ORCHESTRATION_TIMEOUT - (time.monotonic() - _request_started),
     )
     try:
-        result = await asyncio.wait_for(state.app_graph.ainvoke(
+        result = await run_until_disconnect(raw_request, state.app_graph.ainvoke(
         {"input": user_input, "response_id": chat_id, "mode": mode,
          "user_id": user_id, "api_key_id": api_key_id,
          "request_deadline_monotonic": _request_started + ORCHESTRATION_TIMEOUT,
@@ -3050,6 +3051,19 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
          },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
         ), timeout=_remaining_timeout)
+    except ClientDisconnected:
+        _elapsed_ms = round((time.monotonic() - _t_start) * 1000)
+        from services.request_snapshot import consume_request_snapshot
+        _progress = consume_request_snapshot(chat_id)
+        logger.warning(
+            "Client disconnected, orchestration cancelled request=%s after %sms", chat_id, _elapsed_ms,
+        )
+        await _deregister_active_request(
+            chat_id,
+            {"status": "cancelled", "error_code": "client_disconnected", "latency_ms": _elapsed_ms, **_progress},
+        )
+        await _ol_fail(_ol_run_id, job_name="chat_completion", error="client disconnected")
+        return Response(status_code=499)
     except asyncio.TimeoutError:
         _elapsed_ms = round((time.monotonic() - _t_start) * 1000)
         from services.ai_io_audit import aggregate_request_usage
