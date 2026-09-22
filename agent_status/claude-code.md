@@ -5171,3 +5171,45 @@ Notes:
 - Stopped at task 3 (sci-graphrag-01-topology-cascade, multi_turn) condition prefinetune_ai_debate: turns 1-2 are pure "store this info, acknowledge" inject_fact turns with no sources/tools, which the quality gate's trust_score.py structurally scores below the 0.3 BLOCK threshold (source_count/cross_ref factors are 0 by construction) even though the hallucination check found no unsupported claims. native_baseline bypasses the gate (direct call) and passes fine; templated conditions get HTTP 422 -> score 0.0. Affects up to 2/8 tasks (both multi_turn tasks: sci-graphrag-01, sci-graphrag-02) x 6/7 templated conditions.
 - User decision: treat as a real result, no trust_score.py change (matches existing memory note: observe decision-log frequency before touching unsupported_claims_penalty weight, don't blindly tune). Documented as a finding, not fixed.
 - Resumed via `python3 run_scientific_benchmark.py` (no --fresh) with the same Spur-2 env as run_spur1_and_spur2.sh, so the checkpoint (tasks 1-2 complete, 14/14 cells) was reused instead of rerun. Log: benchmarks/results/lumig_spur2_openweight_resume_20260922T140103Z.log.
+
+## 2026-09-22 handoff to agy: Open Weight benchmark, monitoring stopped
+
+**Status beim Handoff (21:38 CEST):** Prozess läuft (PID 1399858, `python3 run_scientific_benchmark.py`, gestartet 16:01 CEST ohne `--fresh`), Log `benchmarks/results/lumig_spur2_openweight_resume_20260922T140103Z.log`, Checkpoint `benchmarks/results/checkpoint_scientific_benchmark.json`. Aufgaben 1-6 von 8 komplett ausgewertet, Aufgabe 7 (`sci-reasoning-01-distributed-consensus-safety`, Raft Consensus) läuft, Bedingung `prefinetune_ai`. Aufgabe 8 (`sci-governance-01-technical-sovereignty`) steht noch aus. Ich (Claude Code) habe das Live-Monitoring hier beendet, um keine Tokens mehr dafür zu verbrauchen — Übergabe an agy.
+
+**Was in dieser Session gefixt und committet wurde (moe-infra, main branch, lokal, nicht gepusht):**
+- `14b55f5c` — Bedingungsreihenfolge im Harness (`benchmarks/run_scientific_benchmark.py`, `_build_conditions()`) von "paired" (abwechselnd fine-tuned/base) auf "family" (native_baseline → alle 3 prefinetune → alle 3 fine-tuned) umgestellt. Grund: alte Reihenfolge tauschte bei jeder Bedingung die Modelle auf allen gepinnten Instanzen (Planner/Judge/8 Experten), 3-21 min Ladezeit pro Wechsel, verfälschte Latenzmessung. `MOE_BENCHMARK_ORDER=paired` stellt alte Reihenfolge wieder her.
+- `557bc467` — `services/pipeline/disconnect.py` (neu) + `services/pipeline/chat.py`: nicht-streamende `/v1/chat/completions`-Anfragen brechen jetzt bei Client-Disconnect sofort ab (`run_until_disconnect`, wartet auf `request.receive()` da `is_disconnected()` hinter `BaseHTTPMiddleware` nicht funktioniert). Vorher lief eine verwaiste Anfrage nach Runner-Stopp weiter und verdrängte die Modelle der nächsten Anfrage. Live verifiziert (499-Response, sauberer Abbruch).
+- Orchestrator-Image entsprechend neu gebaut/deployed. Rollback-Tag: `moe-sovereign-orchestrator:pre-disconnect-cancel-20260922`.
+- Beide Fixes sind bereits im Image, das der laufende Prozess anspricht.
+
+**Separater, unabhängig gefundener und behobener Infra-Ausfall (nicht mehr aktiv, aber gut zu kennen):** Festplatte `/` lief während dieser Session auf 100% (Ursache: `moe-docs`-Container leakte ~93GB verwaiste `mkdocs_*`-Temp-Verzeichnisse, von Nutzer extern bereinigt). Dadurch ging Postgres (`terra_checkpoints`) kurz in Recovery, und der Orchestrator-Neustart traf genau dieses Zeitfenster — sein `moe_userdb`-Connection-Pool blieb danach dauerhaft `None` (kein Retry-Mechanismus beim Start), alle API-Key-Lookups ohne warmen Valkey-Cache-Eintrag schlugen ~9h lang mit 401 fehl. Behoben durch manuellen `docker restart langgraph-orchestrator` um 10:51 CEST. **Offener Gap, nicht gefixt:** `main.py` lifespan-Startup (`state._userdb_pool = AsyncConnectionPool(...)`) hat keine Retry-Logik bei fehlgeschlagenem initialem Connect — bei erneutem Zusammentreffen von Postgres-Downtime + Orchestrator-Start/Restart tritt der gleiche stille Ausfall wieder auf. Kein Code-Fix ohne Rücksprache vorgenommen.
+
+**Bestätigter, bewusst nicht gefixter Befund (User-Entscheidung):** Trust-Gate (`services/trust_score.py`) blockt reine "Information speichern/bestätigen"-Turns (inject_fact-Turns ohne Quellen/Tools) mit Score <0.3 (BLOCK), obwohl inhaltlich korrekt — trifft nur templatisierte Bedingungen (native_baseline umgeht das Gate). Beobachtet bei Aufgabe 3 (`sci-graphrag-01-topology-cascade`), 4 von 7 Bedingungen initial 0.0, nach automatischem Backfill (max. 2 Versuche je Zelle) überwiegend auf plausible Werte (5.0-5.7) korrigiert. Bei Aufgabe 4 (`sci-graphrag-02-paraconsistent-reconciliation`, ebenfalls multi_turn) trat der Effekt NICHT auf (alle 7 Bedingungen direkt sauber). User-Entscheidung: kein Fix an `trust_score.py` (deckt sich mit bestehender Memory-Notiz, `unsupported_claims_penalty`-Gewicht erst nach Beobachtung der Decision-Log-Häufigkeit anfassen), als echtes Ergebnis werten und dokumentieren.
+
+**Zwischenergebnisse Aufgaben 1-6 (Mittelwert über 6 Aufgaben, Score 0-10):**
+| Bedingung | Ø | 
+|---|---|
+| native_baseline | 7.88 |
+| prefinetune_ai | 7.13 |
+| prefinetune_ai_debate | 7.25 |
+| prefinetune_ablation_no_graphrag | 7.16 |
+| compound_ai | 7.53 |
+| compound_ai_debate | 7.11 |
+| ablation_no_graphrag | 7.29 |
+
+Kein klares Gesamtbild bisher — native/Basis schlägt fine-tuned bei den beiden systemprogrammierungslastigen Aufgaben 1+2 und bei Aufgabe 3 (Trust-Gate-Artefakt), fine-tuned schlägt native klar bei Aufgabe 4 und 6, Aufgabe 5 (VLSM) durchgehend 10.0/10 bei allen Bedingungen (keine Differenzierung). Volles Bild erst nach Aufgabe 7+8.
+
+### Anweisungen für agy
+
+1. **Weiter überwachen, nicht neu starten.** Prozess läuft bereits (PID prüfen: `ps aux | grep run_scientific`). Fortschritt prüfen:
+   ```
+   cd /opt/deployment/moe-sovereign/moe-infra/benchmarks
+   grep -a -E "Condition:|answer stored|judged:|Score:|Backfilling|permanently" results/lumig_spur2_openweight_resume_20260922T140103Z.log | tail -20
+   ```
+2. **Bei `422 Unprocessable Entity` / `Score: 0.0` auf `prefinetune_*`- oder `compound_ai*`-Bedingungen:** das ist der oben dokumentierte, bekannte Trust-Gate-Befund. NICHT eingreifen, NICHT stoppen — der Harness backfillt automatisch bis zu 2x pro Zelle (`Backfilling missing/invalid run ...`). Kein neuer Gap.
+3. **Bei echten neuen Fehlern** (Python-Traceback im Log, Orchestrator-Container down/unhealthy, Disk wieder voll `df -h /`, Postgres-Pool-Fehler `pool 'pool-2' is already closed` im Orchestrator-Log) — das sind echte Gaps: kurz analysieren, wenn lösbar fixen (siehe AGENTS.md/CLAUDE.md: Bugs direkt fixen, kein Nachfragen nötig bei klaren technischen Fehlern), sonst hier im Status-Log dokumentieren.
+4. **Nach Abschluss aller 8 Aufgaben** (`run_scientific_benchmark.py`-Prozess beendet sich selbst, prüfen via `ps aux`):
+   - Finalen Report/Summary aus dem Log oder `results/eval_scientific_benchmark_<timestamp>.json` prüfen.
+   - Laut ursprünglichem Nutzerauftrag: dieser Open-Weight-Lauf ist die "Messlatte" — danach den Open-Source-Lauf (Spur 1) unter identischen, jetzt gefixten Infra-Bedingungen starten (`cd benchmarks && MOE_RUN_SPUR2=0 MOE_BENCHMARK_NUM_ROUNDS=1 nohup bash run_spur1_and_spur2.sh > results/runner_<ts>.log 2>&1 &`, NICHT `--fresh` falls ein Checkpoint aus dieser Session noch nützliche Spur-2-Daten enthält — ggf. vorher `checkpoint_scientific_benchmark.json` sichern, da `--fresh` ihn verwirft).
+   - Danach Experten-Bewertung nachholen: `score_expert_answers.py` und `replay_expert_prompts.py` (siehe `benchmarks/post_run_expert_pipeline.sh`).
+5. **Nicht anfassen während des laufenden Rests:** Orchestrator/mcp-precision nicht neu bauen/starten, keine Templates (`LUMI-G*`/`Open-Weight*`) editieren, `.env` nicht ändern, Modelle auf N04/N02 nicht entladen — sonst genau der Modell-Swap-Bug von vorhin erneut.
