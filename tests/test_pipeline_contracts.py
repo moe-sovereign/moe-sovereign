@@ -6,9 +6,11 @@ from services.pipeline.contracts import (
     PlannerContractError,
     assign_stable_task_ids,
     detect_required_precision_intents,
+    disperse_category_hotspots,
     is_task_result_ref,
     normalize_task_dependencies,
     parse_plan,
+    prune_artificial_dependencies,
     recover_explicit_supported_plan,
     repair_precision_task_contracts,
     resolve_task_result_refs,
@@ -810,3 +812,87 @@ def test_chained_precision_task_rejects_reference_to_non_precision_task():
     )
 
     assert [issue.code for issue in issues] == ["invalid_task_result_reference"]
+
+
+def test_disperse_category_hotspots_keyword_security():
+    tasks = [
+        {"id": "task-1", "task": "Implement ringbuffer in Rust", "category": "code_reviewer"},
+        {"id": "task-2", "task": "Audit atomic memory safety and race condition vulnerabilities", "category": "code_reviewer"},
+    ]
+    dispersed, repairs = disperse_category_hotspots(tasks)
+    assert dispersed[0]["category"] == "code_reviewer"
+    assert dispersed[1]["category"] == "security"
+    assert len(repairs) == 1
+    assert repairs[0]["to"] == "security"
+
+
+def test_disperse_category_hotspots_keyword_data_analyst():
+    tasks = [
+        {"id": "task-1", "task": "Implement algorithm", "category": "code_reviewer"},
+        {"id": "task-2", "task": "Design fuzz test cases and boundary benchmarks", "category": "code_reviewer"},
+    ]
+    dispersed, repairs = disperse_category_hotspots(tasks)
+    assert dispersed[0]["category"] == "code_reviewer"
+    assert dispersed[1]["category"] == "data_analyst"
+    assert len(repairs) == 1
+    assert repairs[0]["to"] == "data_analyst"
+
+
+def test_disperse_category_hotspots_fallback():
+    tasks = [
+        {"id": "task-1", "task": "First task", "category": "general"},
+        {"id": "task-2", "task": "Second task without distinct keywords", "category": "general"},
+    ]
+    dispersed, repairs = disperse_category_hotspots(tasks)
+    assert dispersed[0]["category"] == "general"
+    # Fallback picks an unused specialist from the fallback pool
+    assert dispersed[1]["category"] == "data_analyst"
+    assert len(repairs) == 1
+
+
+def test_disperse_category_hotspots_preserves_unique():
+    tasks = [
+        {"id": "task-1", "task": "Code logic", "category": "code_reviewer"},
+        {"id": "task-2", "task": "Threat audit", "category": "security"},
+        {"id": "task-3", "task": "Telemetry check", "category": "data_analyst"},
+    ]
+    dispersed, repairs = disperse_category_hotspots(tasks)
+    assert [t["category"] for t in dispersed] == ["code_reviewer", "security", "data_analyst"]
+    assert repairs == []
+
+
+def test_prune_artificial_dependencies_removes_unreferenced():
+    tasks = [
+        {"id": "task-1", "task": "First independent task", "category": "code_reviewer"},
+        {"id": "task-2", "task": "Second independent task", "category": "security", "depends_on": "task-1"},
+    ]
+    pruned, repairs = prune_artificial_dependencies(tasks)
+    assert pruned[1]["depends_on"] == ""
+    assert len(repairs) == 1
+    assert repairs[0]["task_id"] == "task-2"
+
+
+def test_prune_artificial_dependencies_preserves_result_of():
+    tasks = [
+        {"id": "task-1", "task": "Generate code snippet", "category": "code_reviewer"},
+        {"id": "task-2", "task": "Audit this implementation: {result_of:task-1}", "category": "security", "depends_on": "task-1"},
+    ]
+    pruned, repairs = prune_artificial_dependencies(tasks)
+    assert pruned[1]["depends_on"] == "task-1"
+    assert repairs == []
+
+
+def test_prune_artificial_dependencies_preserves_task_result_ref():
+    tasks = [
+        {"id": "task-1", "task": "Calculate base", "category": "precision_tools"},
+        {
+            "id": "task-2",
+            "task": "Calculate total",
+            "category": "precision_tools",
+            "mcp_args": {"operand": {"$task_result": "task-1"}},
+            "depends_on": "task-1",
+        },
+    ]
+    pruned, repairs = prune_artificial_dependencies(tasks)
+    assert pruned[1]["depends_on"] == "task-1"
+    assert repairs == []

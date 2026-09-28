@@ -2,7 +2,7 @@
 
 > **Detailed comparison content has moved.**
 >
-> The feature coverage matrix, use-case scenarios, and compliance mapping are maintained in the **[moe-codex](https://github.com/h3rb3rn/moe-codex)** repository — the compliance-grade data intelligence platform for regulated industries.
+> The feature coverage matrix, use-case scenarios, and compliance mapping are maintained in the **[moe-codex](https://github.com/moe-sovereign/moe-codex)** repository — the compliance-grade data intelligence platform for regulated industries.
 >
 > - Feature coverage: `moe-codex/docs/system/palantir_comparison.md`
 > - Use cases: `moe-codex/docs/use-cases/`

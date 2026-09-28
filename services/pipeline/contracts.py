@@ -367,6 +367,259 @@ def normalize_task_dependencies(tasks: list[dict]) -> tuple[list[dict], list[dic
     return tasks, repairs
 
 
+# ── Hotspot-Dispersal & Dependency Pruning (Zero-Cost Parallelization) ────────
+
+_CATEGORY_KEYWORD_MAP: list[tuple[str, re.Pattern]] = [
+    (
+        "security",
+        re.compile(
+            r"\b(secur|threat|vulnerab|cve|race\s*condition|concurren|deadlock|"
+            r"atomicity|atomic|memory\s*safety|unsafe|overflow|sanitiz|auth|"
+            r"access\s*control|exploit|thread\s*saf)\b",
+            re.I,
+        ),
+    ),
+    (
+        "data_analyst",
+        re.compile(
+            r"\b(test|unit\s*test|fuzz|edge\s*case|boundar|invariant|verif|"
+            r"validat|benchmark|profil|metric|telemetry|measur|corner\s*case)\b",
+            re.I,
+        ),
+    ),
+    (
+        "code_reviewer",
+        re.compile(
+            r"\b(code|implement|function|class|algorithm|refactor|compile|"
+            r"syntax|rust|python|c\+\+|golang)\b",
+            re.I,
+        ),
+    ),
+    (
+        "research",
+        re.compile(
+            r"\b(research|document|spec|standard|rfc|literature|survey|"
+            r"state\s*of\s*the\s*art|paper|academic)\b",
+            re.I,
+        ),
+    ),
+    (
+        "governance",
+        re.compile(
+            r"\b(govern|complian|policy|legal|gdpr|dsgvo|audit|regul)\b",
+            re.I,
+        ),
+    ),
+    (
+        "compounding_knowledge",
+        re.compile(
+            r"\b(graph|ontology|entity|relation|kg|knowledge\s*base)\b",
+            re.I,
+        ),
+    ),
+    (
+        "general",
+        re.compile(
+            r"\b(overview|synthes|coordinat|summar|general|intro)\b",
+            re.I,
+        ),
+    ),
+]
+
+_FALLBACK_SPECIALIST_ORDER: list[str] = [
+    "data_analyst",
+    "security",
+    "research",
+    "governance",
+    "general",
+    "compounding_knowledge",
+]
+
+
+def disperse_category_hotspots(
+    tasks: list[dict],
+    available_categories: Sequence[str] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Disperse duplicate category assignments across orthogonal idle specialists.
+
+    When multiple tasks in a plan target the exact same category (such as multiple
+    tasks claiming 'code_reviewer'), they block each other at the single-GPU
+    endpoint semaphore (e.g. N02-M60-09), causing serial execution while 7 other
+    dedicated GPU ports remain idle.
+
+    This normalizer detects duplicate categories. For any task beyond the first
+    occurrence of a category, it checks the task description for domain keywords
+    and remaps it to an orthogonal, unused specialist category (e.g., 'security',
+    'data_analyst', 'research'). If no keyword matches, it assigns the least-loaded
+    specialist from a fallback pool.
+
+    Parameters:
+        tasks: The list of task dictionaries in the plan.
+        available_categories: Optional whitelist of valid template categories.
+
+    Returns:
+        (tasks, repairs): The modified tasks list (in-place) and a list of
+        repair audit dicts {"task_id", "from", "to", "reason"}.
+    """
+    if os.getenv("MOE_DISPERSE_CATEGORY_HOTSPOTS", "1") != "1":
+        return tasks, []
+
+    valid_set = set(available_categories) if available_categories else None
+    repairs: list[dict] = []
+    seen_categories: set[str] = set()
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        cat = str(task.get("category") or "general").strip()
+        task_id = str(task.get("id") or "")
+
+        # Never remap precision tools (which require MCP tool schema contracts)
+        if cat == "precision_tools":
+            continue
+
+        if cat not in seen_categories:
+            seen_categories.add(cat)
+            continue
+
+        # Category is already claimed by an earlier task in the plan: HOTSPOT!
+        task_text = str(
+            task.get("task")
+            or task.get("instruction")
+            or task.get("task_description")
+            or ""
+        )
+
+        chosen_cat: str | None = None
+        match_reason: str = "keyword_match"
+
+        # 1. Try keyword matching to an unused candidate category
+        for candidate_cat, pattern in _CATEGORY_KEYWORD_MAP:
+            if candidate_cat != cat and candidate_cat not in seen_categories:
+                if valid_set is None or candidate_cat in valid_set:
+                    if pattern.search(task_text):
+                        chosen_cat = candidate_cat
+                        break
+
+        # 2. If no keyword match or candidate already taken, pick from fallback pool
+        if not chosen_cat:
+            match_reason = "load_balance_fallback"
+            for fallback_cat in _FALLBACK_SPECIALIST_ORDER:
+                if fallback_cat != cat and fallback_cat not in seen_categories:
+                    if valid_set is None or fallback_cat in valid_set:
+                        chosen_cat = fallback_cat
+                        break
+
+        if chosen_cat and chosen_cat != cat:
+            repairs.append({
+                "task_id": task_id,
+                "from": cat,
+                "to": chosen_cat,
+                "reason": match_reason,
+            })
+            task["category"] = chosen_cat
+            seen_categories.add(chosen_cat)
+        else:
+            # All available categories saturated; keep original category
+            seen_categories.add(cat)
+
+    return tasks, repairs
+
+
+def prune_artificial_dependencies(
+    tasks: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Prune artificial sequential `depends_on` chains that lack genuine data flow.
+
+    Planner models frequently emit sequential `depends_on: "task-1"`, `"task-2"`
+    merely due to autoregressive enumeration, even when the subtasks are independent
+    multidisciplinary perspectives (e.g. security audit or edge-case tests) on the
+    same user query.
+
+    Since LangGraph's topological execution groups tasks into sequential levels,
+    unnecessary dependencies prevent parallel execution across independent GPUs.
+    Furthermore, expert tasks that lack `{result_of:id}` placeholders receive no prior
+    outputs at execution time anyway.
+
+    A dependency `task["depends_on"] = dep` is PRESERVED if:
+    1. Any string field in the task contains `{result_of:<dep>}`.
+    2. The task's `mcp_args` contains a `$task_result` reference pointing to `dep`.
+    3. The task description explicitly references depending on or consuming the
+       output/result of `<dep>`.
+
+    Otherwise, the dependency is deemed artificial and cleared (`""`), placing the
+    task into Level 0 for parallel execution.
+
+    Parameters:
+        tasks: The list of task dictionaries in the plan.
+
+    Returns:
+        (tasks, repairs): The modified tasks list (in-place) and a list of
+        repair audit dicts {"task_id", "from", "to", "reason"}.
+    """
+    if os.getenv("MOE_PRUNE_ARTIFICIAL_DEPS", "1") != "1":
+        return tasks, []
+
+    repairs: list[dict] = []
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        dep = str(task.get("depends_on") or "").strip()
+        if not dep:
+            continue
+
+        task_id = str(task.get("id") or "")
+        task_text = str(
+            task.get("task")
+            or task.get("instruction")
+            or task.get("task_description")
+            or ""
+        )
+
+        # Check 1: Does task text contain {result_of:<dep>}?
+        if f"{{result_of:{dep}}}" in task_text:
+            continue
+
+        # Check 2: Does mcp_args contain $task_result pointing to dep?
+        mcp_args = task.get("mcp_args")
+        has_task_result_ref = False
+        if isinstance(mcp_args, dict):
+            def _has_ref(val: Any) -> bool:
+                if is_task_result_ref(val) and str(val.get("$task_result")) == dep:
+                    return True
+                if isinstance(val, list):
+                    return any(_has_ref(item) for item in val)
+                if isinstance(val, dict):
+                    return any(_has_ref(v) for v in val.values())
+                return False
+            has_task_result_ref = _has_ref(mcp_args)
+
+        if has_task_result_ref:
+            continue
+
+        # Check 3: Explicit linguistic consumption of prior output
+        dep_escaped = re.escape(dep)
+        explicit_consumer_pattern = re.compile(
+            rf"\b(?:using|from|based\s+on|output\s+of|result\s+of|nach|basierend\s+auf|"
+            rf"ergebnis\s+von|aus|baue\s+auf)\s+{dep_escaped}\b",
+            re.I,
+        )
+        if explicit_consumer_pattern.search(task_text):
+            continue
+
+        # No genuine data flow: artificial dependency!
+        repairs.append({
+            "task_id": task_id,
+            "from": dep,
+            "to": "",
+            "reason": "artificial_sequential_dependency",
+        })
+        task["depends_on"] = ""
+
+    return tasks, repairs
+
+
 def _infer_precision_contracts(text: str) -> list[tuple[str, dict]]:
     """Infer deterministic MCP contracts whose arguments are fully explicit.
 

@@ -59,19 +59,37 @@ export TORCH_EXTENSIONS_DIR="${SCRATCH}/cache/torch_extensions"
 export TMPDIR="${SCRATCH}/tmp"
 mkdir -p "${SCRATCH}/cache/huggingface" "${SCRATCH}/cache/triton" "${SCRATCH}/cache/torch_extensions" "${SCRATCH}/tmp"
 
+DEEPSPEED_CONFIG=""
+
 if [ "$ROLE" == "judge" ]; then
-    BASE_MODEL="Qwen/Qwen3.8-27B"
+    # Raw Qwen/Qwen3.8-27B is multimodal (Qwen3_5ForConditionalGeneration) --
+    # train_expert_slm_pipeline.py's AutoModelForCausalLM path cannot load it
+    # directly. Use the extracted text-only tower (analogous to the Planner's
+    # already-extracted 9B checkpoint), produced by
+    # lumig_job23_extract_qwen38_27b_texttower.slurm.
+    BASE_MODEL="${SCRATCH}/checkpoints/moe_qwen38_27b_text/merged"
     TRAIN_OUT_DIR="${SCRATCH}/checkpoints/sovereign_judge_27b_sft"
     MERGE_OUT_DIR="${SCRATCH}/checkpoints/merged_sovereign_judge_27b"
     EXPORT_DIR="${SCRATCH}/exports/sovereign-judge-27b"
     BATCH_SIZE=1
     GRAD_ACCUM=16
     LR=1.0e-5
+    # Lehre aus Job 21915493 (OLMo-3.1-32B, HIP OOM unter ZeRO-2): ein
+    # 27B-Modell in bf16 (~54GB) plus Aktivierungen saettigt die 64GB pro
+    # MI250X-GCD schon fast alleine. ZeRO-2 shardet nur Optimizer/Gradienten,
+    # nicht die Gewichte selbst -- ZeRO-3 ist hier zwingend, nicht optional.
+    # Job 21965906 bewies denselben OOM real fuer Qwen3.8-27B ohne diesen Fix.
+    DEEPSPEED_CONFIG="${SCRATCH}/configs/ds_zero3_bf16.json"
 elif [ "$ROLE" == "planner" ]; then
-    BASE_MODEL="${SCRATCH}/checkpoints/moe_qwen35_4b_distilled/merged"
-    TRAIN_OUT_DIR="${SCRATCH}/checkpoints/moe_sovereign_student_4b_sft"
-    MERGE_OUT_DIR="${SCRATCH}/checkpoints/merged_sovereign_student_4b"
-    EXPORT_DIR="${SCRATCH}/exports/moe-sovereign-student-4b"
+    # Nutzerentscheidung 2026-09-10: Planner laeuft auf Qwen3.5-9B, nicht auf
+    # dem 4B-Distilled-Checkpoint der 8 Experten. Nutzt den extrahierten
+    # Text-Tower aus lumig_job22_extract_qwen35_9b_texttower.slurm (COMPLETED,
+    # Job 21915558) -- vorher zeigte dieser Zweig faelschlich noch auf die 4B-
+    # Basis, was still ein falsch benanntes 4B-Modell erzeugt haette.
+    BASE_MODEL="${SCRATCH}/checkpoints/moe_qwen35_9b_text/merged"
+    TRAIN_OUT_DIR="${SCRATCH}/checkpoints/moe_sovereign_student_9b_sft"
+    MERGE_OUT_DIR="${SCRATCH}/checkpoints/merged_sovereign_student_9b"
+    EXPORT_DIR="${SCRATCH}/exports/moe-sovereign-student-9b"
     BATCH_SIZE=4
     GRAD_ACCUM=4
     LR=1.5e-5
@@ -105,10 +123,29 @@ if [ -z "$DATASET_FILE" ] || [ ! -f "$DATASET_FILE" ]; then
     exit 1
 fi
 
+# BASE_MODEL is always a local extracted/merged checkpoint dir in this
+# pipeline (judge/planner: text-tower extraction; experts: distilled 4B).
+# Fail fast here instead of deep inside AutoModelForCausalLM if a
+# prerequisite extraction/distillation step has not completed yet.
+if [ ! -f "${BASE_MODEL}/config.json" ]; then
+    echo "ERROR: Base model checkpoint incomplete or missing: $BASE_MODEL (no config.json)"
+    exit 1
+fi
+
+if [ -n "$DEEPSPEED_CONFIG" ] && [ ! -f "$DEEPSPEED_CONFIG" ]; then
+    echo "ERROR: DeepSpeed config not found: $DEEPSPEED_CONFIG"
+    exit 1
+fi
+
 mkdir -p "$TRAIN_OUT_DIR" "$MERGE_OUT_DIR" "$EXPORT_DIR" "${SCRATCH}/moe-sovereign/logs"
 
 # ── STAGE 1: SFT Training with Torchrun Distributed ─────────────────────────
 echo "[$(date +%H:%M:%S)] === STAGE 1: Distributed SFT Training on 8x MI250X (Torchrun) ==="
+EXTRA_ARGS=()
+if [ -n "$DEEPSPEED_CONFIG" ]; then
+    EXTRA_ARGS+=(--deepspeed "$DEEPSPEED_CONFIG")
+    echo "DeepSpeed Config: $DEEPSPEED_CONFIG (ZeRO-3 -- required for this role's parameter count)"
+fi
 "$SINGULARITY_BIN" exec \
     --bind /scratch/project_465003058:/scratch/project_465003058 \
     --env PYTHONPATH="/scratch/project_465003058/hornphil/.user_site:${PYTHONPATH:-}",HF_HOME="${SCRATCH}/cache/huggingface",XDG_CACHE_HOME="${SCRATCH}/cache",TRITON_CACHE_DIR="${SCRATCH}/cache/triton",TORCH_EXTENSIONS_DIR="${SCRATCH}/cache/torch_extensions",TMPDIR="${SCRATCH}/tmp" \
@@ -123,7 +160,8 @@ echo "[$(date +%H:%M:%S)] === STAGE 1: Distributed SFT Training on 8x MI250X (To
         --batch-size "$BATCH_SIZE" \
         --grad-accum "$GRAD_ACCUM" \
         --learning-rate "$LR" \
-        --max-seq-len 4096
+        --max-seq-len 4096 \
+        "${EXTRA_ARGS[@]}"
 
 ADAPTER_DIR="${TRAIN_OUT_DIR}/final_adapter"
 if [ ! -d "$ADAPTER_DIR" ]; then

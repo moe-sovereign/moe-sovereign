@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  MoE Sovereign — One-Line Installer
-#  Usage: curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh | bash
+#  Usage: curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
 #         or: bash install.sh
 #
 #  Supported OS: Debian 11 (bullseye), 12 (bookworm), 13 (trixie)
@@ -53,7 +53,7 @@ else
 fi
 
 # --- Configurable defaults (override via environment) -----------------------
-MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/h3rb3rn/moe-sovereign.git}"
+MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/moe-sovereign/moe-sovereign.git}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/moe-sovereign}"
 MOE_ENV_FILE="${INSTALL_DIR}/.env"
 
@@ -2603,7 +2603,7 @@ echo "  Logs:    cd ${INSTALL_DIR} && sudo ${COMPOSE} logs -f"
 echo "  Status:  cd ${INSTALL_DIR} && sudo ${COMPOSE} ps"
 echo "  Stop:    cd ${INSTALL_DIR} && sudo ${COMPOSE} down"
 echo ""
-echo "  Project: https://github.com/h3rb3rn/moe-sovereign"
+echo "  Project: https://github.com/moe-sovereign/moe-sovereign"
 echo "  Docs:    https://docs.moe-sovereign.org"
 echo "  Models:  https://huggingface.co/h3rb3rn"
 echo ""

@@ -111,11 +111,42 @@ _PERSISTENCE_CATEGORY_DESCRIPTIONS: Dict[str, str] = {
     "governance": "persisting a multi-clause policy, directive, or regulation update in ONE request, where a later clause amends or references an earlier one",
 }
 
+# One concrete, on-domain example per category, injected into the generation
+# prompt below. Added 2026-09-10 after both open-source student candidates
+# (SmolLM3-3B job 21853583, OLMo-3-7B-Instruct job 21856449) scored badly on
+# real-content inspection despite Exit 0: roughly half their output was
+# lazy numbered-list filler ("string 1", "response 2") and a third of the
+# rest was real text assigned to the WRONG category (precision_tools got
+# "Hello there" / "Tell me a joke" -- general small talk, not a precision
+# request). The abstract category description alone was apparently not
+# enough grounding for a smaller model to both (a) generate real content
+# instead of the shape of a JSON array, and (b) stay on-topic. Every
+# already-verified larger teacher (GLM-4.5-Air, Qwen3-Next-80B,
+# OLMo-3.1-32B) scored 24/24 on the OLD template, so this is additive
+# scaffolding for weaker instruction-following, not a fix for a broken
+# category description.
+_GROUNDING_CATEGORY_EXAMPLES: Dict[str, str] = {
+    "general": "Hi! What's the capital of Australia?",
+    "precision_tools": "Convert 37.5 degrees Celsius to Fahrenheit and Kelvin, rounded to two decimal places.",
+    "code_reviewer": "Can you review this Python function for an off-by-one bug? def get_last(lst): return lst[len(lst)]",
+    "compounding_knowledge": "Remember that our staging database is hosted on db-staging-02, with read replica db-staging-02-ro.",
+    "governance": "Does storing EU customer IP addresses in server logs for 90 days violate GDPR Article 5 data minimization?",
+    "research": "What's the current spot price of Brent crude oil, and has it moved significantly in the last week?",
+    "security": "A login endpoint returns a different error for 'user not found' than for 'wrong password' -- is that a security issue?",
+    "technical_support": "My Docker container keeps restarting with exit code 137 -- what does that mean and how do I fix it?",
+}
+_PERSISTENCE_CATEGORY_EXAMPLES: Dict[str, str] = {
+    "compounding_knowledge": "Save our on-call rotation: Alice covers Mon-Wed, Bob covers Thu-Fri, and Alice also backs up Bob's shifts.",
+    "governance": "Update our data-retention policy: clause 4.2 now overrides clause 3.1 for financial records, extending retention from 3 to 7 years.",
+}
+
 _GROUNDING_GENERATION_TEMPLATE = """Generate {n} diverse, realistic example user requests that a person might send to an AI assistant, all clearly and unambiguously belonging to this domain: {description}.
 
-Vary the phrasing, length (from one short sentence to a few sentences), and specificity. Do NOT write requests that belong to a different domain.
+Example of the right kind of request for this domain (write DIFFERENT requests, not this one): "{example}"
 
-Output STRICT JSON only: a JSON array of exactly {n} strings, no prose, no markdown code fences."""
+Vary the phrasing, length (from one short sentence to a few sentences), and specificity. Do NOT write requests that belong to a different domain. Do NOT write filler placeholders like "string 1" or "request 2", and do not default to generic small talk unless the domain itself is small talk -- every request must be a complete, specific, realistic message a real person would actually type.
+
+Output STRICT JSON only: a JSON array of exactly {n} strings, no prose, no markdown code fences. Do not explain your approach, restate these instructions, or comment on the format -- your entire reply must be the JSON array itself, starting with [ and ending with ]."""
 
 # Copied deliberately, not imported, from the production sources of truth
 # below -- this script runs standalone inside the LUMI-G Singularity
@@ -724,6 +755,31 @@ def _is_unfilled_placeholder(text: str) -> bool:
     return False
 
 
+_NUMBERED_PLACEHOLDER_RE = re.compile(
+    r"^(string|item|example|request|response|task|prompt|entry|question|message)s?\s*#?\s*\d+\.?$",
+    re.IGNORECASE,
+)
+
+
+def _is_numbered_placeholder(text: str) -> bool:
+    """True for lazy numbered-list filler like "string 1", "response 2",
+    "item #3" -- found live, 2026-09-09/10, `--mode grounding` smoke tests
+    for both open-source student candidates (SmolLM3-3B job 21853583,
+    OLMo-3-7B-Instruct job 21856449): a weaker model asked to emit a JSON
+    array of N diverse requests sometimes produces the correct *shape*
+    (valid JSON, N non-empty strings) without generating real content,
+    defaulting to a generic category-agnostic word plus its own array
+    index. parse_grounding_output only checked for a non-empty string, so
+    this passed silently -- unlike role_sft's `_is_unfilled_placeholder`,
+    which only fires on a literal echoed `<...>`/`[...]` template marker
+    and would never catch this. Bounded to short strings that are ONLY the
+    placeholder word plus a number, so a real request that happens to
+    mention a number (e.g. "item 42 in my inventory shows the wrong SKU")
+    is never caught -- those carry real content around the number.
+    """
+    return bool(_NUMBERED_PLACEHOLDER_RE.match(text.strip()))
+
+
 # Minimum plausible length for a field that claims to be a full, compilable
 # Rust source file or a real expert response -- guards against exactly the
 # failure mode caught live in job 21798693's loom retest: one of 2
@@ -792,17 +848,33 @@ def parse_grounding_output(text: str, expected_count: int) -> List[str]:
             continue
         if not isinstance(arr, list):
             continue
-        items = [item.strip() for item in arr if isinstance(item, str) and item.strip()][:expected_count]
+        items = [item.strip() for item in arr if isinstance(item, str) and item.strip()
+                 and not _is_numbered_placeholder(item)][:expected_count]
         if len(items) >= len(best):
             best = items
     return best
 
 
-def _load_llm(model: str, tensor_parallel_size: int, max_model_len: int, gpu_memory_utilization: float):
+def _load_llm(model: str, tensor_parallel_size: int, max_model_len: int, gpu_memory_utilization: float,
+              enforce_eager: bool = False):
     # Imported lazily: vllm is a LUMI-G-only training/inference dependency,
     # not installed in the local dev environment this script is authored in.
     from vllm import LLM  # noqa: PLC0415
 
+    # enforce_eager (default False, opt-in via --enforce-eager): found live,
+    # 2026-09-09, Olmo-3.1-32B-Instruct smoke test (job 21848558) -- weight
+    # loading succeeded, but vLLM's CUDA-graph-capture step ("Capturing CUDA
+    # graphs (mixed prefill-decode, PIECEWISE)") crashed with a ROCm/HIP-
+    # specific error (hipErrorCapturedEvent, "operation not permitted on an
+    # event last recorded in a capturing stream") -- a runtime graph-capture
+    # incompatibility for this architecture on this cluster's ROCm build,
+    # not a weight-loading or size problem. --enforce-eager skips graph
+    # capture entirely (slower per-token, but otherwise identical outputs)
+    # and is the standard vLLM diagnostic for exactly this failure class.
+    # Left off by default: every other teacher model already verified on
+    # this cluster (Qwen3-Next-80B, GLM-4.5-Air, Qwen3.5-35B-A3B, etc.) uses
+    # graph capture successfully, so forcing eager mode everywhere would
+    # slow down already-proven models for no reason.
     return LLM(
         model=model,
         dtype="auto",  # let vLLM read quantization_config (native fp8) from the checkpoint itself
@@ -810,6 +882,7 @@ def _load_llm(model: str, tensor_parallel_size: int, max_model_len: int, gpu_mem
         trust_remote_code=True,
         max_model_len=max_model_len,
         gpu_memory_utilization=gpu_memory_utilization,
+        enforce_eager=enforce_eager,
     )
 
 
@@ -829,7 +902,7 @@ def _log_parse_failure(debug_path: Path, raw_text: str) -> None:
 def run_loom_mode(args: argparse.Namespace) -> None:
     from vllm import SamplingParams  # noqa: PLC0415
 
-    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization)
+    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization, args.enforce_eager)
     sampling = SamplingParams(temperature=0.9, top_p=0.95, max_tokens=args.max_tokens)
 
     output_path = Path(args.output)
@@ -863,9 +936,10 @@ def run_grounding_mode(args: argparse.Namespace) -> None:
     from vllm import SamplingParams  # noqa: PLC0415
 
     descriptions = _PERSISTENCE_CATEGORY_DESCRIPTIONS if args.persistence else _GROUNDING_CATEGORY_DESCRIPTIONS
+    examples = _PERSISTENCE_CATEGORY_EXAMPLES if args.persistence else _GROUNDING_CATEGORY_EXAMPLES
     style = "persistence" if args.persistence else "grounding"
 
-    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization)
+    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization, args.enforce_eager)
     sampling = SamplingParams(temperature=1.0, top_p=0.95, max_tokens=args.max_tokens)
 
     output_path = Path(args.output)
@@ -877,7 +951,7 @@ def run_grounding_mode(args: argparse.Namespace) -> None:
             remaining = args.count_per_category
             while remaining > 0:
                 batch_n = min(args.batch_size, remaining)
-                prompt = _GROUNDING_GENERATION_TEMPLATE.format(n=batch_n, description=description)
+                prompt = _GROUNDING_GENERATION_TEMPLATE.format(n=batch_n, description=description, example=examples[category])
                 outputs = llm.generate([prompt], sampling)
                 raw_text = outputs[0].outputs[0].text
                 requests = parse_grounding_output(raw_text, batch_n)
@@ -939,7 +1013,7 @@ def run_role_sft_mode(args: argparse.Namespace) -> None:
     is_planner = args.role == "planner"
     is_judge = args.role == "judge"
     system_prompt = _ROLE_SYSTEM_PROMPTS[args.role]
-    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization)
+    llm = _load_llm(args.model, args.tensor_parallel_size, args.max_model_len, args.gpu_memory_utilization, args.enforce_eager)
     sampling = SamplingParams(temperature=1.0, top_p=0.95, max_tokens=args.max_tokens)
 
     output_path = Path(args.output)
@@ -1012,6 +1086,7 @@ def main() -> int:
     parser.add_argument("--tensor-parallel-size", type=int, default=8)
     parser.add_argument("--max-model-len", type=int, default=8192)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.9, help="raise (e.g. 0.95-0.97) for tight-fit teacher models whose weights alone exceed vLLM's 90%% default budget per GPU")
+    parser.add_argument("--enforce-eager", action="store_true", help="skip vLLM's CUDA-graph capture (slower per-token, otherwise identical output) -- diagnostic for a ROCm/HIP graph-capture crash seen live on Olmo-3.1-32B-Instruct (job 21848558); leave off for already-verified teacher models")
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--batch-size", type=int, default=16, help="generations per vLLM.generate() call, for incremental flushing")
     parser.add_argument("--output", required=True)

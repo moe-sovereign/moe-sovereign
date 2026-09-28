@@ -14,6 +14,10 @@ The admin backend provides four monitoring layers:
 ## Observability architecture at a glance
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart LR
     subgraph App["Orchestrator (main.py)"]
         M[prometheus_client<br/>/metrics endpoint]
@@ -251,6 +255,10 @@ Live Monitoring provides real-time insight into running processes with the abili
 ### Tab layout
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     P[/live-monitoring/]:::page
     P --> T1["Tab 1: Active Processes<br/>(badge = count)"]:::tab

@@ -170,6 +170,56 @@ Pre-conditions verified:
 - `AGENT_LASTENHEFT.md` updated to `done`.
 
 
+---
 
+## 2026-09-22T19:55:00Z — BENCHMARK-SPUR2-RESUME — in_progress
+
+Plan / progress:
+- Übergabe von Claude Code Session `f3ad6408-38ac-4a45-958c-17da3fa27181` via SessionMesh MCP und `agent_status/claude-code.md` übernommen.
+- Laufender Benchmark-Prozess PID 1399858 (`python3 run_scientific_benchmark.py`, gestartet 14:01Z ohne `--fresh`, Log `results/lumig_spur2_openweight_resume_20260922T140103Z.log`) aktiv übernommen.
+- Aktueller Stand: Aufgabe 7 (`sci-reasoning-01-distributed-consensus-safety`), Bedingung `prefinetune_ai_debate` läuft. Aufgabe 8 (`sci-governance-01-technical-sovereignty`) steht danach an.
+- Plan:
+  1. Benchmark-Fortschritt kontinuierlich überwachen (ohne Unterbrechung, keine Neustarts oder Template-/Modell-Eingriffe gem. Handoff-Anweisungen).
+  2. Nach Abschluss aller 8 Aufgaben: Gesamtergebnis und `eval_scientific_benchmark_*.json` auswerten.
+  3. Vorbereitung des Spur-1-Laufs (Open Source) unter identischen Bedingungen sowie Nachbereitung der Experten-Bewertung (`post_run_expert_pipeline.sh`).
+
+Pre-conditions verified:
+- Prozess PID 1399858 läuft stabil.
+- Orchestrator (`langgraph-orchestrator`), `terra_checkpoints`, `chromadb-vector`, `mcp-precision` sind healthy.
+- Disk-Speicherplatz `/` bei 83% (82 GB frei, stabil).
+- Inferenz-Nodes N04-RTX, N04-RGTX, N02-M60 erreichbar und aktiv in Generierung.
+
+Notes:
+- Bekannter Trust-Gate-Effekt (reine inject_fact-Turns ohne Quellen <0.3 BLOCK) wird nicht verändert, sondern vom Harness via Backfill behandelt.
+- Keine Rebuilds, keine Restarts, keine manuellen Modell-Unloads während des Laufs.
+
+---
+
+## 2026-09-22T21:19:05Z — BENCHMARK-SPUR2-RESUME — done
+
+Plan / progress:
+- Alle 8 Aufgaben des Spur-2 Open-Weight-Benchmarks (7 Bedingungen x 8 Tasks = 56 Zellen) erfolgreich abgeschlossen.
+- Prozess PID 1399858 hat sich nach Abschluss von Aufgabe 8 und Generierung des Abschlussberichts regulär beendet (23:19 CEST).
+- Ergebnisse persistiert in:
+  - `benchmarks/results/eval_scientific_benchmark_20260922-140103.json`
+  - `benchmarks/results/run_scientific_benchmark_20260922-140103.json`
+  - `benchmarks/results/latest_scientific_benchmark.json`
+- Gesamtergebnisse (Mittelwert Score / Latenz):
+  - `native_baseline`: 8.16 / 10.0 (330.0s)
+  - `prefinetune_ai`: 7.20 / 10.0 (480.2s)
+  - `prefinetune_ai_debate`: 6.21 / 10.0 (836.4s)
+  - `prefinetune_ablation_no_graphrag`: 6.58 / 10.0 (533.3s)
+  - `compound_ai`: 6.91 / 10.0 (559.6s)
+  - `compound_ai_debate`: 6.09 / 10.0 (741.6s)
+  - `ablation_no_graphrag`: 7.10 / 10.0 (365.7s)
+
+Pre-conditions verified:
+- JSON-Ergebnisdateien vollständig und valide.
+- Keine verwaisten Prozesse oder GPU-Hänger.
+- Disk-Speicherplatz `/` stabil.
+
+Notes:
+- Open-Weight-Spur dient als Messlatte.
+- Nächster Schritt laut Handoff: Spur 1 (Open-Source / LUMI-G) vorbereiten und starten, gefolgt von der Experten-Evaluation.
 
 

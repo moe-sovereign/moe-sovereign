@@ -1704,7 +1704,14 @@ async def _refine_expert_response(cat: str, gap_feedback: str, state: "AgentStat
     node = await _select_node(best_expert["model"], _refine_ep)
     url      = node.get("url") or URL_MAP.get(node["name"])
     token    = node.get("token", "ollama")
-    _timeout = float(node.get("timeout", EXPERT_TIMEOUT))
+    from services.deadline import remaining_timeout, bounded_output_tokens
+    _base_timeout = float(node.get("timeout", EXPERT_TIMEOUT))
+    _timeout = remaining_timeout(state, _base_timeout, stage=f"refine:{cat}")
+    _refine_max_tokens = bounded_output_tokens(
+        state,
+        int(os.getenv("MAX_EXPERT_TOKENS", "4096")),
+        minimum_internal=128,
+    )
     sys_prompt = _get_expert_prompt(cat, state.get("user_experts"))
     task_text  = state["input"]
     messages = [
@@ -1746,9 +1753,22 @@ async def _refine_expert_response(cat: str, gap_feedback: str, state: "AgentStat
                         break
         except Exception:
             pass  # non-fatal — fall through to the configured num_ctx
-        _refine_extra = {"extra_body": {"options": {"num_ctx": _refine_num_ctx}}}
-    llm = ChatOpenAI(model=best_expert["model"], base_url=url, api_key=token,
-                     timeout=_timeout, **_refine_extra)
+        _refine_extra = {
+            "extra_body": {
+                "options": {
+                    "num_ctx": _refine_num_ctx,
+                    "num_predict": _refine_max_tokens,
+                }
+            }
+        }
+    llm = ChatOpenAI(
+        model=best_expert["model"],
+        base_url=url,
+        api_key=token,
+        timeout=_timeout,
+        model_kwargs={"max_tokens": _refine_max_tokens},
+        **_refine_extra,
+    )
     try:
         res = await _audited_ainvoke(
             llm,

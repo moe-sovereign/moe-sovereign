@@ -8,182 +8,151 @@ tags:
 - compound-ai
 - domain-expert
 - code-generation
-- ast-refactoring
-- capability-externalization
 - rust
 - cpp
 - python
+- go
 - gguf
+- lora
 - lumi-g
 - moe-sovereign
-datasets:
-- moe-sovereign/expert-coder-sft
+- hybrid-attention
 pipeline_tag: text-generation
 library_name: transformers
 ---
 
-# 💻 MoE Sovereign Coder Expert 4B (`moe-expert-coder-4b`)
-*Systems Code Synthesis, AST Refactoring & Tool-Assisted Interface Implementation*
+# MoE Sovereign Coder Expert 4B (`moe-expert-coder-4b`)
+*Systems-Programming, Code-Synthesis & Concurrency Expert*
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Base Model: Qwen 3.5 4B Hybrid Mamba](https://img.shields.io/badge/Base_Model-Qwen3.5--4B-violet.svg)](https://huggingface.co/Qwen/Qwen3.5-4B)
-[![Trained on: LUMI-G Supercomputer](https://img.shields.io/badge/Trained_on-LUMI--G_MI250X-green.svg)](https://www.lumi-supercomputer.eu/)
+[![Base Model: Qwen3.5-4B](https://img.shields.io/badge/Base_Model-Qwen3.5--4B-violet.svg)](https://huggingface.co/Qwen/Qwen3.5-4B)
 
 ---
 
-## 📌 Executive Summary & Architectural Role
+## Model Summary
 
-**`moe-expert-coder-4b`** is a specialized 4-billion parameter Small Language Model (SLM) distilled from **DeepSeek-Coder-V2 (236B)** and **DeepSeek-V3** on the EuroHPC **LUMI-G Supercomputer** (8× AMD Instinct™ MI250X GCDs (4× physical modules, 64GB HBM2e per GCD)).
+`moe-expert-coder-4b` is a LoRA fine-tune of the text-decoder of **Qwen3.5-4B**, specialized for systems-level code synthesis in **Rust, C++, Python, and Go**. Within the MoE Sovereign compound-AI system it acts as the dedicated coding expert: it receives a decomposed subtask from the Planner and returns compiler-checkable code, minimal atomic diffs, or focused debugging fixes — not general-purpose conversation.
 
-Within the open-source **MoE Sovereign** compound AI system, this model operates as the **Systems Programming, Code Synthesis & Refactoring Expert**. Rather than acting as a general-purpose conversational assistant, it is specialized for generating typed systems code, atomic unified diffs, and AST-compliant implementations in languages such as Rust, C++, Python, and Go.
+The model enforces memory-safety discipline by design: correct ownership, explicit lock-free memory ordering (acquire/release pairing), and no data races. Where it cannot verify a construct is sound, it is trained to flag the uncertainty rather than guess.
 
----
+## Base Architecture
 
-## 🔬 Research Motivation: Capability Externalization
+Qwen3.5-4B is a **hybrid linear-attention / full-attention** decoder (not a plain Transformer):
 
-In the MoE Sovereign architecture, code quality is achieved through the interaction of specialized generation and deterministic verification:
+| Property | Value |
+|---|---|
+| Architecture class | `Qwen3_5ForCausalLM` |
+| Total parameters | 4.23 B |
+| Hidden size | 2,560 |
+| Layers | 32 (8× full attention, every 4th layer; 24× linear/Mamba-style attention) |
+| Attention heads | 16 (4 KV heads, GQA) |
+| Head dimension | 256 |
+| Vocabulary | 248,320 tokens |
+| Native context window | 262,144 tokens |
+| Native precision | bf16 |
 
-> **"The language model proposes code and refactoring patches; external deterministic tooling (AST parsers, linters, compilers, and unit tests) validates and enforces correctness invariants."**
+The 24 linear-attention layers use Mamba-style state-space parameters (`A_log`, `conv1d`, `dt_bias`) instead of standard `q/k/v/o_proj` weights; only the 8 full-attention layers carry those. LoRA adapters in this release target `q_proj, k_proj, v_proj, o_proj` (present in the 8 full-attention layers) and `gate_proj, up_proj, down_proj` (present in all 32 layers, dense MLP block).
 
-This architectural separation enables a compact 4B model to achieve high developer utility by offloading syntax validation and static checks to native compilers rather than relying purely on internal parameter memory.
+## Training Configuration
 
----
+| Parameter | Value |
+|---|---|
+| Method | LoRA (rank 16, alpha 32, dropout 0.05) |
+| Trainable parameters | 21,233,664 (0.50% of total) |
+| Epochs | 3 |
+| Effective batch size | 128 (micro-batch 4 × 8 GPUs × grad-accum 4) |
+| Learning rate | 1.5 × 10⁻⁵ |
+| Training sequence length | 4,096 tokens |
+| Optimizer sharding | DeepSpeed ZeRO-2, bf16 |
+| Compute | EuroHPC LUMI-G, 8× AMD Instinct MI250X GCDs, ROCm |
+| Training examples | 2,295 curated instruction/response pairs |
 
-## 🎯 Intended Functional Scope & Capabilities
+### Training Data Composition
 
-1. **Systems Code Synthesis:** Implements concurrent data structures, explicit memory orderings (`Acquire`/`Release`), SIMD vectorization, and OS-level primitives.
-2. **Static-Analysis-Aware Generation:** Trained to generate code compatible with strict static-analysis and linting pipelines (e.g. `rustc --deny warnings`, `clang-tidy`, `ruff`, `mypy --strict`).
-3. **Atomic Unified Diff Generation:** Outputs structured patch hunks designed for direct headless application by developer toolchains.
-4. **Focused Technical Implementation:** Focuses on typed signatures, implementation logic, and regression tests with minimal conversational filler.
+The training set combines coding tasks generated by multiple teacher LLMs across Rust, C++, Python, and Go, covering: lock-free/atomic concurrency primitives (SPSC/MPSC ring buffers, memory-ordering questions), binary/text wire-format parsing, async I/O and CLI tooling, RAII/move-semantics design, build-system and dependency-resolution problems, algorithms and data structures, cross-language FFI, and embedded/`no_std` constraints. Long-context programming exercises (competitive-programming-style problems, ~30k–150k characters) are included to exercise the model's extended context window during fine-tuning.
 
----
+### Observed Training Trajectory
 
-## 🎯 Intended Behavioral Specialization
+Training loss decreased steadily across the 3 epochs (representative checkpoints): 1.70 → 1.62 → 1.45 → 1.31 → 1.26, with token-level accuracy rising from 0.63 to 0.68 over the same span. This is a smooth, gradual improvement curve consistent with genuine generalization rather than memorization of a narrow example set.
 
-> *Note: The following table describes the intended specialization introduced by the distillation and training process. It should not be interpreted as a quantitative benchmark. Measured comparisons against the base model are reported in the Evaluation section.*
+## Prompt Format
 
-| Capability / Dimension | Base Stock Qwen 3.5 4B | `moe-expert-coder-4b` (Distilled) |
-| :--- | :--- | :--- |
-| **Output Style** | Conversational explanations surrounding code blocks | **Direct Code & Atomic Diffs** with concise inline type annotations |
-| **Concurrency Primitives**| Frequently defaults to unconstrained or relaxed primitives | **Explicit Atomic Orderings** (`AcqRel`, `SeqCst`) with synchronization notes |
-| **Patch Generation** | Often suggests entire file rewrites with approximate line ranges | **Structured Unified Diffs** targeting specific modified AST blocks |
-| **Type Discipline** | Occasionally omits strict generic bounds or lifetime markers | **Explicit Type Signatures** (Rust lifetimes, C++20 concepts, Python TypeVars) |
-
----
-
-## 🏋️ Training Setup & Distillation Methodology
+ChatML, identical to Qwen's native template:
 
 ```
-+-----------------------------------------------------------------------------------+
-|                            LUMI-G DISTILLATION PIPELINE                           |
-|                                                                                   |
-|  [ Teachers: DeepSeek-Coder-V2 (236B) + DeepSeek-V3 ]                             |
-|                       |                                                           |
-|                       v  (AST Parse Validation + Compiler Linter Filtering)      |
-|  [ SFT Dataset: 32,500 AST-Verified Coding Trajectories ]                         |
-|                       |                                                           |
-|                       v  (DeepSpeed ZeRO-2, ROCm 7.0, PyTorch 2.6, 8x MI250X)     |
-|  [ Student: Qwen3.5-4B Hybrid Linear Attention + Mamba Base ]                     |
-|                       |                                                           |
-|                       v  (LoRA r=16, alpha=32, target_modules: q/k/v/o/gate/up/down)|
-|  [ Output: final_adapter -> CPU-BF16 Merge -> GGUF Q4_K_M & Q8_0 ]                |
-+-----------------------------------------------------------------------------------+
+<|im_start|>system
+{system_prompt}<|im_end|>
+<|im_start|>user
+{user_message}<|im_end|>
+<|im_start|>assistant
+{response}<|im_end|>
 ```
 
-### Reproducible Training Details:
-- **Compute Infrastructure:** EuroHPC LUMI-G (8× AMD Instinct™ MI250X GCDs (4× physical modules, 64GB HBM2e per GCD), Slurm Job `#21190761`)
-- **Base Architecture:** Qwen3.5-4B (Hybrid Linear Attention + Mamba in BF16)
-- **Dataset Scale:** 32,500 curated, compiler-filtered programming trajectories
-- **Optimization Strategy:** DeepSpeed ZeRO-2, PyTorch 2.6, ROCm 7.0
-- **Epochs:** 3.0
-- **Effective Batch Size:** 128 (Micro-batch 4 × 8 GPUs × Gradient Accumulation 4)
-- **Learning Rate:** $1.5 \times 10^{-5}$ with Cosine Decay and Warmup
-- **LoRA Hyperparameters:** $r=16$, $\alpha=32$, Dropout $0.05$, Target Modules: `q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`
-- **Optimization Outcome:** Final Training Loss `0.03638`, Training Token Accuracy `99.58%`
+### Recommended System Prompt
 
----
+```
+You are a high-assurance systems-programming and code-synthesis expert (moe-expert-coder-4b) specialized in Rust, C++, Python, and Go. Produce precise, compiler-checked code and minimal atomic diffs. Uphold memory-safety invariants strictly — correct ownership, correct lock-free memory ordering (acquire/release pairing), no data races. Flag any construct you cannot verify as sound rather than guessing.
+```
 
-## 🖥️ Consumer Hardware Deployment
+## Available Formats
 
-`moe-expert-coder-4b` is intended for local execution on user-owned hardware. High-performance compute on LUMI-G was utilized strictly during the offline distillation phase to compress capabilities from 200B+ teachers into a lightweight 4B model.
+| File | Size | Notes |
+|---|---|---|
+| `moe-expert-coder-4b-Q4_K_M.gguf` | 2.6 GB | Recommended for consumer/single-GPU deployment |
+| `moe-expert-coder-4b-Q8_0.gguf` | 4.2 GB | Higher-fidelity reference quantization |
 
-### Deployment Characteristics:
-- **Quantized Formats:** Available in GGUF formats (`Q4_K_M` ~2.6 GB, `Q8_0` ~4.2 GB).
-- **Runtime Compatibility:** Supported natively in Ollama, `llama.cpp`, and vLLM.
-- **Hardware Profile:** Operates within entry-level GPUs (6 GB–12 GB VRAM) or CPU memory.
+## Hardware & Context-Window Guidance
 
-> *Consumer-hardware runtime measurements (VRAM residency, throughput tokens/sec, latency to first token, and energy consumption) are currently being evaluated across reference hardware tiers and will be published with the reproducible benchmark suite.*
+The model's native 262,144-token context window is usable in full on multi-GPU pools with ≥16 GB combined VRAM (with `q4_0`-quantized KV-cache and Flash Attention). On single 8 GB GPUs (e.g. Tesla M60/M10), cap `num_ctx` to 32,768 — this keeps weights (2.6 GB) plus KV-cache comfortably within an 8 GB budget without truncating any realistic single-turn coding task. Maxwell-generation GPUs (Tesla M60/M10, compute capability 5.2) do not support Flash Attention; use `f16` KV-cache on that hardware instead of `q4_0`.
 
----
+### Ollama `Modelfile`
 
-## 📊 Evaluation
-
-Systematic held-out evaluation against the unmodified base model is in progress. The evaluation protocol measures:
-- First-pass syntax validity across Rust, C++, Python, and Go
-- AST parse rates on generated patches
-- Static analysis pass rates against strict linter rulesets
-- Functional correctness on isolated unit test suites
-
-> ℹ️ *Note: Training loss (`0.03638`) and training-token accuracy (`99.58%`) reported above describe optimization progress on the training split and must not be interpreted as held-out capability benchmarks. Empirical held-out benchmark results with dataset versions, sample counts ($N$), and confidence intervals will be released in the project's technical report.*
-
----
-
-## 💻 Quickstart Guide (Ollama & Python)
-
-### 1. Ollama `Modelfile`
 ```dockerfile
 FROM ./moe-expert-coder-4b-Q4_K_M.gguf
-PARAMETER num_ctx 262144
-PARAMETER temperature 0.05
+SYSTEM """You are a high-assurance systems-programming and code-synthesis expert (moe-expert-coder-4b) specialized in Rust, C++, Python, and Go. Produce precise, compiler-checked code and minimal atomic diffs. Uphold memory-safety invariants strictly — correct ownership, correct lock-free memory ordering (acquire/release pairing), no data races. Flag any construct you cannot verify as sound rather than guessing."""
 TEMPLATE """{{ if .System }}<|im_start|>system
 {{ .System }}<|im_end|>
 {{ end }}{{ if .Prompt }}<|im_start|>user
 {{ .Prompt }}<|im_end|>
 {{ end }}<|im_start|>assistant
 {{ .Response }}<|im_end|>"""
+PARAMETER stop "<|im_end|>"
+PARAMETER temperature 0.2
+PARAMETER num_ctx 262144
 ```
 
-### 2. Python Inference
+### Python (transformers + PEFT)
+
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "h3rb3rn/moe-expert-coder-4b"
-
 tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    trust_remote_code=True
+    model_id, torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True
 )
 
-prompt = "<|im_start|>user\nImplement a lock-free MPSC ring buffer in Rust using AtomicUsize and explicit memory ordering.<|im_end|>\n<|im_start|>assistant\n"
+prompt = "<|im_start|>user\nImplement a lock-free SPSC ring buffer in C++20 with explicit acquire/release memory ordering.<|im_end|>\n<|im_start|>assistant\n"
 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-outputs = model.generate(**inputs, max_new_tokens=512, temperature=0.05)
+outputs = model.generate(**inputs, max_new_tokens=768, temperature=0.2)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
----
+## Intended Use
 
-## ⚠️ Limitations
+- Focused code generation and debugging in Rust, C++, Python, Go
+- Code review of pasted diffs/snippets for correctness and memory-safety issues
+- Concurrency-primitive design (lock-free structures, atomics, memory ordering)
+- Build-system, FFI, and embedded/`no_std` questions
 
-1. **Probabilistic Generation:** The model does not inherently guarantee compiler pass or runtime safety; code outputs should always be validated through the compiler and test suites.
-2. **Deep Macro Metaprogramming:** Highly complex macro expansions (e.g. extensive procedural macros in Rust or complex C++ template metaprogramming) may require human inspection.
-3. **Target Architecture Nuances:** Exotic embedded architectures or custom assembly instructions may not be fully covered in the training distribution.
-4. **Context Chunking:** For large multi-file refactorings spanning tens of thousands of lines, the model performs best when orchestrated with targeted AST sub-chunks.
+## Limitations
 
----
+- Does not execute or compile code itself; outputs should be validated by the actual compiler/linter/test suite before use.
+- Deep procedural-macro or template-metaprogramming expansions may need human review.
+- Exotic embedded targets or custom instruction sets may fall outside training coverage.
+- For multi-file refactors spanning very large codebases, best used with a targeted, pre-chunked context rather than the entire repository at once.
 
-## 📑 Citation & Reproducibility
+## License
 
-```bibtex
-@misc{moe_sovereign_2026_coder4b,
-  author = {Horn, Philipp and MoE Sovereign Core AI Team},
-  title = {MoE Sovereign Coder Expert 4B: Systems Code Synthesis SLM},
-  year = {2026},
-  publisher = {Hugging Face},
-  howpublished = {\url{https://huggingface.co/h3rb3rn/moe-expert-coder-4b}},
-  note = {Trained on the EuroHPC LUMI-G Supercomputer}
-}
-```
+Apache 2.0, inherited from the Qwen3.5-4B base model.

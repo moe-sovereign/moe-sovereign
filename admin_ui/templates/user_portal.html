@@ -2126,6 +2126,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
                 <div class="col-md-2"><label class="form-label small" for="tmpl-deliberation-max-rounds">{{ t(request, 'deliberation.max_rounds') }}</label><input class="form-control form-control-sm" id="tmpl-deliberation-max-rounds" type="number" min="1" max="8" value="5"></div>
                 <div class="col-md-2"><label class="form-label small" for="tmpl-deliberation-max-calls">{{ t(request, 'deliberation.max_calls') }}</label><input class="form-control form-control-sm" id="tmpl-deliberation-max-calls" type="number" min="3" max="96" value="18"></div>
                 <div class="col-md-4"><label class="form-label small" for="tmpl-deliberation-fallback">{{ t(request, 'deliberation.fallback') }}</label><select class="form-select form-select-sm" id="tmpl-deliberation-fallback"><option value="standard">{{ t(request, 'deliberation.fallback_standard') }}</option><option value="fail">{{ t(request, 'deliberation.fallback_fail') }}</option></select></div>
+                <div class="col-md-4"><label class="form-label small" for="tmpl-debate-analysis-activation">{{ t(request, 'debate_analysis.label') }}</label><select class="form-select form-select-sm" id="tmpl-debate-analysis-activation"><option value="disabled">{{ t(request, 'debate_analysis.disabled') }}</option><option value="enabled">{{ t(request, 'debate_analysis.enabled') }}</option></select></div>
               </div>
             </div>
           </div>
@@ -2230,6 +2231,9 @@ const CSRF_TOKEN = "{{ csrf_token }}";
         document.getElementById('tmpl-graphrag-max-chars').value     = cfg.graphrag_max_chars ?? 0;
         document.getElementById('tmpl-history-max-turns').value      = (cfg.history_max_turns && cfg.history_max_turns > 0) ? cfg.history_max_turns : 0;
         document.getElementById('tmpl-history-max-chars').value      = (cfg.history_max_chars && cfg.history_max_chars > 0) ? cfg.history_max_chars : 0;
+        _templateDeliberationBase = cfg.deliberation_policy ? { ...cfg.deliberation_policy } : {};
+        _templateDebateAnalysisBase = cfg.debate_analysis ? { ...cfg.debate_analysis } : {};
+        document.getElementById('tmpl-debate-analysis-activation').value = (cfg.debate_analysis && cfg.debate_analysis.activation) || 'disabled';
         const dp = cfg.deliberation_policy || (legacyWhenMissing ? {
           activation: 'required', mode: 'micro', initial_agent_cap: 2,
           reserve_agents: 0, absolute_max_agents: 2, initial_round_cap: 1,
@@ -2471,29 +2475,45 @@ const CSRF_TOKEN = "{{ csrf_token }}";
         container.insertAdjacentHTML('beforeend', modelRowHtml(cat, idx, {model:'',endpoint:'',role:'primary'}));
       }
 
+      // Full policy as loaded; the form exposes only a subset of the fields and
+      // the hidden ones must survive a save unchanged.
+      let _templateDeliberationBase = {};
+      // Debate-analysis policy as loaded; only "activation" is editable here.
+      let _templateDebateAnalysisBase = {};
+
+      function collectTemplateDebateAnalysis() {
+        return {
+          ..._templateDebateAnalysisBase,
+          schema_version: '1.0',
+          activation: document.getElementById('tmpl-debate-analysis-activation').value,
+        };
+      }
+
+
       function collectTemplateDeliberationPolicy() {
         const intValue = (id, fallback) => {
           const value = parseInt(document.getElementById(id)?.value, 10);
           return Number.isFinite(value) ? value : fallback;
         };
         return {
-          schema_version: '1.0',
-          activation: document.getElementById('tmpl-deliberation-activation').value,
-          mode: document.getElementById('tmpl-deliberation-mode').value,
           min_agents: 2,
-          initial_agent_cap: intValue('tmpl-deliberation-initial-agents', 6),
-          reserve_agents: intValue('tmpl-deliberation-reserve-agents', 2),
-          absolute_max_agents: intValue('tmpl-deliberation-max-agents', 8),
           min_rounds: 1,
-          initial_round_cap: intValue('tmpl-deliberation-initial-rounds', 3),
-          reserve_rounds: intValue('tmpl-deliberation-reserve-rounds', 2),
-          absolute_max_rounds: intValue('tmpl-deliberation-max-rounds', 5),
-          max_model_calls: intValue('tmpl-deliberation-max-calls', 18),
           moderator_interval: 1,
           estimated_turn_seconds: 20.0,
           synthesis_reserve_seconds: 30.0,
           convergence_threshold: 0.82,
           repetition_threshold: 0.78,
+          ..._templateDeliberationBase,
+          schema_version: '1.0',
+          activation: document.getElementById('tmpl-deliberation-activation').value,
+          mode: document.getElementById('tmpl-deliberation-mode').value,
+          initial_agent_cap: intValue('tmpl-deliberation-initial-agents', 6),
+          reserve_agents: intValue('tmpl-deliberation-reserve-agents', 2),
+          absolute_max_agents: intValue('tmpl-deliberation-max-agents', 8),
+          initial_round_cap: intValue('tmpl-deliberation-initial-rounds', 3),
+          reserve_rounds: intValue('tmpl-deliberation-reserve-rounds', 2),
+          absolute_max_rounds: intValue('tmpl-deliberation-max-rounds', 5),
+          max_model_calls: intValue('tmpl-deliberation-max-calls', 18),
           fallback: document.getElementById('tmpl-deliberation-fallback').value,
         };
       }
@@ -2538,6 +2558,7 @@ const CSRF_TOKEN = "{{ csrf_token }}";
           agent_graphrag:      document.getElementById('tmpl-agent-graphrag').checked,
           agent_ingest:        document.getElementById('tmpl-agent-ingest').checked,
           deliberation_policy: collectTemplateDeliberationPolicy(),
+          debate_analysis: collectTemplateDebateAnalysis(),
           graphrag_max_chars:  parseInt(document.getElementById('tmpl-graphrag-max-chars').value) || 0,
           history_max_turns:   compressionEnabled ? (parseInt(document.getElementById('tmpl-history-max-turns').value) || 0) : -1,
           history_max_chars:   compressionEnabled ? (parseInt(document.getElementById('tmpl-history-max-chars').value) || 0) : -1,

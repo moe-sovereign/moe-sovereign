@@ -46,7 +46,7 @@ def main():
         print(f"errors in newest run: {len(rows)}", [(r['condition'], r.get('error_type'), r.get('error_code', '')[:40]) for r in rows[-3:]])
     print("-- audit anomalies")
     slow = psql(f"select to_char(started_at,'HH24:MI:SS'), stage, split_part(model,'/',3), round(extract(epoch from completed_at-started_at)::numeric), coalesce(round((response_body->>'load_duration')::numeric/1e9)::text,'-'), coalesce(response_body->>'eval_count','-') "
-                f"from ai_io_audit_log where started_at>now()-interval '{m} minutes' and (extract(epoch from completed_at-started_at)>240 or (response_body->>'load_duration')::numeric>60e9 or (response_body->>'eval_count')::int>4000 or status not in ('completed')) order by started_at desc limit 8")
+                f"from ai_io_audit_log where started_at>now()-interval '{m} minutes' and stage<>'guard' and (extract(epoch from completed_at-started_at)>240 or (response_body->>'load_duration')::numeric>60e9 or (response_body->>'eval_count')::int>4000 or status not in ('completed')) order by started_at desc limit 8")
     for l in slow.splitlines():
         print("!!", "stage|model|s|load_s|tokens:", l)
     if not slow:

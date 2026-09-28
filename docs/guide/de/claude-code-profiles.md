@@ -177,9 +177,9 @@ gesaettigt ist.
 
 Vorkonfigurierte Profil-JSONs stehen zum Download bereit:
 
-- [`cc-ref-native.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-native.json) -- Direktes LLM
-- [`cc-ref-reasoning.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-reasoning.json) -- Thinking Node
-- [`cc-ref-orchestrated.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-orchestrated.json) -- Vollstaendige Pipeline
+- [`cc-ref-native.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-native.json) -- Direktes LLM
+- [`cc-ref-reasoning.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-reasoning.json) -- Thinking Node
+- [`cc-ref-orchestrated.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-orchestrated.json) -- Vollstaendige Pipeline
 
 Die Platzhalter `<YOUR_OLLAMA_HOST>` und `<YOUR_TEMPLATE_ID>` durch die
 tatsaechlichen Werte ersetzen.

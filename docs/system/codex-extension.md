@@ -272,7 +272,7 @@ Federated Search (OpenSearch), Dossier, Link Analysis, Timeline, BI Dashboards
 
 ```bash
 # 1. Clone the Codex repository
-git clone https://github.com/h3rb3rn/moe-codex.git /opt/moe-sovereign/moe-codex
+git clone https://github.com/moe-sovereign/moe-codex.git /opt/moe-sovereign/moe-codex
 
 # 2. Copy and configure environment
 cp /opt/moe-sovereign/moe-codex/.env.example \

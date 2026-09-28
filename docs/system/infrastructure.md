@@ -69,6 +69,10 @@ graph TD
 ### Internal Container Dependency Graph
 
 ```mermaid
+---
+config:
+  look: classic
+---
 graph TD
     KAFKA["moe-kafka\n:9092 KRaft"]
     NEO4J["neo4j-knowledge\n:7687 Bolt · :7474 HTTP"]

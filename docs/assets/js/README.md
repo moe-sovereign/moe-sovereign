@@ -12,7 +12,16 @@ Benefits of keeping the local copy:
 
 - Offline / air-gapped builds still render diagrams.
 - No per-visitor HTTP hit on unpkg.com.
-- Pinned, reproducible mermaid version (currently v10.9.3).
+- Pinned, reproducible mermaid version (currently v11.17.2; v11+ is required for `look: handDrawn`).
+
+## `mermaid-look.js`
+
+Switches all diagrams to Mermaid's `handDrawn` look (Excalidraw-like sketch
+style). It only wraps `mermaid.initialize()` so that mkdocs-material's own
+call carries `look: "handDrawn"` — it never calls `initialize()`/`run()` on
+its own, so it does not conflict with the rule below. To return to the clean
+look, remove it from `extra_javascript` in `mkdocs.yml`. Sequence, Gantt and
+pie diagrams ignore `look` and render as before.
 
 ## Do NOT add a `mermaid-init.js`
 

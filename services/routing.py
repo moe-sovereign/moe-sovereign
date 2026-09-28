@@ -19,6 +19,10 @@ from services.deliberation.contracts import (
     legacy_deliberation_policy,
     parse_deliberation_policy,
 )
+from services.debate_analysis.contracts import (
+    DebateAnalysisError,
+    parse_debate_analysis_policy,
+)
 from services.templates import _read_expert_templates
 
 logger = logging.getLogger("MOE-SOVEREIGN")
@@ -163,7 +167,8 @@ def _resolve_user_experts(
                     role = m.get("role")
                     if role is None:
                         role = "always" if m.get("required", True) else "primary"
-                    if role == "always":
+                    # Support explicit forced flag or role 'always' to trigger parallel ensemble dispatch
+                    if role == "always" or m.get("forced", False):
                         forced, model_tier = True, None
                     elif role == "fallback":
                         forced, model_tier = False, 2
@@ -182,9 +187,10 @@ def _resolve_user_experts(
                         "endpoint":       ep,
                         "url":            url,
                         "token":          token,
+                        "role":           role,
                         "forced":         forced,
                         "_tier":          model_tier,
-                        "_system_prompt": _sys_prompt,
+                        "_system_prompt": (m.get("system_prompt") or _sys_prompt).strip(),
                         "context_window": _cat_ctx,
                         "thinking_mode":  bool(
                             m.get(
@@ -310,6 +316,7 @@ def _resolve_template_prompts(
         "complexity_level": "",
         "causal_intervention": None,
         "deliberation_policy": legacy_policy.model_dump(mode="json"),
+        "debate_analysis": parse_debate_analysis_policy(None).model_dump(mode="json"),
         # Augmented Tool Path (agentic clients) — mirrors the global AGENT_*_ENABLED
         # defaults (off), overridable per expert template. See config.py.
         "agent_cache": AGENT_CACHE_ENABLED,
@@ -336,6 +343,20 @@ def _resolve_template_prompts(
             )
         else:
             deliberation_policy = legacy_policy
+
+        # Strict like deliberation_policy, but chat paths do not use this field
+        # and only handle DeliberationPolicyError. An invalid policy therefore
+        # leaves debate analysis disabled (fail closed for the analysis) instead
+        # of turning every chat request on this template into an error. The
+        # analysis route re-validates the raw template and rejects with 422.
+        try:
+            debate_analysis = parse_debate_analysis_policy(tmpl.get("debate_analysis"))
+        except DebateAnalysisError:
+            logger.error(
+                "invalid debate_analysis policy in template %r; debate analysis disabled",
+                tmpl.get("id"),
+            )
+            debate_analysis = parse_debate_analysis_policy(None)
 
         def _split_model_ep(val: str) -> tuple:
             if val and "@" in val:
@@ -400,6 +421,7 @@ def _resolve_template_prompts(
             "complexity_level":        tmpl.get("complexity_level", ""),
             "causal_intervention":     tmpl.get("causal_intervention"),
             "deliberation_policy":     deliberation_policy.model_dump(mode="json"),
+            "debate_analysis":         debate_analysis.model_dump(mode="json"),
             "agent_cache":             bool(tmpl.get("agent_cache", AGENT_CACHE_ENABLED)),
             "agent_graphrag":          bool(tmpl.get("agent_graphrag", AGENT_GRAPHRAG_ENABLED)),
             "agent_ingest":            bool(tmpl.get("agent_ingest", AGENT_INGEST_ENABLED)),

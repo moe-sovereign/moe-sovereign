@@ -296,7 +296,7 @@ See the project root `CHANGELOG.md` for the full environment variable reference 
 
 - **Phase 16–24 services** removed from moe-sovereign: `services/lineage.py`,
   `services/versioning.py`, `services/etl_pipeline.py`, `services/data_health.py`.
-  These are now the canonical implementation in **[moe-codex](https://github.com/h3rb3rn/moe-codex)**.
+  These are now the canonical implementation in **[moe-codex](https://github.com/moe-sovereign/moe-codex)**.
 
 - **Enterprise admin-UI pages** removed: templates `catalog.html`, `approval.html`,
   `explorer.html`, `notebook.html`, `enterprise.html`; routes
@@ -332,7 +332,7 @@ See the project root `CHANGELOG.md` for the full environment variable reference 
   both the update path and the fresh-install path. Creates the MinIO bucket for
   lakeFS, calls `POST /api/v1/setup_lakefs` (the v1.81 image does not auto-bootstrap
   from `LAKEFS_INSTALLATION_*` envs), and primes the `pending/` branch namespace.
-- **Phase 16 OpenLineage / Marquez** merged in [PR #144](https://github.com/h3rb3rn/moe-sovereign/pull/144).
+- **Phase 16 OpenLineage / Marquez** merged in [PR #144](https://github.com/moe-sovereign/moe-sovereign/pull/144).
 - **Phase 17 NiFi** — `services/etl_pipeline.py` submits to a NiFi `ListenHTTP`
   processor; ETL fan-out events become Lineage runs.
 - **Phase 18 lakeFS** — `services/versioning.py` Git-style versioning of knowledge

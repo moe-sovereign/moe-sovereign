@@ -256,7 +256,7 @@ async def merger_node(state_: AgentState):
     def dataset_response(*a, **kw): return {}
     _ol_merger_run = await _ol_start(
         "merger_node",
-        extra_facets={"templateName": {"_producer": "https://github.com/h3rb3rn/moe-sovereign",
+        extra_facets={"templateName": {"_producer": "https://github.com/moe-sovereign/moe-sovereign",
                                        "_schemaURL": "moe-sovereign://templateName",
                                        "name": state_.get("template_name", "default")}},
     )

@@ -1632,7 +1632,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
     _ol_run_id = await _ol_start(
         "chat_completion",
         inputs=[dataset_user_query(session_id or "")],
-        extra_facets={"requestModel": {"_producer": "https://github.com/h3rb3rn/moe-sovereign",
+        extra_facets={"requestModel": {"_producer": "https://github.com/moe-sovereign/moe-sovereign",
                                        "_schemaURL": "moe-sovereign://requestModel",
                                        "model": request.model}},
     )

@@ -270,6 +270,8 @@ async def planner_node(state_: AgentState):
         PlannerContractIssue as _PlannerContractIssue,
         assign_stable_task_ids as _assign_stable_task_ids,
         normalize_task_dependencies as _normalize_task_dependencies,
+        disperse_category_hotspots as _disperse_category_hotspots,
+        prune_artificial_dependencies as _prune_artificial_dependencies,
         canonical_tool_catalog_hash as _canonical_tool_catalog_hash,
         parse_plan as _parse_plan_contract,
         recover_explicit_supported_plan as _recover_explicit_supported_plan,
@@ -317,6 +319,21 @@ async def planner_node(state_: AgentState):
             logger.info(
                 "Planner depends_on normalized: %s",
                 json.dumps(_dep_repairs, ensure_ascii=False),
+            )
+        # Hotspot Dispersal across dedicated Ollama GPUs (Phase 3)
+        _template_cats = set(state_.get("user_experts", {}).keys()) if state_.get("user_experts") else None
+        prepared, _hotspot_repairs = _disperse_category_hotspots(prepared, available_categories=_template_cats)
+        if _hotspot_repairs:
+            logger.info(
+                "Planner category hotspots dispersed: %s",
+                json.dumps(_hotspot_repairs, ensure_ascii=False),
+            )
+        # Prune artificial sequential chains lacking genuine data flow
+        prepared, _prune_repairs = _prune_artificial_dependencies(prepared)
+        if _prune_repairs:
+            logger.info(
+                "Planner artificial dependencies pruned: %s",
+                json.dumps(_prune_repairs, ensure_ascii=False),
             )
         _validate_plan_or_raise(
             prepared,
@@ -992,6 +1009,13 @@ RULES:
 - NEVER just keywords or questions as tasks — always concrete task descriptions!
 - OPTIONAL: Add a "metadata_filters" key to the FIRST task object when the domain is unambiguous, to scope downstream memory retrieval. Use string values only. Omit when unsure.
   Example: {{"task": "...", "category": "code_reviewer", "metadata_filters": {{"expert_domain": "code_reviewer", "project": "frontend"}}}}
+- MULTI-DISCIPLINARY CO-EVALUATION: For complex software, systems programming, or architecture requests, NEVER assign multiple tasks to the same category alone. ALWAYS assign distinct, complementary categories that run on separate hardware specialists simultaneously:
+  1. Core implementation logic -> "code_reviewer"
+  2. Concurrency, memory-safety, and threat audit -> "security"
+  3. Edge-case test suite, failure modes, and verification -> "data_analyst"
+  4. Architectural patterns, background, and reference comparison -> "research"
+- Keep tasks independent (no 'depends_on') whenever possible so they execute strictly in parallel on level 0.
+- NOTE ON PRECISION TOOLS: "precision_tools" is STRICTLY for deterministic tools (requires explicit "mcp_tool" and "mcp_args"). Never use "precision_tools" for code sizing or conceptual math without an MCP tool!
 {_build_skill_catalog()}
 {_quality_hint}{success_hint}{_few_shot_hint}
 EXAMPLE arithmetic:
@@ -1008,7 +1032,22 @@ EXAMPLE VLSM (multiple named subnets from one parent block):
 Request: "Split 10.180.0.0/19 into subnets A(2000 hosts), B(1000 hosts), C(250 hosts)"
 Correct: [{{"task": "VLSM-allocate 10.180.0.0/19 for subnets A, B, C", "category": "precision_tools", "mcp_tool": "vlsm_subnet_calc", "mcp_args": {{"cidr": "10.180.0.0/19", "subnets": [{{"id": "A", "hosts": 2000}}, {{"id": "B", "hosts": 1000}}, {{"id": "C", "hosts": 250}}]}}}}]
 WRONG:   [{{"task": "...", "category": "precision_tools", "mcp_tool": "subnet_calc", "mcp_args": {{"cidr": "10.180.0.0/19", "subnets": [...]}}}}]
-← ERROR: subnet_calc's schema only accepts "cidr" — a "subnets" list is rejected (additionalProperties)
+<- ERROR: subnet_calc's schema only accepts "cidr" — a "subnets" list is rejected (additionalProperties)
+
+EXAMPLE complex systems programming (concurrent multi-expert decomposition):
+Request: "Implement a high-performance lock-free MPSC queue in Rust with atomic orderings, cacheline padding, and unit test"
+Correct: [
+  {{"task": "Implement a high-performance bounded lock-free MPSC ring buffer queue in Rust: power-of-two capacity with bitwise wrapping, explicit Acquire/Release atomic memory orderings (no seq_cst), 64-byte cacheline padding to eliminate false sharing, and non-blocking backpressure handling.", "category": "code_reviewer"}},
+  {{"task": "Audit the lock-free MPSC queue design for concurrency hazards: verify atomic memory orderings (Acquire/Release pairing), inspect compare-and-swap loops for ABA vulnerability and progress guarantees, and verify cacheline alignment prevents false sharing.", "category": "security"}},
+  {{"task": "Develop a multi-threaded stress and verification test suite: 4 concurrent producers contending with 1 consumer, validating zero message loss and strict FIFO order per producer under high contention.", "category": "data_analyst"}},
+  {{"task": "Research and document state-of-the-art lock-free MPSC patterns, comparing against crossbeam-channel and Vyukov queue design trade-offs.", "category": "research", "search_query": "Dmitry Vyukov lock-free queue MPSC bounded ring buffer crossbeam pattern"}}
+]
+WRONG: [
+  {{"task": "Write queue struct", "category": "code_reviewer"}},
+  {{"task": "Write enqueue logic", "category": "code_reviewer"}},
+  {{"task": "Write test", "category": "code_reviewer"}}
+]
+<- ERROR: Clustered all tasks on code_reviewer, causing serial endpoint queuing and omitting security and invariant verification!
 
 EXAMPLE game implementation with domain logic:
 Request: "Create a Connect Four game as HTML5 page"
@@ -1017,7 +1056,7 @@ Correct: [
   {{"task": "Implement Connect Four in HTML5/CSS/JS. MANDATORY RULES: 7 columns × 6 rows; click on column → piece falls to LOWEST free row (not inserted at top!); win = 4 in a row horizontal/vertical/diagonal; move invalid when column full", "category": "code_reviewer"}}
 ]
 WRONG: [{{"task": "Implement HTML5 base structure", "category": "code_reviewer"}}, {{"task": "Write JS game logic", "category": "code_reviewer"}}]
-← ERROR: game rules missing from task description, no research task, logic will be implemented incorrectly
+<- ERROR: game rules missing from task description, no research task, logic will be implemented incorrectly
 
 EXAMPLE simple request:
 Request: "What is Docker?"
