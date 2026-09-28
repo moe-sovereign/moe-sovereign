@@ -3,14 +3,14 @@
 !!! info "Auto-generated"
     This page is updated every 15 minutes by the `moe-docs-sync` service.
 
-*Last updated: **2026-09-28 15:01***
+*Last updated: **2026-09-28 18:01***
 
 ## Metrics
 
 | Metric | Value |
 |--------|-------|
-| Neo4j Entities | 16911 |
-| Neo4j Relations | 108765 |
+| Neo4j Entities | 16943 |
+| Neo4j Relations | 108791 |
 | ChromaDB Documents | 4068 |
 | Total Requests | ? |
 
