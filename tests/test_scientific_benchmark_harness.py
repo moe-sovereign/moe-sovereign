@@ -295,3 +295,94 @@ class TestRedisPasswordLookup:
         import re
         src = pathlib.Path("benchmarks/run_scientific_benchmark.py").read_text()
         assert not re.search(r"password\s*=\s*[\"'][A-Za-z0-9+/_\-]{12,}[\"']", src)
+
+
+class TestPrefinetuneConditions:
+    ENV = ("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE",
+           "MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG")
+
+    def _reload(self, monkeypatch, **values):
+        import importlib
+        from benchmarks import run_scientific_benchmark as rsb
+        for name in self.ENV:
+            monkeypatch.delenv(name, raising=False)
+        for name, value in values.items():
+            monkeypatch.setenv(name, value)
+        importlib.reload(rsb)
+        return rsb
+
+    def test_all_three_disabled_by_default(self, monkeypatch):
+        rsb = self._reload(monkeypatch)
+        assert [rsb.TEMPLATES[c] for c, _, _ in rsb.PREFINETUNE_PAIRS] == ["", "", ""]
+
+    def test_each_variable_enables_its_own_condition(self, monkeypatch):
+        rsb = self._reload(
+            monkeypatch,
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE="Base",
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE="Base - Deliberation",
+            MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG="Base - No-GraphRAG",
+        )
+        assert rsb.TEMPLATES["prefinetune_ai"] == "Base"
+        assert rsb.TEMPLATES["prefinetune_ai_debate"] == "Base - Deliberation"
+        assert rsb.TEMPLATES["prefinetune_ablation_no_graphrag"] == "Base - No-GraphRAG"
+
+    def test_pairs_map_pre_to_finetuned_counterparts(self, monkeypatch):
+        rsb = self._reload(monkeypatch)
+        assert {(p, f) for p, f, _ in rsb.PREFINETUNE_PAIRS} == {
+            ("prefinetune_ai", "compound_ai"),
+            ("prefinetune_ai_debate", "compound_ai_debate"),
+            ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag"),
+        }
+        self._reload(monkeypatch)
+
+
+class TestDeferredEvaluation:
+    """The judge evaluation can be deferred and finalised later without changing the scoring formula."""
+
+    def test_finalize_pending_evaluation_updates_the_result_in_place(self, monkeypatch):
+        import asyncio
+
+        import benchmarks.run_scientific_benchmark as rsb
+
+        async def fake_judge(client, test_case, prompt, response_text):
+            assert response_text == "the full answer"
+            return {"score": 8.0, "verdict": "PASS", "reasoning": "ok"}
+
+        monkeypatch.setattr(rsb, "judge_evaluation", fake_judge)
+        res = {"condition": "compound_ai", "deterministic_score": 10.0, "judge_score": 0.0, "score": 0.0, "judge_verdict": "PENDING",
+               "final_response": "the full", "_pending_full_response": "the full answer"}
+        out = asyncio.run(rsb.finalize_pending_evaluation(None, {"prompt": "q"}, res))
+        assert out is res and "_pending_full_response" not in res
+        assert (res["judge_score"], res["judge_verdict"], res["score"]) == (8.0, "PASS", round(0.4 * 10 + 0.6 * 8, 2))
+
+
+class TestConditionOrder:
+    @staticmethod
+    def _enable_prefinetune(monkeypatch):
+        import benchmarks.run_scientific_benchmark as rsb
+
+        for name in ("prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag"):
+            monkeypatch.setitem(rsb.TEMPLATES, name, "Base " + name)
+        return rsb
+
+    def test_family_order_groups_base_and_fine_tuned_conditions(self, monkeypatch):
+        rsb = self._enable_prefinetune(monkeypatch)
+        names = [c[0] for c in rsb._build_conditions("family")]
+        assert names == [
+            "native_baseline", "prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag",
+            "compound_ai", "compound_ai_debate", "ablation_no_graphrag",
+        ]
+
+    def test_family_order_skips_disabled_prefinetune_templates(self, monkeypatch):
+        import benchmarks.run_scientific_benchmark as rsb
+
+        for name in ("prefinetune_ai", "prefinetune_ai_debate", "prefinetune_ablation_no_graphrag"):
+            monkeypatch.setitem(rsb.TEMPLATES, name, "")
+        assert [c[0] for c in rsb._build_conditions("family")] == [
+            "native_baseline", "compound_ai", "compound_ai_debate", "ablation_no_graphrag",
+        ]
+
+    def test_paired_order_keeps_the_old_interleaving(self, monkeypatch):
+        rsb = self._enable_prefinetune(monkeypatch)
+        names = [c[0] for c in rsb._build_conditions("paired")]
+        assert names[:2] == ["compound_ai", "prefinetune_ai"] and names[-1] == "native_baseline" and len(names) == 7

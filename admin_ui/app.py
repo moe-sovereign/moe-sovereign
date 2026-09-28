@@ -28,6 +28,9 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 import database as db
+from debate_analysis_policy import (
+    validate_debate_analysis_policy as _validate_debate_analysis_policy,
+)
 from deliberation_policy import (
     legacy_deliberation_policy as _legacy_deliberation_policy,
     validate_deliberation_policy as _validate_deliberation_policy,
@@ -435,7 +438,6 @@ async def _poll_and_record_gpu_history() -> None:
 async def lifespan(app: FastAPI):
     await db.init_db()
     await db.seed_initial_admin()
-    await db.seed_default_admin_templates()
     logger.info(f"User DB initialized: {db.DB_PATH}")
     # Migrate expert templates from .env to database (one-time) and populate cache
     await refresh_expert_templates_cache()
@@ -2603,6 +2605,13 @@ def _validated_template_deliberation_policy(raw) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+
+def _validated_template_debate_analysis(raw) -> dict:
+    try:
+        return _validate_debate_analysis_policy(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 @app.get("/templates", response_class=HTMLResponse)
 async def expert_templates_page(request: Request, _=Depends(require_login)):
     config = read_env()
@@ -2683,6 +2692,9 @@ async def api_create_expert_template(request: Request):
         "deliberation_policy":     _validated_template_deliberation_policy(
             body.get("deliberation_policy")
         ),
+        "debate_analysis":         _validated_template_debate_analysis(
+            body.get("debate_analysis")
+        ),
     }
     templates.append(tmpl)
     save_expert_templates(templates)
@@ -2728,6 +2740,9 @@ async def api_export_expert_templates(ids: str = ""):
                 _validated_template_deliberation_policy(t.get("deliberation_policy"))
                 if "deliberation_policy" in t
                 else _legacy_deliberation_policy()
+            ),
+            "debate_analysis":         _validated_template_debate_analysis(
+                t.get("debate_analysis")
             ),
         }
         for t in templates
@@ -2817,6 +2832,9 @@ async def api_import_expert_templates(request: Request, mode: str = "merge"):
                 if "deliberation_policy" in item
                 else _legacy_deliberation_policy()
             ),
+            "debate_analysis":         _validated_template_debate_analysis(
+                item.get("debate_analysis")
+            ),
         })
         existing_names.add(name)
         imported += 1
@@ -2863,6 +2881,10 @@ async def api_update_expert_template(tmpl_id: str, request: Request):
             if "deliberation_policy" in body:
                 t["deliberation_policy"] = _validated_template_deliberation_policy(
                     body.get("deliberation_policy")
+                )
+            if "debate_analysis" in body:
+                t["debate_analysis"] = _validated_template_debate_analysis(
+                    body.get("debate_analysis")
                 )
             save_expert_templates(templates)
             return {"ok": True}
@@ -7287,6 +7309,9 @@ async def user_api_copy_admin_template(
         if "deliberation_policy" in config
         else _legacy_deliberation_policy()
     )
+    config["debate_analysis"] = _validated_template_debate_analysis(
+        config.get("debate_analysis")
+    )
     if "experts" in config:
         config["experts"] = {
             cat: {k: v for k, v in cat_cfg.items() if k != "system_prompt"}
@@ -7308,6 +7333,9 @@ async def user_api_create_template(request: Request, user_id: str = Depends(requ
     config      = body.get("config") or {}
     config["deliberation_policy"] = _validated_template_deliberation_policy(
         config.get("deliberation_policy")
+    )
+    config["debate_analysis"] = _validated_template_debate_analysis(
+        config.get("debate_analysis")
     )
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -7335,6 +7363,9 @@ async def user_api_export_templates(ids: str = "", user_id: str = Depends(requir
             _validated_template_deliberation_policy(config.get("deliberation_policy"))
             if "deliberation_policy" in config
             else _legacy_deliberation_policy()
+        )
+        config["debate_analysis"] = _validated_template_debate_analysis(
+            config.get("debate_analysis")
         )
         items.append({
             "name":        t.get("name", ""),
@@ -7401,6 +7432,9 @@ async def user_api_import_templates(
             if "deliberation_policy" in config
             else _legacy_deliberation_policy()
         )
+        config["debate_analysis"] = _validated_template_debate_analysis(
+            config.get("debate_analysis")
+        )
         await db.create_user_template(user_id, name, description, cost_factor, config)
         existing_names.add(name)
         imported += 1
@@ -7419,6 +7453,10 @@ async def user_api_update_template(tmpl_id: str, request: Request, user_id: str 
     if "deliberation_policy" in config:
         config["deliberation_policy"] = _validated_template_deliberation_policy(
             config.get("deliberation_policy")
+        )
+    if "debate_analysis" in config:
+        config["debate_analysis"] = _validated_template_debate_analysis(
+            config.get("debate_analysis")
         )
     if not name:
         raise HTTPException(status_code=400, detail="name is required")

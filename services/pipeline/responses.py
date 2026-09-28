@@ -499,7 +499,7 @@ async def responses_api(raw_request: Request, request: _ResponsesRequest):
     _ol_run_id = await _ol_start(
         "responses_api",
         inputs=[dataset_user_query("")],
-        extra_facets={"requestModel": {"_producer": "https://github.com/h3rb3rn/moe-sovereign",
+        extra_facets={"requestModel": {"_producer": "https://github.com/moe-sovereign/moe-sovereign",
                                        "_schemaURL": "moe-sovereign://requestModel",
                                        "model": request.model, "stream": request.stream}},
     )

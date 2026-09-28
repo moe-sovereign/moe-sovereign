@@ -146,7 +146,6 @@ _CLAUDE_CTX_TABLE: dict[str, int] = {
     # qwen3-planner: SFT fine-tune on Qwen3-8B base (n_ctx_train=40960, no RoPE scaling).
     # Must appear before "qwen3" so the prefix check matches this first.
     "qwen3-planner":    40_960,
-    "moe-sovereign-student": 40_960,
     # Qwen3 family (all generations) — 262k native context window.
     # Name-based entry needed because the tag carries no k-suffix; the param-count
     # heuristic would otherwise cap these at 32 768 (conservative VRAM estimate).

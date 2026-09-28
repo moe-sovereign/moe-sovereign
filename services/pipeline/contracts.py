@@ -188,11 +188,59 @@ def tool_schema_contract_hash(schema: Mapping[str, Any] | None) -> str:
     return declared or canonical_json_hash(dict(schema))
 
 
+def _close_open_json(text: str):
+    """Balance the brackets of a JSON text a small model wrote sloppily.
+
+    Missing closers are appended and a closer that does not match the innermost open bracket is dropped (typical: one
+    ``}`` too many after a long expression, or ``]`` written before the object was closed). Returns None when the text
+    ends inside a string. The caller accepts the result only if it parses as JSON.
+    """
+    stack: list[str] = []
+    out: list[str] = []
+    in_str = esc = False
+    for ch in text:
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+            out.append(ch)
+        elif ch in "[{":
+            stack.append("]" if ch == "[" else "}")
+            out.append(ch)
+        elif ch in "]}":
+            if stack and stack[-1] == ch:
+                stack.pop()
+                out.append(ch)
+            # else: mismatching closer, dropped
+        else:
+            out.append(ch)
+    if in_str:
+        return None
+    return "".join(out) + "".join(reversed(stack))
+
+
 def _first_json(text: str):
     dec = json.JSONDecoder()
     positions = sorted(
         pos for pos in (text.find("["), text.find("{")) if pos >= 0
     )
+    if positions and text[positions[0]] == "[":
+        # A truncated top-level array (missing closing brackets) is repaired as a whole instead of falling back to
+        # its first inner object, which silently reduced a multi-task plan to its first task.
+        closed = _close_open_json(text[positions[0]:].rstrip())
+        if closed is not None:
+            try:
+                repaired = json.loads(closed)
+                if isinstance(repaired, list):
+                    return repaired
+            except (json.JSONDecodeError, ValueError):
+                pass
     for start in positions:
         pos = start
         opener = text[start]
@@ -209,6 +257,11 @@ def parse_plan(raw: str) -> PlannerPlan:
     plan = PlannerPlan(raw=raw or "")
     cleaned = re.sub(r"<think>.*?</think>", "", raw or "", flags=re.S)
     obj = _first_json(cleaned)
+    _array_at, _object_at = cleaned.find("["), cleaned.find("{")
+    if _array_at >= 0 and (_object_at < 0 or _array_at < _object_at) and not isinstance(obj, list):
+        # The answer is a JSON array that does not parse as a whole; one of its inner objects is not the plan.
+        logger.warning("contracts: planner array is malformed JSON (chars=%d); rejecting instead of keeping a partial plan", len(raw or ""))
+        return plan
     if isinstance(obj, dict) and "tasks" not in obj and ("task" in obj or "category" in obj or "instruction" in obj or "description" in obj or "mcp_tool" in obj):
         tasks = [obj]
     else:
@@ -311,6 +364,259 @@ def normalize_task_dependencies(tasks: list[dict]) -> tuple[list[dict], list[dic
         if resolved != dep:
             repairs.append({"task_id": task.get("id"), "from": dep, "to": resolved})
             task["depends_on"] = resolved
+    return tasks, repairs
+
+
+# ── Hotspot-Dispersal & Dependency Pruning (Zero-Cost Parallelization) ────────
+
+_CATEGORY_KEYWORD_MAP: list[tuple[str, re.Pattern]] = [
+    (
+        "security",
+        re.compile(
+            r"\b(secur|threat|vulnerab|cve|race\s*condition|concurren|deadlock|"
+            r"atomicity|atomic|memory\s*safety|unsafe|overflow|sanitiz|auth|"
+            r"access\s*control|exploit|thread\s*saf)\b",
+            re.I,
+        ),
+    ),
+    (
+        "data_analyst",
+        re.compile(
+            r"\b(test|unit\s*test|fuzz|edge\s*case|boundar|invariant|verif|"
+            r"validat|benchmark|profil|metric|telemetry|measur|corner\s*case)\b",
+            re.I,
+        ),
+    ),
+    (
+        "code_reviewer",
+        re.compile(
+            r"\b(code|implement|function|class|algorithm|refactor|compile|"
+            r"syntax|rust|python|c\+\+|golang)\b",
+            re.I,
+        ),
+    ),
+    (
+        "research",
+        re.compile(
+            r"\b(research|document|spec|standard|rfc|literature|survey|"
+            r"state\s*of\s*the\s*art|paper|academic)\b",
+            re.I,
+        ),
+    ),
+    (
+        "governance",
+        re.compile(
+            r"\b(govern|complian|policy|legal|gdpr|dsgvo|audit|regul)\b",
+            re.I,
+        ),
+    ),
+    (
+        "compounding_knowledge",
+        re.compile(
+            r"\b(graph|ontology|entity|relation|kg|knowledge\s*base)\b",
+            re.I,
+        ),
+    ),
+    (
+        "general",
+        re.compile(
+            r"\b(overview|synthes|coordinat|summar|general|intro)\b",
+            re.I,
+        ),
+    ),
+]
+
+_FALLBACK_SPECIALIST_ORDER: list[str] = [
+    "data_analyst",
+    "security",
+    "research",
+    "governance",
+    "general",
+    "compounding_knowledge",
+]
+
+
+def disperse_category_hotspots(
+    tasks: list[dict],
+    available_categories: Sequence[str] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Disperse duplicate category assignments across orthogonal idle specialists.
+
+    When multiple tasks in a plan target the exact same category (such as multiple
+    tasks claiming 'code_reviewer'), they block each other at the single-GPU
+    endpoint semaphore (e.g. N02-M60-09), causing serial execution while 7 other
+    dedicated GPU ports remain idle.
+
+    This normalizer detects duplicate categories. For any task beyond the first
+    occurrence of a category, it checks the task description for domain keywords
+    and remaps it to an orthogonal, unused specialist category (e.g., 'security',
+    'data_analyst', 'research'). If no keyword matches, it assigns the least-loaded
+    specialist from a fallback pool.
+
+    Parameters:
+        tasks: The list of task dictionaries in the plan.
+        available_categories: Optional whitelist of valid template categories.
+
+    Returns:
+        (tasks, repairs): The modified tasks list (in-place) and a list of
+        repair audit dicts {"task_id", "from", "to", "reason"}.
+    """
+    if os.getenv("MOE_DISPERSE_CATEGORY_HOTSPOTS", "1") != "1":
+        return tasks, []
+
+    valid_set = set(available_categories) if available_categories else None
+    repairs: list[dict] = []
+    seen_categories: set[str] = set()
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        cat = str(task.get("category") or "general").strip()
+        task_id = str(task.get("id") or "")
+
+        # Never remap precision tools (which require MCP tool schema contracts)
+        if cat == "precision_tools":
+            continue
+
+        if cat not in seen_categories:
+            seen_categories.add(cat)
+            continue
+
+        # Category is already claimed by an earlier task in the plan: HOTSPOT!
+        task_text = str(
+            task.get("task")
+            or task.get("instruction")
+            or task.get("task_description")
+            or ""
+        )
+
+        chosen_cat: str | None = None
+        match_reason: str = "keyword_match"
+
+        # 1. Try keyword matching to an unused candidate category
+        for candidate_cat, pattern in _CATEGORY_KEYWORD_MAP:
+            if candidate_cat != cat and candidate_cat not in seen_categories:
+                if valid_set is None or candidate_cat in valid_set:
+                    if pattern.search(task_text):
+                        chosen_cat = candidate_cat
+                        break
+
+        # 2. If no keyword match or candidate already taken, pick from fallback pool
+        if not chosen_cat:
+            match_reason = "load_balance_fallback"
+            for fallback_cat in _FALLBACK_SPECIALIST_ORDER:
+                if fallback_cat != cat and fallback_cat not in seen_categories:
+                    if valid_set is None or fallback_cat in valid_set:
+                        chosen_cat = fallback_cat
+                        break
+
+        if chosen_cat and chosen_cat != cat:
+            repairs.append({
+                "task_id": task_id,
+                "from": cat,
+                "to": chosen_cat,
+                "reason": match_reason,
+            })
+            task["category"] = chosen_cat
+            seen_categories.add(chosen_cat)
+        else:
+            # All available categories saturated; keep original category
+            seen_categories.add(cat)
+
+    return tasks, repairs
+
+
+def prune_artificial_dependencies(
+    tasks: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """Prune artificial sequential `depends_on` chains that lack genuine data flow.
+
+    Planner models frequently emit sequential `depends_on: "task-1"`, `"task-2"`
+    merely due to autoregressive enumeration, even when the subtasks are independent
+    multidisciplinary perspectives (e.g. security audit or edge-case tests) on the
+    same user query.
+
+    Since LangGraph's topological execution groups tasks into sequential levels,
+    unnecessary dependencies prevent parallel execution across independent GPUs.
+    Furthermore, expert tasks that lack `{result_of:id}` placeholders receive no prior
+    outputs at execution time anyway.
+
+    A dependency `task["depends_on"] = dep` is PRESERVED if:
+    1. Any string field in the task contains `{result_of:<dep>}`.
+    2. The task's `mcp_args` contains a `$task_result` reference pointing to `dep`.
+    3. The task description explicitly references depending on or consuming the
+       output/result of `<dep>`.
+
+    Otherwise, the dependency is deemed artificial and cleared (`""`), placing the
+    task into Level 0 for parallel execution.
+
+    Parameters:
+        tasks: The list of task dictionaries in the plan.
+
+    Returns:
+        (tasks, repairs): The modified tasks list (in-place) and a list of
+        repair audit dicts {"task_id", "from", "to", "reason"}.
+    """
+    if os.getenv("MOE_PRUNE_ARTIFICIAL_DEPS", "1") != "1":
+        return tasks, []
+
+    repairs: list[dict] = []
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        dep = str(task.get("depends_on") or "").strip()
+        if not dep:
+            continue
+
+        task_id = str(task.get("id") or "")
+        task_text = str(
+            task.get("task")
+            or task.get("instruction")
+            or task.get("task_description")
+            or ""
+        )
+
+        # Check 1: Does task text contain {result_of:<dep>}?
+        if f"{{result_of:{dep}}}" in task_text:
+            continue
+
+        # Check 2: Does mcp_args contain $task_result pointing to dep?
+        mcp_args = task.get("mcp_args")
+        has_task_result_ref = False
+        if isinstance(mcp_args, dict):
+            def _has_ref(val: Any) -> bool:
+                if is_task_result_ref(val) and str(val.get("$task_result")) == dep:
+                    return True
+                if isinstance(val, list):
+                    return any(_has_ref(item) for item in val)
+                if isinstance(val, dict):
+                    return any(_has_ref(v) for v in val.values())
+                return False
+            has_task_result_ref = _has_ref(mcp_args)
+
+        if has_task_result_ref:
+            continue
+
+        # Check 3: Explicit linguistic consumption of prior output
+        dep_escaped = re.escape(dep)
+        explicit_consumer_pattern = re.compile(
+            rf"\b(?:using|from|based\s+on|output\s+of|result\s+of|nach|basierend\s+auf|"
+            rf"ergebnis\s+von|aus|baue\s+auf)\s+{dep_escaped}\b",
+            re.I,
+        )
+        if explicit_consumer_pattern.search(task_text):
+            continue
+
+        # No genuine data flow: artificial dependency!
+        repairs.append({
+            "task_id": task_id,
+            "from": dep,
+            "to": "",
+            "reason": "artificial_sequential_dependency",
+        })
+        task["depends_on"] = ""
+
     return tasks, repairs
 
 
@@ -1219,19 +1525,24 @@ def validate_plan_tasks(
                 message="plan must contain at least one task",
             )
         ]
-    if max_tasks is not None and len(tasks) > max_tasks:
-        issues.append(
-            PlannerContractIssue(
-                task_index=-1,
-                code="too_many_tasks",
-                field="tasks",
-                message=(
-                    f"plan contains {len(tasks)} tasks but the executable "
-                    f"maximum is {max_tasks}; combine compatible non-precision "
-                    "work without omitting any requested outcome"
-                ),
+    if max_tasks is not None:
+        # The limit bounds model work. Deterministic MCP calls (tasks that name an mcp_tool) run in parallel, cost no
+        # model call and are needed one per requested figure, so they only count against a wider total ceiling.
+        model_tasks = [t for t in tasks if not (isinstance(t, dict) and t.get("mcp_tool"))]
+        total_ceiling = max_tasks * 3
+        if len(model_tasks) > max_tasks or len(tasks) > total_ceiling:
+            issues.append(
+                PlannerContractIssue(
+                    task_index=-1,
+                    code="too_many_tasks",
+                    field="tasks",
+                    message=(
+                        f"plan contains {len(tasks)} tasks ({len(model_tasks)} model tasks) but the executable "
+                        f"maximum is {max_tasks} model tasks and {total_ceiling} in total; combine compatible "
+                        "non-precision work without omitting any requested outcome"
+                    ),
+                )
             )
-        )
 
     schemas = tool_schemas or {}
     _task_id_positions = {

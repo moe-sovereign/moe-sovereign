@@ -191,9 +191,9 @@ plateaus around Epoch 4-5 as the knowledge graph saturates for the test domain.
 
 Pre-configured profile JSONs are available for download:
 
-- [`cc-ref-native.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-native.json) — Direct LLM
-- [`cc-ref-reasoning.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-reasoning.json) — Thinking Node
-- [`cc-ref-orchestrated.json`](https://github.com/h3rb3rn/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-orchestrated.json) — Full Pipeline
+- [`cc-ref-native.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-native.json) — Direct LLM
+- [`cc-ref-reasoning.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-reasoning.json) — Thinking Node
+- [`cc-ref-orchestrated.json`](https://github.com/moe-sovereign/moe-sovereign/blob/main/configs/cc_profiles/downloads/cc-ref-orchestrated.json) — Full Pipeline
 
 Replace `<YOUR_OLLAMA_HOST>` and `<YOUR_TEMPLATE_ID>` with your actual values.
 

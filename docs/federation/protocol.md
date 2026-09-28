@@ -214,7 +214,7 @@ graph TB
 
     HA <-->|hub-to-hub sync| HG
     HB <-->|hub-to-hub sync| HG
-    HA <-.->|direct peering<br/>(optional)| HB
+    HA <-.->|"direct peering<br/>(optional)"| HB
 ```
 
 ### How Hub-to-Hub Sync Works

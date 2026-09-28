@@ -3,25 +3,32 @@
 !!! info "Auto-generated"
     This page is updated every 15 minutes by the `moe-docs-sync` service.
 
-*Last updated: **2026-08-25 16:39***
+*Last updated: **2026-09-28 18:01***
 
 ## Metrics
 
 | Metric | Value |
 |--------|-------|
-| Neo4j Entities | 19112 |
-| Neo4j Relations | 227749 |
-| ChromaDB Documents | 3913 |
-| Total Requests | 36 |
+| Neo4j Entities | 16943 |
+| Neo4j Relations | 108791 |
+| ChromaDB Documents | 4068 |
+| Total Requests | ? |
 
 ## Docker Containers
 
 | Container | Status | Ports |
 |-----------|--------|-------|
+| authentik-postgresql | running | — |
+| authentik-redis | running | — |
+| authentik-server | running | 9000→9000/tcp, 9443→9443/tcp |
+| authentik-worker | running | — |
 | cadvisor | running | 9338→8080/tcp |
 | chromadb-vector | running | — |
 | docker-socket-proxy | running | — |
+| lakefs-postgres | running | — |
 | langgraph-orchestrator | running | 8002→8000/tcp |
+| marquez-postgres | running | — |
+| marquez-web | running | 3031→3000/tcp |
 | mcp-precision | running | 8003→8003/tcp |
 | moe-admin | running | 8088→8088/tcp |
 | moe-akhq | running | 8085→8080/tcp |
@@ -30,14 +37,19 @@
 | moe-dozzle | running | 9999→8080/tcp |
 | moe-embed | running | — |
 | moe-grafana | running | 3001→3000/tcp |
+| moe-jupyterlab | running | 8899→8888/tcp |
 | moe-kafka | running | 9092→9092/tcp |
+| moe-lakefs | running | 8010→8000/tcp |
 | moe-maintenance | running | — |
+| moe-marquez | running | 5000→5000/tcp, 5001→5001/tcp |
+| moe-nifi | running | 8181→8443/tcp |
 | moe-prometheus | running | 9090→9090/tcp |
 | moe-splash | running | — |
 | moe-storage-garage | running | 3900→3900/tcp, 3903→3903/tcp |
 | neo4j-knowledge | running | 7474→7474/tcp, 7687→7687/tcp |
 | node-exporter | running | 9100→9100/tcp |
 | rust-compile-sandbox | running | — |
+| rust-loom-sandbox | running | — |
 | terra_cache | running | — |
 | terra_checkpoints | running | — |
 

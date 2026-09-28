@@ -140,6 +140,25 @@ def _tier2_escalation_decision(cost_tier_t1: bool, t1_confs: list, has_tier2: bo
     return "t2_escalated"
 
 
+def _ollama_chat_messages(messages) -> list:
+    """Chat messages for Ollama's native /api/chat from dict or LangChain messages, roles preserved.
+
+    Dict messages used to fall through to role "user" with content ``str(message)``, so the model received the Python
+    repr of the system prompt inside a user turn (every expert call recorded in ai_io_audit_log since July 2026).
+    """
+    out = []
+    for m in messages:
+        if isinstance(m, dict):
+            role = m.get("role", "user")
+            out.append({"role": role if role in ("system", "user", "assistant", "tool") else "user",
+                        "content": m.get("content", "")})
+            continue
+        mtype = getattr(m, "type", "")
+        role = "assistant" if mtype == "ai" else "system" if mtype == "system" else "user"
+        out.append({"role": role, "content": m.content if hasattr(m, "content") else str(m)})
+    return out
+
+
 async def expert_worker(state_: AgentState):
     if state_.get("cache_hit"):
         return {"expert_results": []}
@@ -334,8 +353,13 @@ async def expert_worker(state_: AgentState):
             mode_cfg    = MODES.get(mode, MODES["default"])
             # _base_static_sys: identical for every call with the same category + mode.
             # Used as the cacheable block when the endpoint is Anthropic-native.
+            # Prefer explicit per-model system prompt if provided by template shadow expert
+            _expert_sys = (
+                model_cfg.get("_system_prompt")
+                or _get_expert_prompt(cat, state_.get("user_experts"))
+            )
             _base_static_sys = (
-                _get_expert_prompt(cat, state_.get("user_experts"))
+                _expert_sys
                 + mode_cfg["expert_suffix"]
                 + _conf_format_for_mode(mode)
             )
@@ -479,9 +503,11 @@ async def expert_worker(state_: AgentState):
             _CODE_GEN_CATS = {"code_reviewer", "devops_sre", "frontend", "backend", "fullstack"}
             # Derive per-expert output and input limits from context window.
             # Code-generation categories use a much higher output cap so that
-            # large HTML/JS/Python files are not truncated mid-function.
+            # large HTML/JS/Python files are not truncated mid-function. Forced shadow experts
+            # act as auditors/evaluators and are bounded to standard MAX_EXPERT_OUTPUT_CHARS.
+            _is_code_primary = cat in _CODE_GEN_CATS and not model_cfg.get("forced")
             _max_output_cap = (
-                MAX_EXPERT_OUTPUT_CHARS_CODE if cat in _CODE_GEN_CATS else MAX_EXPERT_OUTPUT_CHARS
+                MAX_EXPERT_OUTPUT_CHARS_CODE if _is_code_primary else MAX_EXPERT_OUTPUT_CHARS
             )
             if is_deliberation_turn:
                 _max_output_cap = min(
@@ -587,7 +613,7 @@ async def expert_worker(state_: AgentState):
             # can easily exceed 16k tokens; 4096 would truncate mid-function.
             # _CODE_GEN_CATS is already defined above (before first use).
             _expert_max_tokens = (
-                MAX_EXPERT_TOKENS_CODE if cat in _CODE_GEN_CATS else MAX_EXPERT_TOKENS
+                MAX_EXPERT_TOKENS_CODE if _is_code_primary else MAX_EXPERT_TOKENS
             )
             _expert_max_tokens = bounded_output_tokens(
                 state_,
@@ -673,9 +699,15 @@ async def expert_worker(state_: AgentState):
                 from langchain_core.messages import HumanMessage
                 _patched = list(messages)
                 for _i in reversed(range(len(_patched))):
-                    if hasattr(_patched[_i], "type") and _patched[_i].type == "human":
+                    if isinstance(_patched[_i], dict) and _patched[_i].get("role") == "user":
+                        _orig = _patched[_i].get("content", "")
+                        if isinstance(_orig, str) and not _orig.startswith("/no_think"):
+                            _patched[_i] = {**_patched[_i], "content": f"/no_think\n{_orig}"}
+                        break
+                    elif hasattr(_patched[_i], "type") and _patched[_i].type == "human":
                         _orig = _patched[_i].content
-                        _patched[_i] = HumanMessage(content=f"/no_think\n{_orig}")
+                        if isinstance(_orig, str) and not _orig.startswith("/no_think"):
+                            _patched[_i] = HumanMessage(content=f"/no_think\n{_orig}")
                         break
                 messages = _patched
             from metrics import PROM_TOKENS
@@ -688,13 +720,7 @@ async def expert_worker(state_: AgentState):
                 # Modelfile default (8192) instead of 32768 — evicting the CC tool model and
                 # forcing a 90-second reload on the next CC request.
                 if api_type == "ollama":
-                    _native_msgs = []
-                    for _m in messages:
-                        _role = ("assistant" if (hasattr(_m, "type") and _m.type == "ai") else
-                                 "system"    if (hasattr(_m, "type") and _m.type == "system") else
-                                 "user")
-                        _native_msgs.append({"role": _role,
-                                             "content": _m.content if hasattr(_m, "content") else str(_m)})
+                    _native_msgs = _ollama_chat_messages(messages)
                     _ollama_base = url.rstrip("/").removesuffix("/v1")
                     _native_opts: dict = {"num_predict": _expert_max_tokens}
                     if _expert_ctx_for_api > 0:
@@ -1019,7 +1045,46 @@ async def expert_worker(state_: AgentState):
             if _local_experts:
                 all_experts = _local_experts
 
-        forced_experts = [e for e in all_experts if e.get("forced", False)]
+        # Collect forced shadow experts — skip any whose domain/category or single-slot endpoint
+        # is already explicitly planned as a separate task in this plan, avoiding endpoint queue collisions.
+        other_planned_cats = {
+            str(t.get("category") or "").lower() for _, t in expert_tasks
+            if str(t.get("id") or "") != str(task.get("id") or "")
+        }
+        other_planned_endpoints = set()
+        for _, t in expert_tasks:
+            if str(t.get("id") or "") == str(task.get("id") or ""):
+                continue
+            t_cat = t.get("category", "general")
+            t_models = effective_experts.get(t_cat, [])
+            for tm in t_models:
+                if tm.get("endpoint"):
+                    other_planned_endpoints.add(tm.get("endpoint"))
+
+        forced_experts = []
+        for e in all_experts:
+            if not e.get("forced", False):
+                continue
+            e_model = str(e.get("model") or "").lower()
+            e_ep = str(e.get("endpoint") or "")
+            forced_role = str(e.get("role") or "").lower()
+
+            # Check 1: Category / model domain conflict with another planned task
+            cat_conflict = any(
+                c in e_model or f"shadow_{c}" in forced_role or c == forced_role
+                for c in other_planned_cats if c
+            )
+            # Check 2: Single-slot endpoint conflict with another planned task
+            ep_conflict = bool(e_ep and e_ep in other_planned_endpoints)
+
+            if cat_conflict or ep_conflict:
+                logger.info(
+                    "Shadow expert %s (%s) skipped for task %s (conflict with other planned tasks: cat_conflict=%s, ep_conflict=%s)",
+                    e.get("model"), e_ep, task.get("id"), cat_conflict, ep_conflict
+                )
+                continue
+            forced_experts.append(e)
+
         normal_experts = [e for e in all_experts if not e.get("forced", False)]
 
         scored = []

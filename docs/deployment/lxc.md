@@ -40,7 +40,7 @@ Alternatively, set `privileged: 1` — this grants all required capabilities aut
 From inside the LXC (Debian 12/13 or Ubuntu 22.04/24.04):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/h3rb8rn/moe-sovereign/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
 ```
 
 The installer will prompt for:
@@ -183,6 +183,10 @@ container isolation without privileged capabilities.
 ### Why Podman (not Docker) in unprivileged LXC?
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart LR
     subgraph LXC["Unprivileged LXC container"]
         direction TB

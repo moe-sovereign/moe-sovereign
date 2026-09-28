@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 import state
+from services.pipeline.disconnect import ClientDisconnected, run_until_disconnect
 import starfleet_config as _starfleet
 import mission_context as _mission_context
 from parsing import _oai_content_to_str, _extract_oai_images
@@ -1631,7 +1632,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
     _ol_run_id = await _ol_start(
         "chat_completion",
         inputs=[dataset_user_query(session_id or "")],
-        extra_facets={"requestModel": {"_producer": "https://github.com/h3rb3rn/moe-sovereign",
+        extra_facets={"requestModel": {"_producer": "https://github.com/moe-sovereign/moe-sovereign",
                                        "_schemaURL": "moe-sovereign://requestModel",
                                        "model": request.model}},
     )
@@ -2333,9 +2334,12 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             _ns_msgs.append(_nd)
         _NS_THINKING_PREFIXES = ("qwen3", "gemma4", "qwq")
         _ns_model = _native_endpoint["model"].lower()
+        # Plain chat (no tools) to any Ollama model also goes through native /api/chat: the OpenAI-compatible /v1 endpoint
+        # ignores options.num_ctx (verified on Ollama 0.34.1), so such calls always ran with the server default context
+        # and forced a reload whenever the model was loaded with another one (the 32B judge: 111 s per call).
         _ns_use_native = (
             _ep_api_type == "ollama"
-            and any(t in _ns_model for t in _NS_THINKING_PREFIXES)
+            and (any(t in _ns_model for t in _NS_THINKING_PREFIXES) or not request.tools)
         )
         if _ns_use_native:
             # Native Ollama /api/chat with think:false — mirrors the streaming path.
@@ -2408,6 +2412,12 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             _ns_opts: dict = {}
             if _native_num_ctx > 0:
                 _ns_opts["num_ctx"] = _native_num_ctx
+            else:
+                # No explicit context: reuse the one the model is already loaded with instead of forcing a reload.
+                from services.ollama_warm_ctx import loaded_ctx as _loaded_ctx
+                _warm_ctx = await _loaded_ctx(_ns_base, _native_endpoint.get("token"), _native_endpoint["model"])
+                if _warm_ctx > 0:
+                    _ns_opts["num_ctx"] = _warm_ctx
             _ns_eff_max = request.max_tokens or request.max_completion_tokens
             if _ns_eff_max:
                 _ns_opts["num_predict"] = _ns_eff_max
@@ -2926,7 +2936,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
         ORCHESTRATION_TIMEOUT - (time.monotonic() - _request_started),
     )
     try:
-        result = await asyncio.wait_for(state.app_graph.ainvoke(
+        result = await run_until_disconnect(raw_request, state.app_graph.ainvoke(
         {"input": user_input, "response_id": chat_id, "mode": mode,
          "user_id": user_id, "api_key_id": api_key_id,
          "request_deadline_monotonic": _request_started + ORCHESTRATION_TIMEOUT,
@@ -3041,6 +3051,19 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
          },
         {"configurable": {"thread_id": str(uuid.uuid4())}},
         ), timeout=_remaining_timeout)
+    except ClientDisconnected:
+        _elapsed_ms = round((time.monotonic() - _t_start) * 1000)
+        from services.request_snapshot import consume_request_snapshot
+        _progress = consume_request_snapshot(chat_id)
+        logger.warning(
+            "Client disconnected, orchestration cancelled request=%s after %sms", chat_id, _elapsed_ms,
+        )
+        await _deregister_active_request(
+            chat_id,
+            {"status": "cancelled", "error_code": "client_disconnected", "latency_ms": _elapsed_ms, **_progress},
+        )
+        await _ol_fail(_ol_run_id, job_name="chat_completion", error="client disconnected")
+        return Response(status_code=499)
     except asyncio.TimeoutError:
         _elapsed_ms = round((time.monotonic() - _t_start) * 1000)
         from services.ai_io_audit import aggregate_request_usage

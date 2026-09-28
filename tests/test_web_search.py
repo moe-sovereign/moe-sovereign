@@ -60,7 +60,14 @@ class TestReliabilityLabel:
 # ── _web_search_with_citations ─────────────────────────────────────────────────
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    # A private loop: asyncio.get_event_loop() raises once an earlier async
+    # test has closed the thread's current loop, which made this file
+    # order-dependent.
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 class TestWebSearchWithCitations:

@@ -20,12 +20,6 @@ HF_USERNAME = "h3rb3rn"
 
 MODELS = [
     {
-        "role": "planner",
-        "repo_name": "moe-sovereign-student-4b",
-        "export_dir": EXPORTS_BASE / "moe-sovereign-student-4b",
-        "card": MODEL_CARDS_DIR / "moe-sovereign-student-4b.md"
-    },
-    {
         "role": "governance",
         "repo_name": "moe-expert-governance-4b",
         "export_dir": EXPORTS_BASE / "moe-expert-governance-4b",

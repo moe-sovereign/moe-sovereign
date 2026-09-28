@@ -1,0 +1,133 @@
+# Debate-analysis rubric, version v1.
+#
+# STATUS: draft. Criteria are derived from practitioner input (debate
+# experience) and have NOT been calibrated against human ratings. Weights are
+# starting values; do not change them without a documented calibration run
+# (see docs/system/debate-analysis.md). Every stored result records this
+# version, so results from different versions are never compared silently.
+version: v1
+status: draft
+
+axes:
+  substance:
+    description: >-
+      Is what is said factually correct and adequately informed? The audience
+      frame never influences this axis.
+  argumentation:
+    description: >-
+      How well is the case built and defended, independent of who is right?
+  audience_impact:
+    description: >-
+      How does the contribution land for this audience, at this time, in this
+      culture? Relative to the DebateProfile frame; an estimate, not a fact.
+
+# Overall weighting of the three axes depends on the debate goal. The three
+# axis scores are always reported separately; the overall value is only a
+# convenience aggregate.
+axis_weights_by_goal:
+  substance:  {substance: 0.5, argumentation: 0.35, audience_impact: 0.15}
+  opinion:    {substance: 0.15, argumentation: 0.3, audience_impact: 0.55}
+  mixed:      {substance: 0.35, argumentation: 0.35, audience_impact: 0.3}
+
+criteria:
+  # --- substance ---------------------------------------------------------
+  - id: claim_accuracy
+    axis: substance
+    weight: 0.4
+    description: Verifiable claims are correct, complete enough and not misleading.
+    anchors: {low: "Central claims are false or unsupported.", mid: "Mostly correct, with unverified or imprecise claims.", high: "Claims are verified and correct."}
+    requires: [retrieval]
+  - id: quote_accuracy
+    axis: substance
+    weight: 0.2
+    description: >-
+      Quotations are real and correctly attributed; common phrases are not
+      passed off as quotations (and the reverse).
+    anchors: {low: "Invented or misattributed quotation, or phrase presented as a quote.", mid: "Attribution plausible but unchecked.", high: "Quotations verified; phrases labelled as such."}
+    requires: [retrieval]
+  - id: preparedness
+    axis: substance
+    weight: 0.2
+    description: >-
+      Does the speaker know what could be expected as basic knowledge for this
+      topic and role?
+    anchors: {low: "Basic facts of the topic are missing.", mid: "Adequate for the role.", high: "Command beyond the expected basics."}
+    requires: []
+  - id: context_fit_of_evidence
+    axis: substance
+    weight: 0.2
+    description: >-
+      Examples and comparisons actually belong to the context (no apples and
+      oranges, no anachronism).
+    anchors: {low: "Evidence from a different context is used as if it applied.", mid: "Partly comparable.", high: "Evidence and comparisons fit the case."}
+    requires: []
+
+  # --- argumentation -----------------------------------------------------
+  - id: structure
+    axis: argumentation
+    weight: 0.2
+    description: Claim, reason and evidence are stated and connected ("claim, because ...").
+    anchors: {low: "Assertions without reasons.", mid: "Reasons given, evidence thin.", high: "Claim, reason and evidence are explicit and linked."}
+    requires: []
+  - id: fallacy_freedom
+    axis: argumentation
+    weight: 0.25
+    description: Absence of fallacies from the catalogue (see debate_fallacies_v1.yaml).
+    anchors: {low: "Several or decisive fallacies.", mid: "Isolated fallacies.", high: "None detected."}
+    requires: []
+  - id: responsiveness
+    axis: argumentation
+    weight: 0.2
+    description: Objections are answered rather than dodged or redirected.
+    anchors: {low: "Evades or changes the subject.", mid: "Answers partly.", high: "Answers the objection directly."}
+    requires: []
+  - id: tactical_awareness
+    axis: argumentation
+    weight: 0.2
+    description: >-
+      Uses the opponent's concessions and evasions, and avoids handing over
+      openings (self-damaging statements, conceding the decisive point).
+    anchors: {low: "Hands the opponent the decisive opening.", mid: "Neutral.", high: "Exploits openings and closes own weak points."}
+    requires: []
+  - id: concession_management
+    axis: argumentation
+    weight: 0.15
+    description: >-
+      Weaknesses are admitted deliberately and framed, so that the question is
+      pre-empted, instead of being exposed.
+    anchors: {low: "Weakness is exposed by the opponent.", mid: "Not addressed.", high: "Weakness named and framed by the speaker."}
+    requires: []
+
+  # --- audience impact ---------------------------------------------------
+  - id: audience_fit
+    axis: audience_impact
+    weight: 0.3
+    description: >-
+      Level, vocabulary and appeal match the audience (lay vs. expert, factual
+      vs. opinion-forming).
+    anchors: {low: "Wrong level or register for the audience.", mid: "Acceptable.", high: "Well matched."}
+    requires: [profile]
+  - id: reception_in_frame
+    axis: audience_impact
+    weight: 0.35
+    description: >-
+      Expected reception given the frame date and culture: does the wording
+      or position cost credibility with this audience at this time? Estimate
+      with evidence and confidence.
+    anchors: {low: "Likely to cost the speaker the audience.", mid: "Neutral or contested.", high: "Likely well received."}
+    requires: [profile, retrieval]
+  - id: comprehensibility
+    axis: audience_impact
+    weight: 0.2
+    description: Can the audience be expected to understand the point?
+    anchors: {low: "Hard to follow.", mid: "Understandable with effort.", high: "Clear."}
+    requires: [profile]
+  - id: composure_and_retort
+    axis: audience_impact
+    weight: 0.15
+    description: >-
+      Composure under pressure and quickness of reply. Not observable from a
+      text transcript; reported as not assessable unless timing or audio/video
+      information is supplied.
+    anchors: {low: "Visibly unsettled or stalling.", mid: "Steady.", high: "Immediate, composed replies."}
+    requires: [timing_or_media]

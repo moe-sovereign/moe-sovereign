@@ -2,19 +2,22 @@
 """
 run_scientific_benchmark.py -- Scientific Multidisciplinary Benchmark Runner for MoE Sovereign
 
-Evaluates:
-  1. MoE Sovereign Compound AI (Student 4B Planner on N04-RGTX + 8x 4B domain Experts +
-     Sovereign-Judge 27B on N04-RTX + Full MCP Tooling + GraphRAG)
-  2. MoE Sovereign Compound AI + Debate (adds multi-agent deliberation before the Judge verdict)
-  3. MoE Sovereign Ablation (No GraphRAG Knowledge Base)
-  4. Native Single LLM Baseline (Direct Qwen3.8-27B on N04-RTX, no orchestration/tools/GraphRAG)
-     -- the "bigger brother": a dense 27B model with none of the compound-AI scaffolding, so the
-     benchmark can test whether the 4B-SLM + GraphRAG + Judge architecture matches or exceeds a
-     much larger monolithic model on the same tasks.
+Evaluates (per track; the templates are configured through MOE_BENCHMARK_TEMPLATE_* variables):
+  1. compound_ai: the fine-tuned ensemble (fine-tuned planner on N04-RGTX, fine-tuned domain experts,
+     fine-tuned judge on N04-RTX, MCP tooling, GraphRAG). All models are the hf.co/h3rb3rn fine-tunes,
+     e.g. Spur 2: Qwen3.5-9B planner, Qwen3.5-4B experts, Qwen3.8-27B judge.
+  2. compound_ai_debate: the same ensemble plus multi-agent deliberation before the judge verdict
+  3. ablation_no_graphrag: the same ensemble without the GraphRAG knowledge base
+  4. prefinetune_ai / prefinetune_ai_debate / prefinetune_ablation_no_graphrag (optional, enabled per variable
+     MOE_BENCHMARK_TEMPLATE_PREFINETUNE, _PREFINETUNE_DEBATE, _PREFINETUNE_ABLATION_NO_GRAPHRAG): the same three
+     ensembles built from the models BEFORE fine-tuning; each is compared with its fine-tuned counterpart
+     (compound_ai, compound_ai_debate, ablation_no_graphrag) to isolate the system-level effect of the fine-tuned weights
+  5. native_baseline: a large dense base model called directly (no orchestration/tools/GraphRAG) -- the
+     "bigger brother" the compound system has to match or exceed.
 
 Generates:
   - Detailed per-task execution traces
-  - Deterministic + LLM-as-a-Judge evaluations via sovereign-judge:27b
+  - Deterministic + LLM-as-a-Judge evaluations via the fine-tuned sovereign judges (hf.co/h3rb3rn/sovereign-judge-*)
   - Formatted JSON and Markdown artifacts in benchmarks/results/
 """
 
@@ -68,7 +71,7 @@ def _redis_password() -> Optional[str]:
     return None
 API_KEY = os.environ.get("MOE_API_KEY", "YOUR_API_KEY_HERE")
 
-JUDGE_MODEL = os.environ.get("MOE_JUDGE_MODEL", "sovereign-judge:27b")
+JUDGE_MODEL = os.environ.get("MOE_JUDGE_MODEL", "hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M")
 NATIVE_MODEL = os.environ.get("MOE_BENCHMARK_NATIVE_MODEL", "qwen3.8:27b")
 # Node for the "model@node" native-passthrough route on the MoE Sovereign API
 # (services/pipeline/chat.py) -- both the judge (scoring) and the native
@@ -81,19 +84,55 @@ SUITE = os.environ.get("BENCHMARK_SUITE", "sovereign")
 
 # Template names configured in database (admin_expert_templates). Overridable
 # via env vars so this harness can target a different template family (e.g.
-# the LUMI-G ensemble) without editing source; defaults preserve the
-# historical qwen-based template names for existing callers.
+# the Open-Weight ensemble) without editing source; the defaults are the Spur 1
+# (open source) fine-tuned templates.
 TEMPLATES = {
     "compound_ai": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI", "MoE Sovereign Scientific Benchmark"
+        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble"
     ),
     "compound_ai_debate": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE", "MoE Sovereign Deliberation Benchmark"
+        "MOE_BENCHMARK_TEMPLATE_COMPOUND_AI_DEBATE", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - Deliberation"
     ),
     "ablation_no_graphrag": os.environ.get(
-        "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "MoE Sovereign Ablation (No GraphRAG)"
+        "MOE_BENCHMARK_TEMPLATE_ABLATION_NO_GRAPHRAG", "LUMI-G OLMo + SmolLM3 Sovereign Ensemble - No-GraphRAG"
     ),
+    # Optional reference arms: the same three ensembles built from the models BEFORE fine-tuning
+    # (e.g. "LUMI-G Base (Pre-Finetune)" + " - Deliberation" + " - No-GraphRAG"). Empty = condition disabled.
+    # Comparing each with its fine-tuned counterpart isolates the system-level effect of the fine-tuned weights.
+    "prefinetune_ai": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE", "").strip(),
+    "prefinetune_ai_debate": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE_DEBATE", "").strip(),
+    "prefinetune_ablation_no_graphrag": os.environ.get("MOE_BENCHMARK_TEMPLATE_PREFINETUNE_ABLATION_NO_GRAPHRAG", "").strip(),
 }
+
+# (pre-finetune condition, fine-tuned counterpart, label used in the report)
+PREFINETUNE_PAIRS = [
+    ("prefinetune_ai", "compound_ai", "graphrag"),
+    ("prefinetune_ai_debate", "compound_ai_debate", "graphrag_debate"),
+    ("prefinetune_ablation_no_graphrag", "ablation_no_graphrag", "no_graphrag"),
+]
+
+def _build_conditions(order: str = "family") -> List[Any]:
+    """The conditions of one task in run order.
+
+    "family" (default): native baseline, then all pre-finetune templates, then all fine-tuned templates. Every expert
+    category is pinned to one Ollama instance, and the base and the fine-tuned models share those instances, the planner
+    instance and the judge instance; alternating base and fine-tuned conditions (the old "paired" order) swapped the resident
+    models on every instance in every condition (minutes of loading, e.g. 21 min for 1028 tokens) and put the loading time
+    into the measured latency. Grouping by family leaves one swap per family and task.
+    "paired": each fine-tuned condition followed by its pre-finetune counterpart, native last.
+    """
+    if order == "paired":
+        out: List[Any] = []
+        for pre_name, fine_name, _ in PREFINETUNE_PAIRS:
+            out.append((fine_name, TEMPLATES[fine_name]))
+            if TEMPLATES[pre_name]:
+                out.append((pre_name, TEMPLATES[pre_name]))
+        out.append(("native_baseline", NATIVE_MODEL))
+        return out
+    pre = [(pre_name, TEMPLATES[pre_name]) for pre_name, _, _ in PREFINETUNE_PAIRS if TEMPLATES[pre_name]]
+    fine = [(fine_name, TEMPLATES[fine_name]) for _, fine_name, _ in PREFINETUNE_PAIRS]
+    return [("native_baseline", NATIVE_MODEL)] + pre + fine
+
 
 VALID_VERDICTS = {"EXCELLENT", "PASS", "DEFICIENT", "FAIL"}
 
@@ -732,8 +771,15 @@ async def run_single_test_condition(
     target_config: str,
     round_num: int,
     run_id: str,
+    defer_eval: bool = False,
 ) -> Dict[str, Any]:
-    """Execute a single test case under a specific configuration condition."""
+    """Execute a single test case under a specific configuration condition.
+
+    defer_eval: skip the judge evaluation and return a result marked ``PENDING``; the caller evaluates it later with
+    ``finalize_pending_evaluation``. Used to run all conditions of a task first and judge all answers afterwards, so
+    the judge model is not swapped out (a ~110 s reload for the 27-32B models) between generation calls, which would
+    inflate the measured latency of the next request.
+    """
     test_id = test_case["id"]
     test_type = test_case["type"]
     scoring_cfg = test_case.get("scoring", {})
@@ -854,6 +900,11 @@ async def run_single_test_condition(
             "verdict": "PIPELINE_FAILED",
             "reasoning": "Skipped judge evaluation: the pipeline call itself failed (turns[].ok is False), so there is no real response to grade.",
         }
+    elif defer_eval:
+        det_score = deterministic_score(final_response, scoring_cfg, expected_answer)
+        judge_score = 0.0
+        combined_score = 0.0
+        judge_res = {"verdict": "PENDING", "reasoning": "Judge evaluation deferred until all conditions of the task ran."}
     else:
         det_score = deterministic_score(final_response, scoring_cfg, expected_answer)
         judge_res = await judge_evaluation(
@@ -892,8 +943,26 @@ async def run_single_test_condition(
         "completion_tokens": total_comp_tok,
         "total_tokens": total_prompt_tok + total_comp_tok,
         "turns": turns_result,
-        "final_response": final_response[:1000]
+        "final_response": final_response[:1000],
+        **({"_pending_full_response": final_response} if judge_res.get("verdict") == "PENDING" else {}),
     }
+
+
+async def finalize_pending_evaluation(client: httpx.AsyncClient, test_case: Dict[str, Any], res: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the deferred judge evaluation of a result created with ``defer_eval=True`` and update it in place."""
+    full_response = res.pop("_pending_full_response", res.get("final_response", ""))
+    judge_res = await judge_evaluation(
+        client=client,
+        test_case=test_case,
+        prompt=test_case.get("prompt") or test_case.get("turns", [{}])[-1].get("prompt", ""),
+        response_text=full_response,
+    )
+    judge_score = float(judge_res.get("score") or judge_res.get("overall_score") or 5.0)
+    res["judge_score"] = judge_score
+    res["judge_verdict"] = judge_res.get("verdict", "N/A")
+    res["judge_reasoning"] = judge_res.get("reasoning", "")
+    res["score"] = round(0.4 * res["deterministic_score"] + 0.6 * judge_score, 2)
+    return res
 
 
 def _write_interim_reports(
@@ -991,10 +1060,10 @@ async def main():
     print("🚀 MOE SOVEREIGN SCIENTIFIC MULTIDISCIPLINARY BENCHMARK")
     print(f"Dataset: {DATASET_PATH.name}")
     # Dynamically resolve planner template reference instead of obsolete hardcoded student:4b
-    print(f"Planner Template: {TEMPLATES['compound_ai']} @ N04-RGTX (port 11435)")
-    print(f"Judge Model:   {JUDGE_MODEL} @ N04-RTX (port 11434)")
-    print(f"Expert Models: {NATIVE_MODEL} @ N04-RTX")
-    print(f"Baseline:      Native {NATIVE_MODEL} (Direct Inference)")
+    print(f"Fine-tuned Template: {TEMPLATES['compound_ai']}")
+    print(f"Pre-Finetune Templates: {[TEMPLATES[c] for c, _, _ in PREFINETUNE_PAIRS if TEMPLATES[c]] or '(disabled)'}")
+    print(f"Judge Model:   {JUDGE_MODEL} @ {JUDGE_NODE}")
+    print(f"Baseline:      Native {NATIVE_MODEL} @ {JUDGE_NODE} (Direct Inference)")
     print("=" * 80)
 
     if not DATASET_PATH.exists():
@@ -1015,12 +1084,7 @@ async def main():
     # native_baseline reinstated: the benchmark's purpose includes proving (or disproving)
     # that the 4B-SLM + GraphRAG + Judge compound system matches its "bigger brother" --
     # a dense large model (NATIVE_MODEL, qwen3.8:27b) with none of the scaffolding.
-    conditions = [
-        ("compound_ai", TEMPLATES["compound_ai"]),
-        ("compound_ai_debate", TEMPLATES["compound_ai_debate"]),
-        ("ablation_no_graphrag", TEMPLATES["ablation_no_graphrag"]),
-        ("native_baseline", NATIVE_MODEL),
-    ]
+    conditions = _build_conditions(os.environ.get("MOE_BENCHMARK_ORDER", "family"))
     _cond_filter = os.environ.get("MOE_BENCHMARK_CONDITIONS", "").strip()
     if _cond_filter:
         _wanted_conds = {c.strip() for c in _cond_filter.split(",") if c.strip()}
@@ -1105,6 +1169,8 @@ async def main():
             print(f"\n--- 🔄 EXECUTING BENCHMARK ROUND {r}/{NUM_ROUNDS} ---", flush=True)
             for tc in test_cases:
                 print(f"\n▶ Task: [{tc['category'].upper()}] {tc['name']} ({tc['complexity']})", flush=True)
+                pending_eval: List[Any] = []
+                _defer_eval = os.environ.get("MOE_BENCHMARK_DEFER_EVAL", "1").strip().lower() not in ("", "0", "false", "no")
                 for cond_name, target_cfg in conditions:
                     run_key = f"r{r}_{tc['id']}_{cond_name}"
 
@@ -1120,8 +1186,13 @@ async def main():
                         continue
 
                     print(f"  • Condition: {cond_name:22} ... ", end="", flush=True)
-                    res = await run_single_test_condition(client, tc, cond_name, target_cfg, round_num=r, run_id=run_id)
+                    res = await run_single_test_condition(client, tc, cond_name, target_cfg, round_num=r, run_id=run_id,
+                                                          defer_eval=_defer_eval)
                     all_results.append(res)
+                    if res.get("judge_verdict") == "PENDING":
+                        pending_eval.append((run_key, res))
+                        print(f"answer stored, judge evaluation follows after the task | {res['total_time_s']}s | {res['total_tokens']} tok", flush=True)
+                        continue
                     print(f"Score: {res['score']:.1f}/10 (Det: {res['deterministic_score']:.1f}, Judge: {res['judge_score']:.1f}) | {res['total_time_s']}s | {res['total_tokens']} tok", flush=True)
 
                     # Update checkpoint only on genuinely valid (non-fallback, non-empty) responses
@@ -1130,6 +1201,17 @@ async def main():
 
                     # Incremental checkpoint save after every single test run
                     _write_interim_reports(run_id, timestamp, conditions, all_results)
+
+                # Deferred judge evaluation: every answer of this task is graded now, one judge model after the other
+                # phase, instead of after each generation call (see run_single_test_condition).
+                for _run_key, _res in pending_eval:
+                    _res = await finalize_pending_evaluation(client, tc, _res)
+                    print(f"  ◦ {_res['condition']:22} judged: Score: {_res['score']:.1f}/10 (Det: {_res['deterministic_score']:.1f}, "
+                          f"Judge: {_res['judge_score']:.1f}) | {_res['total_time_s']}s", flush=True)
+                    if _result_is_valid(_res):
+                        _persist_checkpoint(checkpoint_file, checkpoint_data, completed_runs, _run_key, _res)
+                    _write_interim_reports(run_id, timestamp, conditions, all_results)
+                pending_eval = []
 
                 # All conditions for this task/round have run (or were resumed from
                 # cache) -- verify every active condition landed a valid checkpoint
@@ -1217,6 +1299,21 @@ async def main():
     native_overall = summary_by_condition.get("native_baseline", {}).get("mean_overall_score", 0.0)
     native_time = summary_by_condition.get("native_baseline", {}).get("mean_latency_s", 0.0)
     compound_vs_native_delta = round(c_overall - native_overall, 2)
+    finetuning_system_delta = {}
+    for pre_name, fine_name, label in PREFINETUNE_PAIRS:
+        _pre = summary_by_condition.get(pre_name)
+        _fine = summary_by_condition.get(fine_name)
+        if _pre and _fine:
+            finetuning_system_delta[label] = {
+                "prefinetune_template": TEMPLATES[pre_name],
+                "finetuned_template": TEMPLATES[fine_name],
+                "prefinetune_overall_score": _pre.get("mean_overall_score", 0.0),
+                "finetuned_overall_score": _fine.get("mean_overall_score", 0.0),
+                "delta_overall": round(_fine.get("mean_overall_score", 0.0) - _pre.get("mean_overall_score", 0.0), 2),
+                "prefinetune_mean_latency_s": _pre.get("mean_latency_s", 0.0),
+                "finetuned_mean_latency_s": _fine.get("mean_latency_s", 0.0),
+            }
+    finetuning_system_delta = finetuning_system_delta or None
 
     output_payload = {
         "run_id": run_id,
@@ -1227,6 +1324,7 @@ async def main():
         "judge_reference_fix": True,
         "summary": summary_by_condition,
         "summary_valid_only": summary_by_condition_valid_only,
+        "finetuning_system_delta": finetuning_system_delta,
         "lumi_finetuning_validation": {
             # Dynamically reference template rather than obsolete student:4b label
             "planner_model": f"{TEMPLATES['compound_ai']} (Planner on N04-RGTX)",

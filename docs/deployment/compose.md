@@ -17,6 +17,10 @@ complete MoE Sovereign stack running on a single host. The same
 ## What the stack contains
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     subgraph CORE[Core services]
         O[langgraph-app<br/>:8002 → :8000]

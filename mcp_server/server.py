@@ -138,6 +138,21 @@ def calculate(expression: str) -> str:
     )
     expr = re.sub(r"(\d+(?:\.\d+)?)%", r"(\1/100)", expr)
 
+    # Small planner models drop the last closing parenthesis of a long expression or write ^ for a power (in a
+    # calculation ^ means power). Only these two slips are repaired; the AST whitelist below still applies and the
+    # returned text shows the expression that was actually evaluated.
+    _repaired = expr
+    _repaired = _repaired.replace("^", "**")
+    _missing_close = _repaired.count("(") - _repaired.count(")")
+    if _missing_close > 0:
+        _repaired = _repaired + ")" * _missing_close
+    while _missing_close < 0 and _repaired.rstrip().endswith(")"):  # one closing parenthesis too many at the very end
+        _repaired = _repaired.rstrip()[:-1]
+        _missing_close += 1
+    if _repaired != expr:
+        expr = _repaired
+        expression = expr.strip()
+
     # Stage 1: safe AST evaluation (whitelist-only — no arbitrary Python allowed).
     try:
         tree = ast.parse(expr.strip(), mode="eval")

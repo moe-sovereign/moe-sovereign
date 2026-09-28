@@ -802,6 +802,7 @@ async def _invoke_judge_with_retry(
                 # Augmented Tool Path (services/pipeline/anthropic.py,
                 # services/pipeline/chat.py's _retry_tool_agent_fallback) but was never
                 # applied to the judge/planner path that competes with it on the same node.
+                _judge_ctx_reused = False
                 try:
                     async with httpx.AsyncClient(timeout=2.0) as _ps_cl:
                         _ps_r = await _ps_cl.get(
@@ -818,9 +819,15 @@ async def _invoke_judge_with_retry(
                                     _loaded_ctx, _ctx, _jm,
                                 )
                                 _ctx = _loaded_ctx
+                                _judge_ctx_reused = True
                                 break
                 except Exception:
                     pass  # non-fatal — fall through to the configured num_ctx
+                if _ctx > 0 and not _judge_ctx_reused:
+                    # The request needs a larger context than the one loaded (or the model is not loaded): Ollama reloads
+                    # it, and while a second large model holds the VRAM that reload can hang for hours (observed:
+                    # 75 min on N04-RTX). Free exactly the VRAM that is missing first, like the planner path does.
+                    await _evict_competing_models(_ollama_base, _jm, ctx=_ctx)
                 _opts: dict = {}
                 if _ctx > 0:
                     _opts["num_ctx"] = _ctx
@@ -1697,7 +1704,14 @@ async def _refine_expert_response(cat: str, gap_feedback: str, state: "AgentStat
     node = await _select_node(best_expert["model"], _refine_ep)
     url      = node.get("url") or URL_MAP.get(node["name"])
     token    = node.get("token", "ollama")
-    _timeout = float(node.get("timeout", EXPERT_TIMEOUT))
+    from services.deadline import remaining_timeout, bounded_output_tokens
+    _base_timeout = float(node.get("timeout", EXPERT_TIMEOUT))
+    _timeout = remaining_timeout(state, _base_timeout, stage=f"refine:{cat}")
+    _refine_max_tokens = bounded_output_tokens(
+        state,
+        int(os.getenv("MAX_EXPERT_TOKENS", "4096")),
+        minimum_internal=128,
+    )
     sys_prompt = _get_expert_prompt(cat, state.get("user_experts"))
     task_text  = state["input"]
     messages = [
@@ -1739,9 +1753,22 @@ async def _refine_expert_response(cat: str, gap_feedback: str, state: "AgentStat
                         break
         except Exception:
             pass  # non-fatal — fall through to the configured num_ctx
-        _refine_extra = {"extra_body": {"options": {"num_ctx": _refine_num_ctx}}}
-    llm = ChatOpenAI(model=best_expert["model"], base_url=url, api_key=token,
-                     timeout=_timeout, **_refine_extra)
+        _refine_extra = {
+            "extra_body": {
+                "options": {
+                    "num_ctx": _refine_num_ctx,
+                    "num_predict": _refine_max_tokens,
+                }
+            }
+        }
+    llm = ChatOpenAI(
+        model=best_expert["model"],
+        base_url=url,
+        api_key=token,
+        timeout=_timeout,
+        model_kwargs={"max_tokens": _refine_max_tokens},
+        **_refine_extra,
+    )
     try:
         res = await _audited_ainvoke(
             llm,

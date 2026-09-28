@@ -69,6 +69,10 @@ The split was completed in 14 phases — `main.py` shrank from 11,190 → ~1,500
 ## LangGraph Pipeline
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TD
     IN([Client Request]) --> GUARD{guard\noptional Llama Guard}
     GUARD -->|safe / disabled / provider error| CACHE
@@ -169,6 +173,10 @@ clients) and `_anthropic_tool_handler` (`services/pipeline/anthropic.py`,
 Claude Code / Anthropic-format clients).
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TD
     IN([Client Request\nhas tools array?]) -->|no| PIPE[LangGraph Pipeline\nsee above]
     IN -->|yes| ATP[Augmented Tool Path\nbypasses planner/workers/judge]
@@ -332,6 +340,10 @@ graph LR
 ## Caching Architecture
 
 ```mermaid
+---
+config:
+  look: classic
+---
 graph TD
     Q([Query]) --> L1
 
@@ -340,14 +352,14 @@ graph TD
     L1 -->|0.15–0.50 soft hit| FEW[Few-shot examples\nfor experts]
     L1 -->|> 0.50 miss| L2
 
-    L2{L2: Valkey\nPlan Cache\nmoe:plan:sha256[:16]}
+    L2{"L2: Valkey\nPlan Cache\nmoe:plan:sha256[:16]"}
     L2 -->|TTL 30 min hit| SKIP_PLAN[Skip planner LLM\n~1,600 tokens saved]
     L2 -->|miss| PLAN_LLM[Planner LLM call]
     PLAN_LLM -->|write-back| L2
 
     SKIP_PLAN --> L3
 
-    L3{L3: Valkey\nGraphRAG Cache\nmoe:graph:sha256[:16]}
+    L3{"L3: Valkey\nGraphRAG Cache\nmoe:graph:sha256[:16]"}
     L3 -->|TTL 1h hit| SKIP_NEO4J[Skip Neo4j query\n1–3s saved]
     L3 -->|miss| NEO4J_Q[Neo4j query]
     NEO4J_Q -->|write-back| L3

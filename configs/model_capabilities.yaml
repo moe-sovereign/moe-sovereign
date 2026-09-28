@@ -95,11 +95,6 @@ models:
     json_object: false
     stream: true
 
-  "moe-sovereign-student:4b":
-    json_schema: false
-    json_object: false
-    stream: true
-
   # tool_model for several static cc-profiles (cc-innovator-fast, cc-ref-*,
   # cc-agent-augmented). Ollama's GBNF grammar compiler fails to initialize
   # on the full Claude Code tool set (e.g. /init sends ~26 tool schemas),
