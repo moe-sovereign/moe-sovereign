@@ -39,7 +39,7 @@ aiokafka>=0.11.0
 prometheus_client>=0.21.0
 
 # --- OIDC/JWT ---
-PyJWT>=2.13.0
+PyJWT>=2.15.0
 cryptography>=50.0.0
 
 # --- PDF generation & parsing ---
@@ -50,4 +50,4 @@ pypdf>=6.16.2
 pyyaml>=6.0
 
 # --- Pinned transitive deps (guard against unwanted bumps) ---
-urllib3==2.7.0
+urllib3==2.8.0

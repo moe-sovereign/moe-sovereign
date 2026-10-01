@@ -74,7 +74,7 @@ mpmath==1.4.1
 multidict==6.7.1
 neo4j==6.2.0
 numpy==1.26.4
-oauthlib==3.3.1
+oauthlib==4.0.0
 onnxruntime==1.28.0
 openai==2.49.0
 opentelemetry-api==1.44.0
@@ -102,7 +102,7 @@ pydantic-settings==2.14.2
 pydantic_core==2.46.4
 pydyf==0.12.1
 Pygments==2.20.0
-PyJWT==2.13.0
+PyJWT==2.15.0
 pyphen==0.17.2
 pypdf==6.16.2
 PyPika==0.51.1
@@ -137,7 +137,7 @@ tqdm==4.70.0
 typer==0.27.0
 typing-inspection==0.4.2
 typing_extensions==4.16.0
-urllib3==2.7.0
+urllib3==2.8.0
 uuid_utils==0.17.0
 uvicorn==0.51.0
 uvloop==0.22.1
