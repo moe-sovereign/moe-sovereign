@@ -64,7 +64,7 @@ langgraph==1.2.10
 langgraph-checkpoint==4.1.1
 langgraph-checkpoint-postgres==3.1.1
 langgraph-prebuilt==1.1.0
-langgraph-sdk==0.4.2
+langgraph-sdk==0.4.4
 langsmith==0.10.11
 lxml==6.1.1
 markdown-it-py==4.2.0
@@ -104,7 +104,7 @@ pydyf==0.12.1
 Pygments==2.20.0
 PyJWT==2.15.0
 pyphen==0.17.2
-pypdf==6.16.2
+pypdf==6.19.0
 PyPika==0.51.1
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0

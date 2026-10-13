@@ -44,7 +44,7 @@ cryptography>=50.0.0
 
 # --- PDF generation & parsing ---
 weasyprint>=70.0
-pypdf>=6.16.2
+pypdf>=6.19.0
 
 # --- System Constitution enforcement ---
 pyyaml>=6.0
