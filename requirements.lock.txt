@@ -71,7 +71,7 @@ markdown-it-py==4.2.0
 mdurl==0.1.2
 mmh3==5.2.1
 mpmath==1.4.1
-multidict==6.7.1
+multidict==6.9.1
 neo4j==6.2.0
 numpy==1.26.4
 oauthlib==4.0.0
