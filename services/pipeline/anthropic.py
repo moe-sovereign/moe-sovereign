@@ -1982,7 +1982,7 @@ async def _anthropic_tool_handler(
                     f"user:{user_id}" if user_id and user_id != "anon" else None,
                     user_id, effective_model, session_id or "",
                     state.redis_client, state.agent_cache_collection,
-                    path="anthropic",
+                    path="anthropic", api_key_id=api_key_id,
                 ))
 
         _llm_t0 = time.monotonic()
@@ -2231,7 +2231,7 @@ async def _anthropic_tool_handler(
                     f"user:{user_id}" if user_id and user_id != "anon" else None,
                     user_id, effective_model, session_id or "",
                     state.redis_client, state.agent_cache_collection,
-                    path="anthropic",
+                    path="anthropic", api_key_id=api_key_id,
                 ))
 
         _llm_t0 = time.monotonic()
@@ -2591,7 +2591,7 @@ async def _anthropic_tool_handler(
                 f"user:{user_id}" if user_id and user_id != "anon" else None,
                 user_id, effective_model, session_id or "",
                 state.redis_client, state.agent_cache_collection,
-                path="anthropic",
+                path="anthropic", api_key_id=api_key_id,
             ))
 
     if not do_stream:

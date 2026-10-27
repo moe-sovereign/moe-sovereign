@@ -464,6 +464,40 @@ class TestAgentWriteback:
         # Only the initial write — judge failed before any promotion/flag upsert.
         assert collection.upsert.call_count == 1
 
+    @pytest.mark.asyncio
+    async def test_judge_promote_registers_in_live_monitoring(self):
+        """Regression: _agent_judge_promote() posts directly to the judge
+        model's node and can evict whatever model the client just used (e.g.
+        on a VRAM-constrained node hosting both the tool model and the
+        judge) — but ran as a bare asyncio.create_task with no
+        _register_active_request call, so it never showed up in MoE-Admin's
+        "Laufende API-Anfragen" table. A model vanishing right after a clean
+        response, with no visible cause, looked like an unexplained bug.
+        """
+        collection = MagicMock()
+        answer = "x" * 200
+
+        judge_result = MagicMock()
+        judge_result.content = "SELF_RATING: 5"
+
+        with patch("services.agent_enrichment._kafka_publish", new=AsyncMock()), \
+             patch("services.agent_enrichment.AGENT_INGEST_JUDGE", True), \
+             patch("services.inference.ainvoke_judge_llm", new=AsyncMock(return_value=judge_result)), \
+             patch("services.agent_enrichment._register_active_request", new=AsyncMock()) as mock_reg, \
+             patch("services.agent_enrichment._deregister_active_request", new=AsyncMock()) as mock_dereg:
+            await agent_writeback(
+                "what is X?", answer, "scope1", "user:u1", "u1", "model-a", "sess1",
+                None, collection, api_key_id="key-123",
+            )
+            await asyncio.sleep(0.05)
+
+        mock_reg.assert_called_once()
+        reg_kwargs = mock_reg.call_args.kwargs
+        assert reg_kwargs["user_id"] == "u1"
+        assert reg_kwargs["api_key_id"] == "key-123"
+        assert reg_kwargs["moe_mode"] == "agent_judge_promote"
+        mock_dereg.assert_called_once_with(reg_kwargs["chat_id"])
+
 
 # ── agent_graph_context ────────────────────────────────────────────────────────
 

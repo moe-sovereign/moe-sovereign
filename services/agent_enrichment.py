@@ -45,13 +45,14 @@ from psycopg.rows import dict_row
 from config import (
     AGENT_CACHE_L0_TTL, AGENT_CACHE_MAX_LOOKUP_MS, AGENT_CACHE_MIN_CONF,
     AGENT_CACHE_TTL_DAYS, AGENT_INGEST_JUDGE, CACHE_MIN_RESPONSE_LEN,
-    KAFKA_TOPIC_INGEST, KNOWLEDGE_BYPASS_THRESHOLD,
+    JUDGE_MODEL, KAFKA_TOPIC_INGEST, KNOWLEDGE_BYPASS_THRESHOLD,
     MOE_USERDB_URL, POSTGRES_CHECKPOINT_URL,
 )
 from metrics import PROM_AGENT_CACHE, PROM_AGENT_WRITEBACK
 from services.helpers import _entry_is_fresh
 from services.kafka import _kafka_publish
 from services.async_utils import run_sync_daemon
+from services.tracking import _register_active_request, _deregister_active_request
 
 logger = logging.getLogger("MOE-SOVEREIGN")
 
@@ -925,7 +926,7 @@ async def agent_graph_context(
 async def agent_writeback(
     query: str, answer: str, scope: str, tenant_id: str, user_id: str,
     source_model: str, session_id: str, redis_client, collection,
-    path: str = "anthropic",
+    path: str = "anthropic", api_key_id: str = "",
 ) -> None:
     """Fire-and-forget write of a clean final agent answer into the agent
     cache (moe_agent_cache) and the Kafka ingestion topic.
@@ -994,7 +995,8 @@ async def agent_writeback(
 
     if AGENT_INGEST_JUDGE:
         asyncio.create_task(
-            _agent_judge_promote(query, answer, doc_id, metadata, scope, redis_client, collection)
+            _agent_judge_promote(query, answer, doc_id, metadata, scope, redis_client, collection,
+                                  user_id=user_id, api_key_id=api_key_id)
         )
     return None
 
@@ -1002,6 +1004,7 @@ async def agent_writeback(
 async def _agent_judge_promote(
     query: str, answer: str, doc_id: str, metadata: dict, scope: str,
     redis_client, collection,
+    user_id: str = "anon", api_key_id: str = "",
 ) -> None:
     """Async, fire-and-forget: judge-scores a freshly written agent answer and
     promotes its confidence (unlocking cache-serving) or flags it as bad.
@@ -1011,7 +1014,20 @@ async def _agent_judge_promote(
     reusing services/helpers.py::_self_evaluate (which writes to
     moe:response:{response_id} state that belongs to the merger/judge
     pipeline, not agent tool-path sessions).
+
+    Registered in live monitoring under its own synthetic chat_id: this call
+    POSTs directly to the judge model's node and, on VRAM-constrained nodes
+    (e.g. N04-RTX, which also hosts the tool/expert models), can evict the
+    model the client just used — previously invisible in the admin "Laufende
+    API-Anfragen" table because this fire-and-forget task never registered,
+    so a model vanishing right after a request looked like it had no cause.
     """
+    _judge_chat_id = f"agent-judge-{uuid.uuid4().hex[:12]}"
+    await _register_active_request(
+        chat_id=_judge_chat_id, user_id=user_id, model=JUDGE_MODEL,
+        moe_mode="agent_judge_promote", req_type="background",
+        api_key_id=api_key_id,
+    )
     try:
         from services.inference import ainvoke_judge_llm
         eval_prompt = (
@@ -1027,6 +1043,8 @@ async def _agent_judge_promote(
     except Exception as e:
         logger.debug("agent_writeback: judge scoring failed: %s", e)
         return None
+    finally:
+        await _deregister_active_request(_judge_chat_id)
 
     try:
         if score >= _JUDGE_PROMOTE_SCORE_MIN:

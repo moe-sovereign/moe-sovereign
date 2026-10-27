@@ -411,7 +411,7 @@ async def _agent_writeback_traced(chat_id: str, *args, **kwargs) -> None:
 
 async def _wrap_agent_writeback_sse(
     body_iterator, chat_id: str, query: str, scope: str, tenant_id, user_id: str,
-    source_model: str, session_id: str,
+    source_model: str, session_id: str, api_key_id: str = "",
 ):
     """Passes an SSE chunk stream through byte-for-byte unchanged while
     accumulating the assistant's text content, firing agent_writeback() once
@@ -458,7 +458,7 @@ async def _wrap_agent_writeback_sse(
             chat_id,
             query, "".join(content_parts), scope, tenant_id, user_id, source_model,
             session_id or "", state.redis_client, state.agent_cache_collection,
-            path="openai",
+            path="openai", api_key_id=api_key_id,
         ))
 
 
@@ -2826,6 +2826,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                     _tc_resp.body_iterator = _wrap_agent_writeback_sse(
                         _tc_resp.body_iterator, chat_id, _agent_turn.query, _agent_turn.scope,
                         _agent_tenant_id, user_id, _tc_model, session_id,
+                        api_key_id=api_key_id,
                     )
                 else:
                     _tc_choice = (_tc_resp.get("choices") or [{}])[0]
@@ -2837,6 +2838,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                             _agent_turn.query, _tc_msg["content"], _agent_turn.scope,
                             _agent_tenant_id, user_id, _tc_model, session_id or "",
                             state.redis_client, state.agent_cache_collection, path="openai",
+                            api_key_id=api_key_id,
                         ))
 
             # ── Live-monitoring deregistration (fixes pre-existing gap) ───────
