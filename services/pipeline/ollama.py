@@ -228,11 +228,15 @@ async def _ollama_internal_stream(
     except (TypeError, ValueError):
         client_max_output_tokens = 0
 
-    asyncio.create_task(_register_active_request(
+    # Await registration so every subsequent error/return path can reliably
+    # remove the exact entry; fire-and-forget registration races used to
+    # recreate keys after a fast failure had already deregistered them
+    # (see services/pipeline/chat.py for the same fix applied earlier).
+    await _register_active_request(
         chat_id=chat_id, user_id=user_id, model=model_name,
         moe_mode=mode, req_type="streaming", template_name=model_name,
         client_ip="", backend_model="", backend_host="", api_key_id=api_key_id,
-    ))
+    )
 
     async for sse_line in stream_response(
         user_input, chat_id, mode,
