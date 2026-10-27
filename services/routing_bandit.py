@@ -28,12 +28,18 @@ from __future__ import annotations
 import random
 import re
 
+from typing import Optional, Sequence
+
 import state
+from services import routing_patterns
 from config import (
     ROUTING_BANDIT_ENABLED,
     ROUTING_BANDIT_MIN_DATAPOINTS,
     ROUTING_BANDIT_COST_PRIOR,
     ROUTING_BANDIT_CONTEXT_BANDS,
+    ROUTING_PATTERN_PRIOR_ENABLED,
+    ROUTING_PATTERN_PRIOR_K,
+    ROUTING_PATTERN_PRIOR_CAP,
 )
 
 # Per-gate arm labels. "rich" = run the retrieval node; "cheap" = skip it.
@@ -65,13 +71,23 @@ async def _arm_stats(gate: str, context: str, action: str) -> tuple[int, int]:
         return 0, 0
 
 
-async def decide(gate: str, context: str, heuristic_default: bool) -> tuple[bool, str]:
+async def decide(
+    gate: str,
+    context: str,
+    heuristic_default: bool,
+    query_embedding: Optional[Sequence[float]] = None,
+) -> tuple[bool, str]:
     """Decide whether to run the rich (retrieval) action for ``gate``.
 
     Args:
         gate:              "research" or "graphrag".
         context:           discretised context bucket (e.g. "moderate|v1").
         heuristic_default: the fuzzy/complexity decision (True = run retrieval).
+        query_embedding:   BGE embedding of the request, when available. Used
+                            only as an embedding-space cold-start prior
+                            (services/routing_patterns.py) for whichever arm
+                            is still below ROUTING_BANDIT_MIN_DATAPOINTS, when
+                            ROUTING_PATTERN_PRIOR_ENABLED. No effect otherwise.
 
     Returns:
         (run_rich, source) where source is "bandit" or "heuristic". ``run_rich``
@@ -83,21 +99,60 @@ async def decide(gate: str, context: str, heuristic_default: bool) -> tuple[bool
     pos_r, tot_r = await _arm_stats(gate, context, _RICH[gate])
     pos_c, tot_c = await _arm_stats(gate, context, _CHEAP[gate])
 
-    # Cold start: both arms must have evidence, otherwise trust the heuristic.
-    if tot_r < ROUTING_BANDIT_MIN_DATAPOINTS or tot_c < ROUTING_BANDIT_MIN_DATAPOINTS:
+    alpha_r, beta_r = pos_r + 1, (tot_r - pos_r) + 1
+    alpha_c, beta_c = pos_c + 1, (tot_c - pos_c) + 1
+    r_ready = tot_r >= ROUTING_BANDIT_MIN_DATAPOINTS
+    c_ready = tot_c >= ROUTING_BANDIT_MIN_DATAPOINTS
+
+    if ROUTING_PATTERN_PRIOR_ENABLED and query_embedding is not None:
+        # Only an arm that is itself still below MIN_DATAPOINTS consults the
+        # prior, and only a *non-empty* prior can promote it out of cold
+        # start — an embedding with zero neighbors changes nothing, same as
+        # the flag being off.
+        if not r_ready:
+            prior_pos, prior_total = await routing_patterns.prior(
+                "gate", f"{gate}:{_RICH[gate]}:{context}", query_embedding,
+                ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
+            )
+            if prior_total > 0.0:
+                alpha_r += prior_pos
+                beta_r += (prior_total - prior_pos)
+                r_ready = True
+        if not c_ready:
+            prior_pos, prior_total = await routing_patterns.prior(
+                "gate", f"{gate}:{_CHEAP[gate]}:{context}", query_embedding,
+                ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
+            )
+            if prior_total > 0.0:
+                alpha_c += prior_pos
+                beta_c += (prior_total - prior_pos)
+                c_ready = True
+
+    if not (r_ready and c_ready):
+        # Cold start: unchanged from today, whether because the prior is off,
+        # no embedding was given, or it found no neighbors for this bucket.
         return heuristic_default, "heuristic"
 
-    theta_rich = random.betavariate(pos_r + 1, (tot_r - pos_r) + 1)
+    theta_rich = random.betavariate(alpha_r, beta_r)
     # Cost prior: optimistic α head-start for the cheaper arm steers ties toward
     # skipping retrieval (the lower-cost outcome) without a hard rule.
-    theta_cheap = random.betavariate(
-        pos_c + 1 + ROUTING_BANDIT_COST_PRIOR, (tot_c - pos_c) + 1
-    )
+    theta_cheap = random.betavariate(alpha_c + ROUTING_BANDIT_COST_PRIOR, beta_c)
     return (theta_rich > theta_cheap), "bandit"
 
 
-async def record(gate: str, context: str, ran_rich: bool, success: bool) -> None:
-    """Record the outcome of a gate decision into the arm that was actually taken."""
+async def record(
+    gate: str,
+    context: str,
+    ran_rich: bool,
+    success: bool,
+    query_embedding: Optional[Sequence[float]] = None,
+) -> None:
+    """Record the outcome of a gate decision into the arm that was actually taken.
+
+    When ``query_embedding`` is given, also records the observation into the
+    embedding-space pattern store (services/routing_patterns.py). No-op for
+    that part when no embedding is passed — identical to today's behaviour.
+    """
     if state.redis_client is None or not context:
         return
     action = _RICH[gate] if ran_rich else _CHEAP[gate]
@@ -110,3 +165,5 @@ async def record(gate: str, context: str, ran_rich: bool, success: bool) -> None
         await pipe.execute()
     except Exception:
         pass
+    if query_embedding is not None:
+        await routing_patterns.record("gate", f"{gate}:{action}:{context}", query_embedding, success)

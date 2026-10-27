@@ -70,3 +70,30 @@ def test_self_critique_round_1_still_triggers():
     from graph.synthesis import _should_replan
     state = _state(trust_verdict="PROCEED_WITH_ASSUMPTION", self_critique_round=1, self_critique_max=2)
     assert _should_replan(state) == "self_critique"
+
+
+def test_second_round_skipped_without_trust_gain():
+    from graph.synthesis import _should_replan
+    state = _state(trust_verdict="PROCEED_WITH_ASSUMPTION", self_critique_round=1,
+                   self_critique_max=2, trust_score=0.52, self_critique_prev_score=0.52)
+    assert _should_replan(state) == "critic"
+
+
+def test_second_round_runs_with_trust_gain():
+    from graph.synthesis import _should_replan
+    state = _state(trust_verdict="PROCEED_WITH_ASSUMPTION", self_critique_round=1,
+                   self_critique_max=2, trust_score=0.60, self_critique_prev_score=0.52)
+    assert _should_replan(state) == "self_critique"
+
+
+def test_review_wave_flag_skips_self_critique():
+    from graph.synthesis import _should_replan
+    state = _state(trust_verdict="PROCEED_WITH_ASSUMPTION", self_critique_round=0,
+                   self_critique_max=2, review_replaces_self_critique=True)
+    assert _should_replan(state) == "critic"
+
+
+def test_first_round_unaffected():
+    from graph.synthesis import _should_replan
+    state = _state(trust_verdict="PROCEED_WITH_ASSUMPTION", self_critique_round=0, self_critique_max=2)
+    assert _should_replan(state) == "self_critique"

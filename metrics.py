@@ -122,3 +122,21 @@ PROM_THOMPSON = Histogram(
     "moe_thompson_sample", "Thompson-sampled expert score",
     buckets=[.1, .2, .3, .4, .5, .6, .7, .8, .9, 1.0],
 )
+
+# ---------------------------------------------------------------------------
+# Routing pattern prior (services/routing_patterns.py — embedding-space
+# cold-start bridging for the Thompson bandits above, ROUTING_PATTERN_PRIOR_ENABLED)
+# ---------------------------------------------------------------------------
+
+# One increment per prior() consultation (i.e. only while a bucket is still
+# below its own MIN_DATAPOINTS threshold and an embedding was available).
+# outcome:
+#   used        — k-NN found neighbors with nonzero weight; alpha/beta blended in
+#   empty       — collection reachable but no (or too-distant) neighbors for this bucket yet
+#   unavailable — ChromaDB collection not initialized/reachable
+#   error       — the query itself raised (fail-open path)
+PROM_PATTERN_PRIOR = Counter(
+    'moe_routing_pattern_prior_total',
+    'Embedding-space cold-start prior consultations, by namespace and outcome',
+    ['namespace', 'outcome'],
+)

@@ -93,6 +93,9 @@ _THRESHOLD_ASSUMPTION   = float(os.getenv("TRUST_SCORE_ASSUMPTION",   "0.30"))
 
 _MAX_SOURCE_COUNT = 10   # Normalise source_count to [0, 1]: min(count/max, 1)
 _MAX_EXPERT_COUNT = 5    # Normalise expert_count to [0, 1]: min(count/max, 1)
+# expert_results entries that are appended by the pipeline itself rather than
+# produced by a planned expert task.
+_NON_EXPERT_RESULT_PREFIXES = ("[SELF_CRITIQUE_", "[REVIEW:")
 
 
 def _load_weights() -> Dict[str, float]:
@@ -172,6 +175,10 @@ def compute_trust_score(state_: dict) -> TrustScore:
         and len(r.strip()) > 20
         and " ERROR]:" not in r
         and not r.startswith("[Judge unavailable")
+        # Judge-authored self-critique fragments and complementary reviews are
+        # not independent expert answers; counting them inflated the score by
+        # +1/_MAX_EXPERT_COUNT per round and let the loop "pass" itself.
+        and not r.startswith(_NON_EXPERT_RESULT_PREFIXES)
     ]
     expert_count_norm = min(len(non_empty_experts) / _MAX_EXPERT_COUNT, 1.0)
 

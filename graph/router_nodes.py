@@ -513,8 +513,9 @@ async def fuzzy_router_node(state_: AgentState):
     _research_ctx = f"{complexity_level}|v{_rb_band(tnorm_vector)}"
     _graph_ctx    = f"{complexity_level}|g{_rb_band(tnorm_graph)}"
 
-    _do_research,  _src_r = await _rb_decide("research", _research_ctx, _heur_do_research)
-    _enable_graph, _src_g = await _rb_decide("graphrag", _graph_ctx,    _heur_enable_graph)
+    _query_embedding = state_.get("query_embedding")
+    _do_research,  _src_r = await _rb_decide("research", _research_ctx, _heur_do_research, query_embedding=_query_embedding)
+    _enable_graph, _src_g = await _rb_decide("graphrag", _graph_ctx,    _heur_enable_graph, query_embedding=_query_embedding)
 
     new_skip_research   = not _do_research
     new_enable_graphrag = _enable_graph

@@ -239,3 +239,30 @@ async def test_journal_write_failure_does_not_raise():
         await commit._write_journal("moe:response_commit:some-key", {"status": "complete"})  # must not raise
     finally:
         _state_mod.redis_client = original
+
+
+@pytest.mark.asyncio
+async def test_no_cache_request_still_writes_routing_telemetry(monkeypatch):
+    calls = []
+
+    async def _fake_record(pool, request_id, payload, wall_clock_ms=0):
+        calls.append((request_id, wall_clock_ms))
+
+    import telemetry
+    monkeypatch.setattr(telemetry, "record_routing_decision", _fake_record)
+    response = "x" * 400
+    payload = {
+        "request_id": "req-nc", "final_response": response,
+        "response_hash": commit.canonical_json_hash(response),
+        "no_cache": True, "wall_clock_ms": 1234,
+    }
+    result = await commit.commit_response_payload(payload)
+    assert result["status"] == "skipped"
+    assert calls == [("req-nc", 1234)]
+
+
+def test_elapsed_ms_from_deadline():
+    import time as _time
+    state_ = {"request_deadline_monotonic": _time.monotonic() + commit.ORCHESTRATION_TIMEOUT - 2.0}
+    assert 1500 <= commit._elapsed_ms(state_) <= 5000
+    assert commit._elapsed_ms({}) == 0

@@ -628,8 +628,19 @@ async def planner_node(state_: AgentState):
     ):
         expert_categories = expert_categories + ["agentic_coder"]
     import os as _os
+    # "dynamic" hands the task to expert_builder's ad-hoc model discovery
+    # (graph/expert.py, services/expert_builder.py), which floats to whatever
+    # endpoint currently reports the requested capability -- bypassing every
+    # fixed model@endpoint pin the template author set. Offering it
+    # unconditionally defeats a template that already pins a complete expert
+    # roster: observed live, the planner picked "dynamic" for GraphRAG/topology
+    # tasks even though "compounding_knowledge" was pinned and available,
+    # silently answering with qwen3.6:35b/gemma4-31b on N04-RTX instead of the
+    # template's own SmolLM3 experts. Only offer the escape hatch when the
+    # template itself has no pinned roster (global-EXPERTS fallback path,
+    # mirroring the expert_categories source distinction directly above).
     if _os.getenv("EXPERT_BUILDER_ENABLED", "true").lower() in ("true", "1", "yes"):
-        if "dynamic" not in expert_categories:
+        if not _user_experts_for_cats and "dynamic" not in expert_categories:
             expert_categories = expert_categories + ["dynamic"]
 
     # Annotate images in planner input so routing triggers 'vision'

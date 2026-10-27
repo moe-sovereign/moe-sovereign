@@ -5,7 +5,7 @@ import time
 import random
 import logging
 import uuid
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Sequence
 import httpx
 import numpy as np
 import onnxruntime as ort
@@ -13,8 +13,15 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 import state
+from services import routing_patterns
 from admin_ui.database import _get_pool, log_dynamic_template_feedback
-from config import MOE_USERDB_URL, URL_MAP, API_TYPE_MAP, TOKEN_MAP, INFERENCE_SERVERS_LIST, EXPERT_TIER_BOUNDARY_B, PLANNER_NUM_CTX, JUDGE_NUM_CTX, PLANNER_MODEL as _PLANNER_MODEL_ENV, JUDGE_MODEL as _JUDGE_MODEL_ENV
+from config import (
+    MOE_USERDB_URL, URL_MAP, API_TYPE_MAP, TOKEN_MAP, INFERENCE_SERVERS_LIST,
+    EXPERT_TIER_BOUNDARY_B, PLANNER_NUM_CTX, JUDGE_NUM_CTX,
+    PLANNER_MODEL as _PLANNER_MODEL_ENV, JUDGE_MODEL as _JUDGE_MODEL_ENV,
+    EXPERT_MIN_DATAPOINTS, ROUTING_PATTERN_PRIOR_ENABLED,
+    ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
+)
 
 logger = logging.getLogger("MOE-SOVEREIGN")
 
@@ -384,24 +391,44 @@ async def _get_cluster_state() -> list[dict]:
     return models_list
 
 
-async def _get_thompson_score(model: str, category: str) -> float:
-    """Draws a Thompson sample for (model, category) based on Valkey performance logs."""
+async def _get_thompson_score(
+    model: str,
+    category: str,
+    query_embedding: Optional[Sequence[float]] = None,
+) -> float:
+    """Draws a Thompson sample for (model, category) based on Valkey performance logs.
+
+    When the (model, category) bucket is still below EXPERT_MIN_DATAPOINTS and
+    ROUTING_PATTERN_PRIOR_ENABLED, blends in a capped, distance-weighted Beta
+    prior from the k nearest historical observations in embedding space
+    (services/routing_patterns.py) instead of returning the flat 0.5 fallback.
+    Behaviour is unchanged when the flag is off or no embedding is available.
+    """
     if state.redis_client is None:
         return 0.5
     try:
         safe_model = re.sub(r"[^a-zA-Z0-9_\-]", "_", model)
         key = f"moe:perf:{safe_model}:{category}"
         data = await state.redis_client.hgetall(key)
-        
+
         # Redis hgetall returns bytes keys/values
         total = int(data.get(b"total", data.get("total", 0)))
-        if total < 5:  # EXPERT_MIN_DATAPOINTS = 5
-            return 0.5
-            
         positive = int(data.get(b"positive", data.get("positive", 0)))
-        alpha = positive + 1
-        beta = (total - positive) + 1
-        
+        if total < EXPERT_MIN_DATAPOINTS:
+            if not (ROUTING_PATTERN_PRIOR_ENABLED and query_embedding is not None):
+                return 0.5
+            prior_pos, prior_total = await routing_patterns.prior(
+                "expert", f"{model}:{category}", query_embedding,
+                ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
+            )
+            if prior_total <= 0.0:
+                return 0.5
+            alpha = positive + prior_pos + 1
+            beta = (total - positive) + (prior_total - prior_pos) + 1
+        else:
+            alpha = positive + 1
+            beta = (total - positive) + 1
+
         # Load penalty to avoid overloading a node
         load_penalty = float(os.getenv("THOMPSON_LOAD_PENALTY", "2.0"))
         node = model.split("@")[-1] if "@" in model else ""
@@ -417,7 +444,7 @@ async def _get_thompson_score(model: str, category: str) -> float:
         return 0.5
 
 
-async def _score_and_allocate_model(category: str, models: list[dict], model_metadata: dict, local_only: bool, complexity: str = "moderate", interventions: list = None, force_weak: bool = False) -> list[dict]:
+async def _score_and_allocate_model(category: str, models: list[dict], model_metadata: dict, local_only: bool, complexity: str = "moderate", interventions: list = None, force_weak: bool = False, query_embedding: Optional[Sequence[float]] = None) -> list[dict]:
     """Scores models based on parameter size, context window, warmed status, strengths, and Thompson Sampling."""
     if force_weak:
         weak_models = []
@@ -461,7 +488,7 @@ async def _score_and_allocate_model(category: str, models: list[dict], model_met
             bench_val = bench_scores.get("mmlu", 50.0) / 100.0
             
         # Draw Thompson sample for feedback rating
-        t_sample = await _get_thompson_score(m_id, category)
+        t_sample = await _get_thompson_score(m_id, category, query_embedding=query_embedding)
         
         # 1. Strengths Match Bonus
         strengths = meta.get("strengths", [])
@@ -901,6 +928,7 @@ async def get_dynamic_template(
     global_only: bool = False,
     user_conns_only: bool = False,
     deliberation_activation: str = "adaptive",
+    query_embedding: Optional[Sequence[float]] = None,
 ) -> Optional[dict]:
     """Main service entrypoint: matching, ONNX routing, cluster mapping, scoring and allocation.
 
@@ -910,6 +938,12 @@ async def get_dynamic_template(
         user_connections: User's private connections dictionary.
         global_only:      When True, restrict to global admin-defined endpoints.
         user_conns_only:  When True, restrict to user-created connections.
+        query_embedding:  BGE embedding of `prompt`, when the caller already
+                           computed one (e.g. services/pipeline/chat.py, for
+                           reuse in AgentState). Reused for RouteLLM instead
+                           of a second get_bge_embedding() call, and passed
+                           through to the expert Thompson sampler for
+                           ROUTING_PATTERN_PRIOR_ENABLED cold-start bridging.
     """
     global _onnx_session
     if _onnx_session is None:
@@ -958,6 +992,14 @@ async def get_dynamic_template(
     enable_web_research = classification["enable_web_research"]
     enable_graphrag = classification["enable_graphrag"]
 
+    # Reuse the caller's embedding (if given) for both RouteLLM below and the
+    # expert Thompson sampler's cold-start prior further down.
+    embedding_arr: Optional[np.ndarray] = (
+        np.asarray(query_embedding, dtype=np.float32)
+        if query_embedding is not None and len(query_embedding) > 0
+        else None
+    )
+
     # Run RouteLLM classifier
     prob = None
     force_weak = False
@@ -965,9 +1007,10 @@ async def get_dynamic_template(
         if _routellm_w is None:
             init_router()
         if _routellm_w is not None:
-            embedding = await get_bge_embedding(prompt)
-            if embedding is not None:
-                z = np.dot(embedding, _routellm_w) + _routellm_b
+            if embedding_arr is None:
+                embedding_arr = await get_bge_embedding(prompt)
+            if embedding_arr is not None:
+                z = np.dot(embedding_arr, _routellm_w) + _routellm_b
                 prob = 1.0 / (1.0 + np.exp(-np.clip(z, -50, 50)))
                 logger.info(f"RouteLLM routing score: {prob:.4f} (threshold={ROUTELLM_THRESHOLD})")
                 if prob < ROUTELLM_THRESHOLD:
@@ -1096,10 +1139,10 @@ async def get_dynamic_template(
         interventions = []
         for exp in active_experts:
             # Allocate models for this expert category
-            allocated = await _score_and_allocate_model(exp, models, model_metadata, local_only, complexity, interventions, force_weak=force_weak)
+            allocated = await _score_and_allocate_model(exp, models, model_metadata, local_only, complexity, interventions, force_weak=force_weak, query_embedding=embedding_arr)
             if not allocated:
                 # If local_only is active but no local model is available, fall back to whatever is available
-                allocated = await _score_and_allocate_model(exp, models, model_metadata, False, complexity, interventions, force_weak=force_weak)
+                allocated = await _score_and_allocate_model(exp, models, model_metadata, False, complexity, interventions, force_weak=force_weak, query_embedding=embedding_arr)
                 
             if allocated:
                 models_cfg = []

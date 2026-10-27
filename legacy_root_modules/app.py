@@ -1528,7 +1528,7 @@ async def save_config(request: Request, _=Depends(require_login)):
         "JUDGE_REFINE_MAX_ROUNDS":    form.get("JUDGE_REFINE_MAX_ROUNDS",    "2"),
         "JUDGE_REFINE_MIN_IMPROVEMENT": form.get("JUDGE_REFINE_MIN_IMPROVEMENT", "0.15"),
         "PLANNER_RETRIES":            form.get("PLANNER_RETRIES",            "2"),
-        "PLANNER_MAX_TASKS":          form.get("PLANNER_MAX_TASKS",          "4"),
+        "PLANNER_MAX_TASKS":          form.get("PLANNER_MAX_TASKS",          "8"),
         "TOOL_MAX_TOKENS":            form.get("TOOL_MAX_TOKENS",            "8192"),
         "REASONING_MAX_TOKENS":       form.get("REASONING_MAX_TOKENS",       "16384"),
         "MAX_EXPERT_OUTPUT_CHARS":    form.get("MAX_EXPERT_OUTPUT_CHARS",    "2400"),

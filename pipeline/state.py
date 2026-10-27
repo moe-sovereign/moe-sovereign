@@ -67,6 +67,8 @@ class AgentState(TypedDict):
     trivial_fast_path: bool             # Conservative one-shot path selected by planner
     pending_reports: List[str]          # Progress messages collected before pipeline starts streaming
     metadata_filters: Dict              # Optional domain filters from planner for scoped ChromaDB retrieval
+    query_embedding: List[float]        # BGE embedding of `input`, computed once (see services/pipeline/chat.py);
+                                         # empty when not computed (feature disabled or RouteLLM/pattern-prior off)
 
     # ── 3. Node results ───────────────────────────────────────────────────────
     # Annotated[list, operator.add] means LangGraph accumulates values from
@@ -199,6 +201,8 @@ class AgentState(TypedDict):
     trust_factors: dict                 # Per-factor breakdown (source_count, expert_count, conflict_penalty, cross_reference_coverage, unsupported_claims_penalty)
     self_critique_round: int            # Current self-critique iteration (0 = first pass)
     self_critique_max: int              # Max self-critique rounds (from SELF_CRITIQUE_MAX_ROUNDS env)
+    self_critique_prev_score: float     # Trust score at the start of the last self-critique round
+    review_replaces_self_critique: bool # Review wave ran and the template opted to skip self-critique
     constitution_violations: list       # [{rule_id, on_violation, detail}] from constitution enforcement
 
     # ── 16. Cynefin & HITL Gate ──────────────────────────────────────────────

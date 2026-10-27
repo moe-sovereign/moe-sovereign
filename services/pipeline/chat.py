@@ -50,6 +50,7 @@ from config import (
     AGENT_GRAPHRAG_MAX_CHARS, AGENT_GRAPHRAG_TIMEOUT_S,
     TRIVIAL_FAST_PATH_ENABLED,
     MOE_AUTO_DELIBERATION_ACTIVATION,
+    ROUTING_PATTERN_PRIOR_ENABLED,
 )
 from context_budget import graphrag_budget_chars
 from services.agent_enrichment import (
@@ -1945,6 +1946,10 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             logger.info(
                 "⚡ moe-auto trivial preflight: dynamic template compilation skipped"
             )
+    # Computed at most once below (dynamic-router branch only) and reused for
+    # both the AgentState field and the RouteLLM step inside get_dynamic_template
+    # — see services/routing_patterns.py for what consumes it downstream.
+    _query_embedding: List[float] = []
     if (
         not _native_model_selected
         and not _moe_auto_trivial_preflight
@@ -1956,7 +1961,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
     ):
         is_default_moe = request.model in ("moe-orchestrator", "moe-orchestrator-code", "moe-orchestrator-concise", "moe-orchestrator-agent", "moe-orchestrator-agent-orchestrated")
         if not _tmpl_override or is_default_moe or _is_moe_auto:
-            from services.dynamic_router import get_dynamic_template
+            from services.dynamic_router import get_dynamic_template, get_bge_embedding, ROUTELLM_ENABLED
             user_msgs = [m for m in request.messages if m.role == "user"]
             last_prompt = _oai_content_to_str(user_msgs[-1].content) if user_msgs else ""
 
@@ -1984,6 +1989,14 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                     _user_conns_for_router = {}
             # ─────────────────────────────────────────────────────────────────────
 
+            # Computed once and reused for both RouteLLM (inside
+            # get_dynamic_template) and the Thompson-sampler cold-start prior
+            # (services/routing_patterns.py) — avoids a second moe-embed call.
+            if last_prompt and (ROUTING_PATTERN_PRIOR_ENABLED or ROUTELLM_ENABLED):
+                _embed = await get_bge_embedding(last_prompt)
+                if _embed is not None:
+                    _query_embedding = _embed.tolist()
+
             dynamic_tmpl = await get_dynamic_template(
                 last_prompt,
                 local_only=local_only,
@@ -1991,6 +2004,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                 global_only=_perm_global_only,
                 user_conns_only=_perm_user_conns_only,
                 deliberation_activation=_auto_deliberation_activation,
+                query_embedding=_query_embedding or None,
             )
             if dynamic_tmpl:
                 try:
@@ -2879,7 +2893,8 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                             deliberation_policy=_tmpl_prompts.get("deliberation_policy", {}),
                             no_cache=request.no_cache,
                             client_max_output_tokens=_client_max_output_tokens,
-                            local_only=local_only)
+                            local_only=local_only,
+                            query_embedding=_query_embedding)
 
         async def _lineage_wrapped_stream():
             """Wrap the upstream generator so COMPLETE/FAIL fires when streaming ends."""
@@ -2920,6 +2935,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
          "user_conn_prompt_tokens": 0, "user_conn_completion_tokens": 0,
          "chat_history": history, "reasoning_trace": "", "system_prompt": system_prompt,
          "images": _user_images,
+         "query_embedding": _query_embedding,
          "user_permissions": user_perms, "user_experts": user_experts,
          "local_only_routing": local_only,
          # Prepend personal namespace so user-created knowledge is private by default.
@@ -3257,6 +3273,22 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
     # (self-critique round count, trust score/verdict). Merged via update() so
     # it can never clobber the sources/candidate keys set above.
     resp.setdefault("metadata", {}).update(_build_diagnostic_metadata(result))
+    if not request.no_cache:
+        # Online quality probe (sampled): pipeline vs. single best expert.
+        # Skipped for no_cache traffic so benchmark latency is not distorted.
+        try:
+            from services.quality_probe import run_probe as _qp_run
+            asyncio.create_task(_qp_run(
+                query=user_input, pipeline_answer=result["final_response"],
+                experts=user_experts, planner_cfg=_tmpl_prompts,
+                request_id=chat_id, user_id=user_id,
+                pipeline_tokens=c_tok,
+                graph_context=result.get("graph_context", ""),
+                web_research=result.get("web_research", ""),
+                mcp_result=result.get("mcp_result", ""),
+            ))
+        except Exception:
+            pass
     await _ol_complete(_ol_run_id, job_name="chat_completion",
                        outputs=[dataset_response(chat_id)])
     if _moe_resp_headers:

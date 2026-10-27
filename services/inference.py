@@ -24,13 +24,15 @@ from config import (
     JUDGE_NUM_CTX, PLANNER_NUM_CTX,
     MAX_PLANNER_TOKENS, PLANNER_THINKING_ENABLED,
     JUDGE_THINKING_ENABLED,
+    ROUTING_PATTERN_PRIOR_ENABLED, ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
 )
 from context_budget import get_model_context_window as _static_ctx
 from context_budget import adaptive_context_window, resolve_requested_ctx
 from metrics import PROM_THOMPSON
+from services import routing_patterns
 from services.routing import _server_info, _is_endpoint_error
 from services.tracking import _get_node_latency_stats, _get_premature_stop_rate
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Dict, List, Optional, Sequence, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI  # noqa: F811 — type hints only
@@ -1098,6 +1100,7 @@ async def ainvoke_guard_decision(
         GUARD_WARM_ONLY,
         GUARD_PROBE_TIMEOUT,
         GUARD_KEEP_ALIVE,
+        GUARD_NUM_CTX,
     )
 
     _gm = guard_model or GUARD_MODEL
@@ -1113,6 +1116,7 @@ async def ainvoke_guard_decision(
         "messages":   [{"role": "user", "content": _content}],
         "stream":     False,
         "keep_alive": GUARD_KEEP_ALIVE,
+        "options":    {"num_ctx": GUARD_NUM_CTX},
     }
     _audit_entry = _audit_create(
         session_id,
@@ -1197,6 +1201,45 @@ async def ainvoke_guard_decision(
         _category = _lines[1].strip() if len(_lines) > 1 else "unspecified"
         return GuardDecision(True, _category, "unsafe")
     return GuardDecision(False, status="safe")
+
+
+async def prewarm_guard_model() -> None:
+    """One-time cold load of the guard model at process startup.
+
+    GUARD_WARM_ONLY (default true) makes ainvoke_guard_decision fail open
+    whenever the guard model is not already resident, specifically to avoid
+    paying for a cold 8B load out of the request's own latency budget. But
+    with GUARD_WARM_ONLY on, nothing ever triggers that first cold load
+    either -- observed live, every single request failed open
+    ("fail_open_not_warm") because the guard model was never resident even
+    once. This mirrors _prewarm_bge_model's pattern (main.py): pay the cold
+    load cost once, out-of-band, at startup, so real traffic afterwards
+    always finds it warm and refreshes GUARD_KEEP_ALIVE via normal use.
+    Fire-and-forget: any failure here must never block startup or crash the
+    process -- the guard already fails open by design when unavailable.
+    """
+    from config import GUARD_URL, GUARD_MODEL, GUARD_TOKEN, GUARD_KEEP_ALIVE, GUARD_NUM_CTX
+
+    _gu = (GUARD_URL or "").rstrip("/")
+    if not GUARD_MODEL or not _gu or _url_api_type(_gu) != "ollama":
+        return
+    try:
+        async with httpx.AsyncClient() as _hc:
+            await _hc.post(
+                f"{_gu.removesuffix('/v1')}/api/chat",
+                json={
+                    "model": GUARD_MODEL,
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "stream": False,
+                    "keep_alive": GUARD_KEEP_ALIVE,
+                    "options": {"num_ctx": GUARD_NUM_CTX},
+                },
+                headers={"Authorization": f"Bearer {GUARD_TOKEN}"},
+                timeout=300.0,
+            )
+        logger.info("🛡️ Guard model '%s' pre-warmed at startup", GUARD_MODEL)
+    except Exception as exc:
+        logger.warning("🛡️ Guard model pre-warm failed (will keep failing open until warm): %s", exc)
 
 
 class _OllamaAwareJudgeLLM:
@@ -1994,7 +2037,11 @@ async def _select_node(model_name: str, allowed_endpoints: List[str],
 # THOMPSON_SAMPLING_ENABLED imported from config.py
 
 
-async def _get_expert_score(model: str, category: str) -> float:
+async def _get_expert_score(
+    model: str,
+    category: str,
+    query_embedding: Optional[Sequence[float]] = None,
+) -> float:
     """Performance score 0-1 for a model in a category.
 
     When ``THOMPSON_SAMPLING_ENABLED`` is true, draws from Beta(α, β) instead
@@ -2002,6 +2049,12 @@ async def _get_expert_score(model: str, category: str) -> float:
     exploration: experts with fewer observations have wider variance and
     occasionally score higher than their point estimate, giving them a chance
     to prove themselves.
+
+    While the bucket is below EXPERT_MIN_DATAPOINTS and both
+    THOMPSON_SAMPLING_ENABLED and ROUTING_PATTERN_PRIOR_ENABLED are true,
+    blends in a capped, distance-weighted Beta prior from the k nearest
+    historical observations in embedding space (services/routing_patterns.py)
+    instead of returning the flat 0.5 fallback. No effect otherwise.
     """
     if state.redis_client is None:
         return 0.5
@@ -2009,9 +2062,25 @@ async def _get_expert_score(model: str, category: str) -> float:
         key = _perf_key(model, category)
         data = await state.redis_client.hgetall(key)
         total = int(data.get("total", 0))
-        if total < EXPERT_MIN_DATAPOINTS:
-            return 0.5
         positive = int(data.get("positive", 0))
+        if total < EXPERT_MIN_DATAPOINTS:
+            if not (THOMPSON_SAMPLING_ENABLED and ROUTING_PATTERN_PRIOR_ENABLED and query_embedding is not None):
+                return 0.5
+            prior_pos, prior_total = await routing_patterns.prior(
+                "expert", f"{model}:{category}", query_embedding,
+                ROUTING_PATTERN_PRIOR_K, ROUTING_PATTERN_PRIOR_CAP,
+            )
+            if prior_total <= 0.0:
+                return 0.5
+            import random
+            alpha = positive + prior_pos + 1
+            beta  = (total - positive) + (prior_total - prior_pos) + 1
+            _LOAD_PENALTY = float(os.getenv("THOMPSON_LOAD_PENALTY", "2.0"))
+            _node_load    = _get_model_node_load(model)
+            beta          = beta * (1.0 + _LOAD_PENALTY * _node_load)
+            score = random.betavariate(alpha, beta)
+            PROM_THOMPSON.observe(score)
+            return score
         if THOMPSON_SAMPLING_ENABLED:
             import random
             alpha = positive + 1
@@ -2032,8 +2101,19 @@ async def _get_expert_score(model: str, category: str) -> float:
     except Exception:
         return 0.5
 
-async def _record_expert_outcome(model: str, category: str, positive: bool) -> None:
-    """Increments total and optionally positive counter for a model/category pair."""
+async def _record_expert_outcome(
+    model: str,
+    category: str,
+    positive: bool,
+    query_embedding: Optional[Sequence[float]] = None,
+) -> None:
+    """Increments total and optionally positive counter for a model/category pair.
+
+    When ``query_embedding`` is given, also records the observation into the
+    embedding-space pattern store (services/routing_patterns.py) so future
+    cold-start buckets for similar contexts can draw on it. No-op for that
+    part when no embedding is passed — identical to today's behaviour.
+    """
     if state.redis_client is None:
         return
     try:
@@ -2047,6 +2127,8 @@ async def _record_expert_outcome(model: str, category: str, positive: bool) -> N
         await pipe.execute()
     except Exception as e:
         logger.warning(f"Expert score update failed: {e}")
+    if query_embedding is not None:
+        await routing_patterns.record("expert", f"{model}:{category}", query_embedding, positive)
 
 # _extract_usage, _extract_json, _parse_expert_confidence,
 # _parse_expert_gaps, _expert_category — see parsing.py

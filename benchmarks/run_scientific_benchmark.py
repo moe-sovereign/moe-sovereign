@@ -46,6 +46,26 @@ RESULTS_DIR = BASE_DIR / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 ORCHESTRATOR_URL = os.environ.get("MOE_API_BASE", "http://localhost:8002")
+
+
+def _redis_password() -> Optional[str]:
+    """Valkey password for the HITL-gate fallback read; never hard-coded.
+
+    Order: REDIS_PASSWORD from the environment, then REDIS_PASSWORD from the
+    repository's .env file. Returns None when neither is set (the fallback read
+    then simply fails and is ignored by its caller).
+    """
+    value = os.environ.get("REDIS_PASSWORD")
+    if value:
+        return value
+    env_file = BASE_DIR.parent / ".env"
+    try:
+        for line in env_file.read_text().splitlines():
+            if line.startswith("REDIS_PASSWORD="):
+                return line.split("=", 1)[1].strip().strip("'\"") or None
+    except OSError:
+        return None
+    return None
 API_KEY = os.environ.get("MOE_API_KEY", "YOUR_API_KEY_HERE")
 
 JUDGE_MODEL = os.environ.get("MOE_JUDGE_MODEL", "sovereign-judge:27b")
@@ -332,7 +352,7 @@ async def query_moe_orchestrator(
                     elif appr_resp.status_code == 409:
                         try:
                             import redis
-                            r_cli = redis.Redis(host="localhost", port=6379, password="0lk0sbMwuMIbIC8HogUgygi4aIy562GX", decode_responses=True)
+                            r_cli = redis.Redis(host="localhost", port=6379, password=_redis_password(), decode_responses=True)
                             raw_gate = r_cli.get(f"hitl_gate:{gate_id}")
                             if raw_gate:
                                 content = json.loads(raw_gate).get("response_draft", "")
@@ -484,6 +504,24 @@ def deterministic_evaluation(test_case: Dict[str, Any], response_text: str) -> D
     }
 
 
+def _derive_ground_truth(test_case: Dict[str, Any]) -> str:
+    """Reference answer for the judge prompt.
+
+    The v1 dataset stores the reference as ``expected_answer`` (single-turn)
+    or ``turns[-1].expected_behavior`` (multi-turn), not as
+    ``ground_truth_reference``.
+    """
+    expected = test_case.get("expected_answer")
+    if expected:
+        if isinstance(expected, (dict, list)):
+            return json.dumps(expected, ensure_ascii=False, indent=2)
+        return str(expected)
+    turns = test_case.get("turns") or []
+    if turns and isinstance(turns[-1], dict) and turns[-1].get("expected_behavior"):
+        return str(turns[-1]["expected_behavior"])
+    return ""
+
+
 async def judge_evaluation(
     client: httpx.AsyncClient,
     test_case: Dict[str, Any],
@@ -501,8 +539,13 @@ async def judge_evaluation(
     tasks/conditions fail more often), not random noise -- observed fallback
     rates of 15-50% across recent runs, see agent_status/claude-code.md.
     """
-    criteria = test_case.get("evaluation_rules", {}).get("semantic_criteria", "")
-    ground_truth = test_case.get("ground_truth_reference", "")
+    criteria = (
+        (test_case.get("evaluation_rules") or {}).get("semantic_criteria", "")
+        or (test_case.get("scoring") or {}).get("rubric", "")
+    )
+    ground_truth = test_case.get("ground_truth_reference", "") or _derive_ground_truth(test_case)
+    if not ground_truth:
+        logger.warning("Judge evaluation for %s has no reference answer", test_case.get("id"))
 
     base_judge_prompt = f"""You are an uncompromising academic and technical evaluation judge for sovereign compound AI systems.
 Evaluate the model response against the prompt, ground truth reference, and specific criteria.
@@ -635,10 +678,41 @@ Respond ONLY with a JSON object in this exact schema:
     }
 
 
-def deterministic_score(response: str, scoring_cfg: Dict[str, Any]) -> float:
+_NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+
+def _numbers_in(text: str) -> List[float]:
+    values: List[float] = []
+    for raw in _NUMBER_RE.findall(text or ""):
+        try:
+            values.append(float(raw.replace(",", "")))
+        except ValueError:
+            continue
+    return values
+
+
+def numeric_tolerance_score(response: str, expected: Dict[str, Any], tolerance_pct: float) -> float:
+    """Share of expected numeric values found in the response within tolerance, scaled to 0..10."""
+    targets = [float(v) for v in (expected or {}).values() if isinstance(v, (int, float))]
+    if not targets:
+        return 10.0
+    found = _numbers_in(response)
+    hits = 0
+    for target in targets:
+        allowed = abs(target) * tolerance_pct / 100.0
+        if any(abs(value - target) <= allowed for value in found):
+            hits += 1
+    return round(hits / len(targets) * 10.0, 2)
+
+
+def deterministic_score(response: str, scoring_cfg: Dict[str, Any], expected_answer: Optional[Dict[str, Any]] = None) -> float:
     """Compute deterministic score based on required keywords and exact numbers."""
     if not response:
         return 0.0
+    if scoring_cfg.get("type") == "numeric_tolerance" and isinstance(expected_answer, dict):
+        return numeric_tolerance_score(
+            response, expected_answer, float(scoring_cfg.get("tolerance_pct") or 0.5)
+        )
     res_lower = response.lower()
     req_kws = scoring_cfg.get("required_keywords") or scoring_cfg.get("turn3_required_keywords") or []
     if not req_kws:
@@ -781,7 +855,7 @@ async def run_single_test_condition(
             "reasoning": "Skipped judge evaluation: the pipeline call itself failed (turns[].ok is False), so there is no real response to grade.",
         }
     else:
-        det_score = deterministic_score(final_response, scoring_cfg)
+        det_score = deterministic_score(final_response, scoring_cfg, expected_answer)
         judge_res = await judge_evaluation(
             client=client,
             test_case=test_case,
@@ -916,7 +990,8 @@ async def main():
     print("=" * 80)
     print("🚀 MOE SOVEREIGN SCIENTIFIC MULTIDISCIPLINARY BENCHMARK")
     print(f"Dataset: {DATASET_PATH.name}")
-    print(f"Planner Model: moe-sovereign-student:4b @ N04-RGTX (port 11435)")
+    # Dynamically resolve planner template reference instead of obsolete hardcoded student:4b
+    print(f"Planner Template: {TEMPLATES['compound_ai']} @ N04-RGTX (port 11435)")
     print(f"Judge Model:   {JUDGE_MODEL} @ N04-RTX (port 11434)")
     print(f"Expert Models: {NATIVE_MODEL} @ N04-RTX")
     print(f"Baseline:      Native {NATIVE_MODEL} (Direct Inference)")
@@ -986,36 +1061,41 @@ async def main():
         # hours on a run that would otherwise silently produce 48x empty-response failures
         # (this exact failure mode hit every run on 2026-08-18/19 until the template names
         # were corrected against admin_expert_templates).
-        print("\n🔎 Pre-flight: verifying orchestrator templates resolve...", flush=True)
-        preflight_failed = []
-        for cond_name, target_cfg in conditions:
-            if cond_name == "native_baseline":
-                continue
-            # A bare "ping" gives the planner no real signal to plan around --
-            # observed live to make it hallucinate an unrelated task (e.g.
-            # "Characterize DNS, HTTP, gRPC... routing"), which then
-            # predictably fails trust-score/plausibility and comes back as a
-            # 422 quality_blocked. That 422 actually proves the template
-            # resolves and the full pipeline runs end to end; it is not the
-            # "template name doesn't exist" failure this check exists to
-            # catch. Use a minimal but genuine question, and additionally
-            # treat quality_blocked as a pass (template alive, just declined
-            # a low-signal probe) rather than a hard failure.
-            probe = await query_moe_orchestrator(client, target_cfg, [{"role": "user", "content": "What is 2 + 2?"}])
-            _err = str(probe.get("error", ""))
-            if not probe.get("ok") and "quality_blocked" not in _err:
-                preflight_failed.append((cond_name, target_cfg, probe.get("error", "unknown error")))
-                print(f"  ✗ {cond_name:22} ({target_cfg!r}): {_err[:200]}", flush=True)
-            elif not probe.get("ok"):
-                print(f"  ✓ {cond_name:22} ({target_cfg!r}) resolves (quality gate declined trivial probe)", flush=True)
-            else:
-                print(f"  ✓ {cond_name:22} ({target_cfg!r}) resolves", flush=True)
-        if preflight_failed:
-            print("\n❌ Pre-flight failed -- aborting before burning compute on broken templates:", file=sys.stderr)
-            for cond_name, target_cfg, err in preflight_failed:
-                print(f"   {cond_name}: template {target_cfg!r} -> {err}", file=sys.stderr)
-            sys.exit(1)
-        print("✅ Pre-flight passed: all templates resolve.\n", flush=True)
+        # Optional pre-flight bypass via MOE_BENCHMARK_SKIP_PREFLIGHT
+        _skip_preflight = bool(os.environ.get("MOE_BENCHMARK_SKIP_PREFLIGHT", "").strip())
+        if _skip_preflight:
+            print("\n⚡ Pre-flight skipped via MOE_BENCHMARK_SKIP_PREFLIGHT -- starting benchmark directly...\n", flush=True)
+        else:
+            print("\n🔎 Pre-flight: verifying orchestrator templates resolve...", flush=True)
+            preflight_failed = []
+            for cond_name, target_cfg in conditions:
+                if cond_name == "native_baseline":
+                    continue
+                # A bare "ping" gives the planner no real signal to plan around --
+                # observed live to make it hallucinate an unrelated task (e.g.
+                # "Characterize DNS, HTTP, gRPC... routing"), which then
+                # predictably fails trust-score/plausibility and comes back as a
+                # 422 quality_blocked. That 422 actually proves the template
+                # resolves and the full pipeline runs end to end; it is not the
+                # "template name doesn't exist" failure this check exists to
+                # catch. Use a minimal but genuine question, and additionally
+                # treat quality_blocked as a pass (template alive, just declined
+                # a low-signal probe) rather than a hard failure.
+                probe = await query_moe_orchestrator(client, target_cfg, [{"role": "user", "content": "What is 2 + 2?"}])
+                _err = str(probe.get("error", ""))
+                if not probe.get("ok") and "quality_blocked" not in _err:
+                    preflight_failed.append((cond_name, target_cfg, probe.get("error", "unknown error")))
+                    print(f"  ✗ {cond_name:22} ({target_cfg!r}): {_err[:200]}", flush=True)
+                elif not probe.get("ok"):
+                    print(f"  ✓ {cond_name:22} ({target_cfg!r}) resolves (quality gate declined trivial probe)", flush=True)
+                else:
+                    print(f"  ✓ {cond_name:22} ({target_cfg!r}) resolves", flush=True)
+            if preflight_failed:
+                print("\n❌ Pre-flight failed -- aborting before burning compute on broken templates:", file=sys.stderr)
+                for cond_name, target_cfg, err in preflight_failed:
+                    print(f"   {cond_name}: template {target_cfg!r} -> {err}", file=sys.stderr)
+                sys.exit(1)
+            print("✅ Pre-flight passed: all templates resolve.\n", flush=True)
 
         # Run across multiple rounds. 5 rounds/cell (up from 2) so per-condition
         # standard error/CI are actually meaningful, not just point estimates from
@@ -1142,10 +1222,14 @@ async def main():
         "run_id": run_id,
         "timestamp": timestamp,
         "dataset": DATASET_PATH.name,
+        "arm": os.environ.get("MOE_BENCHMARK_ARM", ""),
+        "pipeline_commit": os.environ.get("MOE_PIPELINE_COMMIT", ""),
+        "judge_reference_fix": True,
         "summary": summary_by_condition,
         "summary_valid_only": summary_by_condition_valid_only,
         "lumi_finetuning_validation": {
-            "planner_model": "moe-sovereign-student:4b (LUMI-G Distilled)",
+            # Dynamically reference template rather than obsolete student:4b label
+            "planner_model": f"{TEMPLATES['compound_ai']} (Planner on N04-RGTX)",
             "judge_model": JUDGE_MODEL,
             "native_comparison_model": NATIVE_MODEL,
         },

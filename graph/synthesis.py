@@ -602,6 +602,20 @@ async def merger_node(state_: AgentState):
                                            JUDGE_NUM_CTX, label="synthesis")
     _merger_maxout = await _get_max_out_async(_merger_judge_model, _merger_judge_url,
                                               _merger_judge_tok, state.redis_client)
+    # Code-heavy merger tasks (systems_programming/code_reviewer) routinely need
+    # a full critique PLUS one or more corrected code blocks in one response.
+    # Observed live: a 2048-token budget cut the judge off mid rewrite, leaving
+    # an odd ``` count that the plausibility gate then rejected as
+    # unclosed_code_block (services/quality_gate.py verify_response_plausibility)
+    # -- not a prompt-wording issue, a genuine output-budget shortfall for this
+    # task shape. resolve_io_budget() below still caps the final value against
+    # the model's real context window, so this only widens headroom when there
+    # is room to give.
+    _merger_code_categories_present = (
+        {_expert_category(r) for r in expert_results} & _RUST_COMPILE_CHECK_CATEGORIES
+    )
+    if _merger_code_categories_present:
+        _merger_maxout = int(_merger_maxout * 1.75)
     if _merger_ctx > 0:
         _budget = resolve_io_budget(
             ctx_tokens=_merger_ctx, desired_max_tokens=_merger_maxout,
@@ -1996,6 +2010,19 @@ def _should_replan(state_: AgentState) -> str:
     if trust_verdict in ("PROCEED_WITH_ASSUMPTION", "BLOCK"):
         sc_round = state_.get("self_critique_round") or 0
         sc_max   = state_.get("self_critique_max") or int(os.getenv("SELF_CRITIQUE_MAX_ROUNDS", "2"))
+        if state_.get("review_replaces_self_critique"):
+            logger.info("🔄 Self-Critique router: skipped, review wave replaces self-critique")
+            return "critic"
+        if sc_round >= 1:
+            _prev = float(state_.get("self_critique_prev_score") or 0.0)
+            _cur = float(state_.get("trust_score") or 0.0)
+            _min_gain = float(os.getenv("SELF_CRITIQUE_MIN_GAIN", "0.05"))
+            if _cur - _prev < _min_gain:
+                logger.info(
+                    "🔄 Self-Critique router: stop after round %d, trust gain %.3f < %.3f",
+                    sc_round, _cur - _prev, _min_gain,
+                )
+                return "critic"
         if sc_round < sc_max:
             logger.info("🔄 Self-Critique router: round %d/%d, verdict=%s", sc_round + 1, sc_max, trust_verdict)
             return "self_critique"
@@ -2158,18 +2185,23 @@ async def self_critique_node(state_: AgentState):
         from parsing import _extract_usage
         res      = await _invoke_judge_with_retry(state_, critique_prompt)
         usage    = _extract_usage(res)
-        improved = res.content.strip()
+        improved = re.sub(r"<think>.*?</think>", "", res.content or "", flags=re.DOTALL).strip()
 
         if improved and len(improved) > 30:
             new_expert = f"[SELF_CRITIQUE_R{round_num} / judge]: {improved}"
             await _report(f"✅ Self-Critique produced {len(improved)} chars")
             await _record_stage(request_id, "self_critique", "done")
             logger.info("✅ Self-Critique round %d: %d chars added", round_num, len(improved))
-            return {"expert_results": [new_expert], "self_critique_round": round_num, **usage}
+            return {
+                "expert_results": [new_expert],
+                "self_critique_round": round_num,
+                "self_critique_prev_score": float(trust_score or 0.0),
+                **usage,
+            }
     except Exception as _ex:
         logger.warning("⚠️ Self-Critique LLM call failed: %s", _ex)
 
-    return {"self_critique_round": round_num}
+    return {"self_critique_round": round_num, "self_critique_prev_score": float(trust_score or 0.0)}
 
 
 def _log_hallucination_check(state_: AgentState, corrected: bool, upgraded: bool = False) -> None:
@@ -2231,6 +2263,19 @@ _CRITIC_PREAMBLE_RE = re.compile(
     r'|^\s*(unsupported|incorrect|critical)\s+(claim|flaw|error)\b',
     re.IGNORECASE,
 )
+
+
+def _critic_noncompliance_reason(critic_out: str, original: str) -> str:
+    """Same rules as _critic_is_noncompliant_confirmation, returning which one fired ("" = compliant)."""
+    stripped = critic_out.strip()
+    if _CRITIC_TRAILING_CONFIRMED_RE.search(stripped):
+        return "trailing_confirmed"
+    if _CRITIC_PREAMBLE_RE.match(stripped):
+        return "preamble"
+    code_markers = ("`" * 3, "<!DOCTYPE", "<html", "def ", "function ", "class ", "import ", "setInterval")
+    if any(m in original for m in code_markers) and not any(m in critic_out for m in code_markers):
+        return "code_dropped"
+    return ""
 
 
 def _critic_is_noncompliant_confirmation(critic_out: str, original: str) -> bool:
@@ -2455,7 +2500,10 @@ async def critic_node(state_: AgentState):
     try:
         res          = await _invoke_judge_with_retry(state_, critic_prompt)
         usage        = _extract_usage(res)
-        critic_out   = res.content.strip()
+        critic_out   = re.sub(r"<think>.*?</think>", "", res.content or "", flags=re.DOTALL).strip()
+        if "</think>" in critic_out:
+            # Unterminated/leading reasoning block: keep only the text after it.
+            critic_out = critic_out.split("</think>")[-1].strip()
         await _report(f"🔎 Critic response:\n{critic_out}")
 
         # Guard: if the judge refused (content filter / VRAM), keep the merger answer unchanged.
@@ -2487,7 +2535,10 @@ async def critic_node(state_: AgentState):
                 "⚠️ Critic: non-compliant judge format (CONFIRMED reached without "
                 "the required leading format, or code dropped from the reply) — "
                 "preserving merger answer instead of overwriting it with the "
-                "judge's deliberation trace"
+                "judge's deliberation trace | reason=%s chars=%d head=%r",
+                _critic_noncompliance_reason(critic_out, final_response),
+                len(critic_out),
+                critic_out[:160],
             )
             await _report(
                 "⚠️ Critic: judge reply was a non-compliant deliberation, not a "

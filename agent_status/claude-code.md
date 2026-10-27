@@ -3770,3 +3770,1149 @@ Jobs) gestoppt.
 **Zwischenfund während der Verifikation:** `research` (21832988) war
 bereits durchgelaufen (1799/1800, 0 Garbage-Zeilen nach Fix-Anwendung) —
 noch nicht im vorigen Log-Eintrag erwähnt, jetzt nachgetragen.
+
+## 2026-09-09T05:40:00Z — Zwischenstand: precision fertig, omni-Ergänzung verifiziert — done
+
+precision (initial, 21832987): COMPLETED, 1783/1800 sauber (0 Garbage nach
+Filter). Ergänzungsjob mit erweiterter Themenliste eingereicht: 21843896.
+
+omni-Ergänzung (21840254): COMPLETED, 2399 gesamt (1799 alt + 600 neu),
+0 Garbage. Stichprobe bestätigt: neue Themen (Multi-Domain-Routing,
+Priorisierung konfligierender Spezialisten-Empfehlungen) erzeugen echten,
+passenden Inhalt (z.B. "four expert outputs" die priorisiert werden
+müssen) — Themenerweiterung wirkt wie beabsichtigt.
+
+**Laufend:** security_initial (21832989), precision_supp (21843896),
+datainfra_supp (21840251), governance_supp (21840252),
+graphrag_supp (21840253), research_supp (21840255).
+
+## 2026-09-09T06:10:00Z — coder- und research-Ergänzung verifiziert — done
+
+coder-Ergänzung (21840250): 721→704 nach Filter (17 Garbage entfernt).
+Neue Themen bestätigt vertreten: FFI/Binding 120 Erwähnungen, embedded 49,
+no_std 13, PyO3 7. coder-Gesamtstand LUMI-G: 704 (nach beiden Läufen).
+
+research-Ergänzung (21840255): 2399, 0 Garbage (1799 alt + 600 neu).
+
+**Laufend:** security_initial (21832989), precision_supp (21843896),
+datainfra_supp (21840251), governance_supp (21840252),
+graphrag_supp (21840253).
+
+## 2026-09-09T06:45:00Z — graphrag/datainfra/governance/security verifiziert, letzter Ergänzungsjob eingereicht — done
+
+graphrag-Ergänzung: 2393 sauber (1793+600, 0 Garbage).
+datainfra-Ergänzung: 2095 sauber (0 Garbage).
+governance-Ergänzung: 2085 sauber (0 Garbage).
+security (initial, 21832989): 1335 sauber (5 Garbage entfernt) — Ergänzungsjob
+mit erweiterter Themenliste eingereicht: 21845727.
+
+**Nur noch 2 Jobs laufend:** precision_supp (21843896), security_supp
+(21845727). Sobald beide fertig sind, ist die LUMI-G-Generierung für alle
+9 Rollen abgeschlossen — dann `merge_training_datasets.py` pro Rolle und
+Übergang zu Phase 3 (Training).
+
+**Nebenbei (cross-session):** Branch feature/lumig-role-sft-topic-diversity-fixes
+(4eda4ee4) wurde von einer anderen Claude-Session auf Bitte ihres Users
+nach GitLab (origin, git.4noobs.de) gepusht -- verifiziert per git fetch.
+Nutzer hier hat urspruenglich GitHub angefragt; das bleibt fuer diese
+Session weiterhin classifier-blockiert. Rueckfrage an Nutzer gestellt, ob
+GitLab ausreicht oder GitHub zusaetzlich noch gebraucht wird.
+
+## 2026-09-09T14:05:00Z — Mistral-Kontrolltest Planner/Judge erfolgreich, große Läufe gestartet — done
+
+**precision-Ergänzung verifiziert:** 2374 sauber (0 Garbage). Damit 8/9
+Rollen LUMI-G-seitig komplett (nur security_supp 21845727 noch laufend).
+
+**Nutzerfrage:** lohnt sich ein erneuter Mistral-Test für Planner/Judge,
+da deren Templates strukturell anders sind als das generische role_sft-
+Template, an dem Mistral bei coder scheiterte? Antwort: ja, unterschiedliche
+Fehlerklasse (weiche Themen-Vorgabe vs. konkrete Pattern-Prompts), lohnt
+sich empirisch zu prüfen.
+
+**Kontrolltest (6 Anfragen, $0,0041 Gesamtkosten):** 6/6 sauber geparst,
+echte Inhalte bei beiden Rollen (Planner: korrekte JSON-Task-Arrays mit
+precision_tools/chained_calculation/vlsm_subnet_calc; Judge:
+confirmed_code/confirmed_prose/corrected_code, Contract eingehalten).
+Kosten Ø $0,0009/Beispiel (Planner) bzw. $0,0004/Beispiel (Judge) —
+30-70× günstiger als Kimi K3. Bestätigt: Mistrals Problem bei `coder` war
+spezifisch die weiche Themen-Vorgabe, nicht die Fähigkeit zu strukturierter
+Ausgabe.
+
+**Nutzer-Entscheidung:** Mistral als Hauptquelle, großes Volumen. User hat
+$30 nachgeladen (Gesamtguthaben jetzt $62,19 von $100 Limit).
+
+**4 Läufe gestartet** (parallel, lokal im Hintergrund):
+- Mistral Large 3 → planner, Ziel 1500, Kostendeckel $5
+- Mistral Large 3 → judge, Ziel 1500, Kostendeckel $5
+- Kimi K3 → planner, Ziel 400, Kostendeckel $15 (Cross-Teacher-Diversität)
+- Kimi K3 → judge, Ziel 400, Kostendeckel $15
+
+Geplante Gesamtkosten ~$25 von $62 Restguthaben.
+
+**Offen:** alle 4 Läufe + security_supp (LUMI-G) abwarten, dann Diversität/
+Qualität prüfen, danach `merge_training_datasets.py` für alle 9 Rollen
+und Übergang zu Phase 3 (Training).
+
+## 2026-09-09T14:15:00Z — 3 von 4 OpenRouter-Läufen fertig, Pattern-Verteilung verifiziert — done
+
+- Mistral → judge: 1486/1500, $0,34, 50/50-Split CONFIRMED/korrigiert
+  bestätigt (748/738) — sauberes Pattern-Cycling, keine Kollaps-Gefahr.
+- Kimi K3 → planner: 399/400, $2,20, echte VLSM/Compound-Interest-Inhalte.
+- Kimi K3 → judge: 388/400, $1,72.
+- Mistral → planner: noch laufend (505/1500).
+- security_supp (LUMI-G, 21845727): noch laufend (0:59h).
+
+Gesamtkosten OpenRouter bisher: ~$4,26 von geplanten ~$25-40.
+
+**Offen:** Mistral-planner + security_supp abwarten, dann für Planner/Judge
+mit `merge_training_datasets.py` zusammenführen (LUMI-G + Mistral + Kimi K3
+je Rolle), danach alle 9 Rollen fertig für Phase 3 (Training).
+
+## 2026-09-09T15:20:00Z — Datensicherung durchgeführt, Publikations-Plan festgelegt — done
+
+**Datensicherung (aus ephemeren Scratch-Speichern):**
+- Lokal: `datasets/role_sft_final/{role}/` (29MB, alle OpenRouter-generierten
+  Dateien: coder Kimi-K3+Loom, planner/judge Mistral+Kimi-K3, 7 generische
+  Rollen Mistral — Stand zum Kopierzeitpunkt, Mistral-Läufe für die 7
+  generischen Rollen liefen zu dem Zeitpunkt noch).
+- LUMI-G: `/scratch/.../datasets/` → `/projappl/project_465003058/datasets/`
+  (2,5GB, persistente Projekt-Storage-Klasse statt Scratch, das einer
+  Aufräum-Policy unterliegt). Quota danach: 2,7G/54G.
+- **Fund nebenbei:** LUMI-G-Home (`/users/hornphil`) ist bei 100% Kapazität
+  (28G/22G laut lumi-quota-Ausgabe, unterliegende FS zeigt 20G/20G) — nicht
+  akut fuer diese Aufgabe relevant, aber als Risiko vermerkt.
+
+**Nutzerwunsch:** Trainingssets sowohl auf GitHub als auch HuggingFace
+veröffentlichen. HF-Zugriff bestätigt (h3rb3rn). Entscheidungen:
+- **Timing:** erst nach Merge (`merge_training_datasets.py` pro Rolle) +
+  der im Plan vorgesehenen Stichprobenprüfung (Themen-Treue + Fach-
+  Korrektheit) — kein Zwischenstand-Upload, der später überschrieben
+  werden müsste.
+- **HuggingFace:** neues Dataset-Repo `h3rb3rn/moe-sovereign-role-sft`,
+  zunächst privat.
+- **GitHub:** `moe-infra`-Dev-Repo, `datasets/` via git-lfs tracken (ändert
+  die bestehende .gitignore-Regel, die `datasets/` bisher bewusst als
+  "local build artifacts, nicht Repo-Source" ausschließt) statt des
+  separaten Github/moe-sovereign-Publish-Checkouts.
+
+**Offen:** 7 Mistral-Läufe für die generischen Experten fertig abwarten,
+dann Stichprobenprüfung + Merge + git-lfs-Setup + HF-Repo-Erstellung +
+Push zu beiden Zielen in einem sauberen Schritt.
+
+## 2026-09-09T17:35:00Z — OLMo-3.1-32B Smoke-Test FAILED, Root Cause gefunden, Retry mit --enforce-eager — done
+
+Job 21848558 FAILED (0:04:51): Checkpoint-Laden erfolgreich (alle 3
+statischen Filter bestätigt korrekt), aber vLLMs CUDA-Graph-Capture-Schritt
+crashte mit ROCm/HIP-spezifischem Fehler (`hipErrorCapturedEvent`,
+"operation not permitted on an event last recorded in a capturing
+stream") — Laufzeit-Inkompatibilität von Olmo3ForCausalLM mit Graph-Capture
+auf diesem ROCm-Build, kein Lade-/Größenproblem.
+
+**Fix:** `--enforce-eager`-Flag ergänzt (`_load_llm()` in
+`generate_diverse_training_seeds.py`, opt-in, Default unverändert für alle
+bereits verifizierten Lehrer-Modelle). Alle 69 Tests grün, nach LUMI-G
+synchronisiert. Job 21849323 mit `--enforce-eager` neu eingereicht, Monitor
+läuft.
+
+## 2026-09-09T17:40:00Z — OLMo-3.1-32B Smoke-Test bestanden (mit --enforce-eager) — done
+
+Job 21849323 COMPLETED, Exit 0:0. **24/24 geparst** (8 Kategorien × 3),
+echte plausible Inhalte über general/precision_tools/code_reviewer/
+compounding_knowledge/governance/etc. Damit erreicht OLMo-3.1-32B-Instruct
+dieselbe 24/24-Bestätigungsschwelle wie Qwen3-Next-80B/GLM-4.5-Air in
+Phase 1 -- als erster echt "open source" (nicht nur open weight)
+Lehrer-Kandidat real verifiziert, einziger Unterschied zu den bestehenden
+Tier-A-Lehrern: braucht `--enforce-eager` (ROCm/HIP-Graph-Capture-
+Inkompatibilität, siehe letzter Eintrag), keine funktionale Einschränkung,
+nur etwas langsamer pro Token.
+
+Details: `docs/experiments/lumig_openrouter_teacher_verification.md` sollte
+um diesen neuen Kandidaten ergänzt werden (noch offen).
+
+**Offen:** Nutzer entscheiden lassen, ob/wie OLMo-3.1-32B in die
+Lehrer-Rotation aufgenommen wird (z.B. als Ersatz oder Ergänzung zu Qwen3-
+Next-80B für den Reasoning-Cluster, gegeben die Provenienz-sauberere
+Positionierung). Ausserdem noch offen: 7 Mistral-Läufe für die generischen
+Experten, Datensicherung/HF/GitHub-Publikation nach Merge+Stichprobe.
+
+## 2026-09-09T18:10:00Z — Scope-Korrektur: echte Open-Source-Kandidaten für SCHÜLER-Basismodelle — done
+
+**Wichtige Nutzer-Korrektur:** Ursprünglich fälschlich als Lehrer-Modell-
+Frage behandelt (Datengenerierung) — tatsächliche Absicht: echte
+Open-Source-Alternativen zu den fein zu tunenden SCHÜLER-Basismodellen
+selbst (aktuell Qwen3.5:4b Experte, Qwen3.5:8b Planner, Qwen3.8:27b Judge),
+um die Distillation-Provenienz-Unsicherheit auf Basismodell-Ebene zu lösen.
+
+**Recherche + Kandidaten:**
+- Experte (~4B): **SmolLM3-3B** (HuggingFace) — vollständig offen
+  (Architektur/Datenmix/Post-Training dokumentiert).
+- Planner (~8B): **OLMo-2-1124-7B-Instruct** (AI2).
+- Judge (~27B): **OLMo-3.1-32B-Instruct** (bereits als Lehrer-Kandidat
+  smoke-getestet, 24/24).
+- Geprüft und verworfen: **AMD Instella-3B** — trotz AMD-nativem Training
+  auf AMD-Hardware ironischerweise das riskanteste: kein natives
+  `transformers`-Modul (nur `trust_remote_code`), **kein offizieller
+  llama.cpp/GGUF-Support** (nur gepatchte Community-Forks, Tokenizer-
+  Integration laut Diskussion unvollständig) — genau der Exportschritt, an
+  dem der urspüngliche Stage-3-Bug dieser Session hing.
+
+**Methodik-Korrektur:** vLLM-Registry-Check allein reicht nicht für
+Schüler-Kandidaten (das prüft nur Lehrer/Inferenz-Pfad) — zusätzlich
+HF-`transformers`-Support UND GGUF/llama.cpp-Support geprüft (config-only,
+kein Gewichte-Download).
+
+**2 echte LUMI-G-Smoke-Tests eingereicht** (ohne `--enforce-eager`,
+nicht per Analogie zu OLMo-3.1-32B angenommen): SmolLM3-3B (21853583),
+OLMo-2-7B (21853584), `--tensor-parallel-size 1` (unnötig, Modelle sind
+klein). Monitor läuft.
+
+**Nebenbei weiterlaufend:** 7 Mistral-Läufe für generische Experten (fast
+fertig), Datensicherung/HF/GitHub-Publikation weiterhin nach Merge+
+Stichprobe geplant.
+
+## 2026-09-09T18:20:00Z — 7 Mistral-Läufe fertig, lokal gesichert — done
+
+Alle 7 generischen Experten fertig: precision 1500/1500 ($3.71), graphrag
+1495/1500 ($3.51, 5 Fehler), governance 1235/1500 ($5.03, Kostendeckel
+erreicht), research 1220/1500 ($5.03, Kostendeckel), security 1392/1500
+($5.03, Kostendeckel), datainfra 1296/1500 ($5.03, Kostendeckel), omni
+1485/1500 ($2.88, 15 Fehler). Gesamt: 9.623 Beispiele, $30,22.
+
+Vier Rollen liefen in den $5-Kostendeckel bevor 1500 erreicht wurden --
+kein Fehler, nur Budget-Grenze. Bei Bedarf könnten diese 4 mit höherem
+--max-cost-usd auf 1500 aufgefüllt werden (Restguthaben aktuell $26,22
+von $100 Limit -- OpenRouter-Gesamtverbrauch diese Session: $73,78).
+
+Lokal gesichert nach `datasets/role_sft_final/` (86MB, 14.371 Zeilen
+OpenRouter-Anteil gesamt über alle Rollen).
+
+**Noch offen:** SmolLM3-3B/OLMo-2-7B Student-Smoke-Tests laufen noch,
+LUMI-G-Daten der 7 Rollen noch nicht final in projappl nachsynchronisiert
+(letzte Sync war vor Abschluss dieser Läufe -- die 7 Mistral-Dateien
+liegen nur lokal, nicht auf LUMI-G, da sie lokal generiert wurden).
+Placeholder/Garbage-Filter-Bereinigung für die 7 neuen Mistral-Dateien
+noch nicht angewendet (bisher nur auf LUMI-G-generierte Dateien).
+
+## 2026-09-09T18:35:00Z — OLMo-3.1-32B als zusätzlicher Lehrer produktiv eingesetzt — done
+
+Nutzer-Hinweis: OLMo-3.1-32B war zwar smoke-getestet, aber nie tatsächlich
+für echte Generierung genutzt worden. Nachgeholt: 6 neue SLURM-Jobs für den
+Reasoning-Cluster (planner, precision, graphrag, research, omni, judge —
+dieselben Rollen wie Qwen3-Next-80B), Ziel je 1500 Beispiele, mit
+`--enforce-eager` (ROCm-Fix aus dem Smoke-Test). Eingereicht:
+graphrag 21855388, judge 21855389, omni 21855390, planner 21855391,
+precision 21855392, research 21855393. Ergänzt die bestehenden
+Qwen3-Next-80B-Daten, ersetzt sie nicht (Merge später zusammen).
+
+Kombinierter Monitor für diese 6 + die 2 laufenden Student-Basismodell-
+Smoke-Tests (SmolLM3-3B, OLMo-2-7B) eingerichtet, alter Monitor gestoppt.
+
+## 2026-09-09T19:10:00Z — OLMo-2 wegen 4K-Kontext verworfen, OLMo-3-7B als Ersatz — done
+
+Nutzer-Frage nach Kontextfenstern (Ziel: nach Finetuning weiterhin volles
+Kontextfenster nutzbar) deckte auf: OLMo-2-1124-7B-Instruct hat nur
+`max_position_embeddings=4096` -- gegen aktuellen Produktionsbedarf
+(Experten 32.768, Judge 258.000) viel zu klein. Nutzer bezweifelte den Fund
+("das kann nicht stimmen"), auf Bestehen dessen an 3 Checkpoints
+gegengeprüft (7B-1124, 13B-1124, 32B-0325-Refresh) -- überall identisch
+4096, rope_scaling=null. Bestätigt durch AI2s eigenes "2 OLMo 2 Furious"-
+Paper (arXiv:2501.00656): echte, dokumentierte Design-Entscheidung der
+OLMo-2-Generation, kein Datenfehler.
+
+**Fix:** OLMo-3-7B-Instruct (`Olmo3ForCausalLM`, dieselbe Architektur wie
+das bereits verifizierte 32B) hat dieselbe YaRN-Erweiterung auf 65.536
+nativ (Faktor 8x von 8.192) -- klar besserer Planner-Kandidat. Job
+21853584 (OLMo-2-7B) noch vor Start gecancelt, Job 21856449
+(OLMo-3-7B-Instruct, mit `--enforce-eager` von Anfang an) eingereicht.
+
+**Aktualisierte Kandidatentabelle:**
+| Rolle | Kandidat | Kontext (nativ) | Produktionsbedarf |
+|---|---|---|---|
+| Experte | SmolLM3-3B | 65.536 | 32.768 -- OK |
+| Planner | OLMo-3-7B-Instruct | 65.536 (YaRN) | ~32.768 -- OK |
+| Judge | OLMo-3.1-32B-Instruct | 65.536 (YaRN) | 258.000 -- ~25%, offene Frage |
+
+**Noch offen:** reale Judge-Kontextnutzung in Produktion prüfen (Frage:
+reicht 65K praktisch, auch wenn das Maximum 258K ist?). Monitor für alle
+8 laufenden LUMI-G-Jobs aktualisiert (OLMo-2-7B raus, OLMo-3-7B rein).
+
+## 2026-09-09T21:15:00Z — SmolLM3-3B-Smoke-Test: Exit 0, aber echte Inhaltsprüfung zeigt Schwächen — done
+
+Job 21853583 meldete "SMOKE TEST PASSED" (Exit 0:0, 15 Zeilen > 0), aber
+echtes Gegenlesen zeigt: `technical_support`-Kategorie komplett fehlgeschlagen
+(0/3), `research`-Kategorie lieferte Platzhalter-Müll ("request 1",
+"request 2", "request 3") statt echter Anfragen -- durchgerutscht, weil
+`--mode grounding`s JSON-Array-Parser (anders als der neuere `role_sft`-
+Parser mit `_is_unfilled_placeholder`) keine Platzhalter-Erkennung hat.
+Real nutzbar: ~15/24 Slots, davon 3 Platzhalter-Müll -> effektiv ~12/24.
+
+Deutlich schwächer als GLM-4.5-Air/Qwen3-Next-80B/OLMo-3.1-32B (alle 24/24).
+SmolLM3-3B als Experten-Kandidat damit NICHT ohne Weiteres bestätigt --
+schwächer als erwartet für ein reines Grounding-Smoke-Test-Szenario.
+
+**Offen:** Entscheiden, ob (a) SmolLM3-3B trotzdem als Kandidat weiter-
+verfolgt wird (ggf. mit Prompt-Anpassung), (b) ein anderes ~3-4B Open-
+Source-Modell gesucht wird, oder (c) `--mode grounding` um dieselbe
+Platzhalter-Erkennung wie `role_sft` ergänzt wird (Code-Fix, würde auch
+rückwirkend alte Grounding-Smoke-Tests genauer machen).
+
+## 2026-09-10T00:10:00Z — Dolci-Think-SFT für Long-Context-Bedarf integriert (Phase B) — done
+
+**Herkunftsprüfung:** Dolci-Think-SFT enthält zu ~12% (283k von 2,27 Mio.
+Beispielen) Reasoning-Traces, generiert von DeepSeek R1/R1-0528 (WildChat,
+OpenAssistant, CoCoNot, WildGuardMix, WildJailbreak, Aya, TableGPT).
+DeepSeek R1 selbst ist MIT-lizenziert (verifiziert), keine ToS-Verletzung.
+Nutzer-Entscheidung: alles nutzen, keine Filterung nach Quelle nötig.
+
+**Diversitäts-Korrektur:** Erste Extraktion (3 aufeinanderfolgende Shards)
+ergab zufällig 100% WildChat-Chat — Shards sind blockweise nach Quelle
+sortiert, nicht gemischt. Gegen Fachliteratur geprüft (ProLong-Paper):
+Domänen-Mischung ist für Long-Context-Generalisierung nachweislich wichtig,
+reiner Chat-Content würde unseren Bedarf (technische/strukturierte lange
+Inhalte) unterversorgen. Shard-Kartierung durchgeführt (Stichproben bei
+Index 10/30/50/80/110/140/155), 5 echte Quell-Blöcke identifiziert:
+WildChat-Chat, OpenThoughts3-Mathe-Reasoning, Python-SFT-Code,
+Persona-Precise-IF, Aya-mehrsprachig.
+
+**Ergebnis:** 2028 lange Beispiele (>30k Zeichen, ~7,5k+ Token) extrahiert:
+600 WildChat, 600 OpenThoughts3-Mathe, 600 Python-SFT, 221 Persona-Precise-
+IF, 7 Aya (die letzten beiden Quellen hatten von Natur aus wenige lange
+Einträge). Inhaltlich stichprobenartig verifiziert (PE-Header-Analyse,
+Geometrie-Beweis mit Denkspur, Python-Bibliothekssystem, Community-Event-
+Planung, ukrainisches Mathe-Wortproblem — alle real, hochwertig).
+
+**Rollen-Zuordnung + ChatML-Rendering** (`render_for_roles.py`):
+python_sft→coder (600), openthoughts3_math→precision (600),
+persona_precise_if→planner (221), wildchat_chat→omni (600),
+aya_multilingual→research (7). Gespeichert unter
+`datasets/role_sft_final/{role}/role_sft_{role}_dolci_longcontext.jsonl`,
+bereit fuer den Phase-Q1-Merge.
+
+**Offen:** graphrag, governance, security, datainfra, judge haben noch
+keinen Long-Context-Anteil zugeordnet bekommen (keine passende Quelle in
+den bisher gesichteten Bloecken) -- bei Bedarf weitere Shard-Bloecke
+kartieren (SYNTHETIC-2, Nemotron, TableGPT, CoCoNot, WildGuardMix,
+WildJailbreak, OpenAssistant noch nicht lokalisiert).
+
+## 2026-09-10T02:30:00Z — OLMo-3-7B-Smoke-Test: real nur 25% brauchbar, Muster erkannt — done
+
+Job 21856449 COMPLETED, Exit 0:0, aber echtes Gegenlesen (Lehre aus dem
+SmolLM3-Fund) zeigt: nur `technical_support` (3/3) echt/treffend.
+`general` und `research` (je 3/3) sind reiner Platzhatzer-Muell ("string
+1/2/3", "response 1/2/3"). `precision_tools` (3/3) ist falsch kategorisiert
+(General-Chitchat statt Praezisions-Anfragen). Real nutzbar: 3/12 (25%) --
+noch schwaecher als SmolLM3-3Bs 12/24 (50%).
+
+**Erkanntes Muster:** Beide kleineren Open-Source-Kandidaten (SmolLM3-3B
+fuer Experte, OLMo-3-7B fuer Planner) zeigen schwache --mode grounding
+Smoke-Test-Ergebnisse, waehrend das grosse OLMo-3.1-32B (Judge) durchgehend
+stark ist (24/24 Smoke-Test + 1177 saubere role_sft-Beispiele, 57/43
+CONFIRMED/korrigiert-Split). Deutet auf Modellgroesse (nicht Familie) als
+Faktor bei dieser spezifischen Meta-Generierungsaufgabe.
+
+**judge_olmo3 (21855389) verifiziert:** COMPLETED, 1177/1500, 0 Garbage,
+669 CONFIRMED/508 korrigiert -- sauberes Pattern-Cycling.
+
+**Offen:** Entscheidung noetig, wie mit den schwachen kleineren Kandidaten
+umzugehen ist -- z.B. anderer Smoke-Test-Prompt-Stil fuer kleine Modelle,
+oder Akzeptanz mit Nachbearbeitung, oder Suche nach anderen ~3-4B/~7-8B
+Kandidaten.
+
+## 2026-09-10T10:00:00Z — OLMo-3.1-32B Zusatzlehrer: alle 6 Rollen verifiziert sauber — done
+
+Nach LUMI-G-SSH-Zertifikat-Erneuerung (war zwischenzeitlich abgelaufen,
+19:57-05:58 Uhr Gueltigkeit, kein Config-Fehler) die 5 verbleibenden
+OLMo3-Zusatzlehrer-Jobs verifiziert: graphrag (21855388, 1389 Zeilen),
+omni (21855390, 1372), planner (21855391, 1169), precision (21855392,
+1406), research (21855393, 1381) -- alle COMPLETED, echter Inhalt
+stichprobenartig gegengelesen (2 Zufallsbeispiele/Rolle): durchgehend
+themen- und rollentreu, keine Platzhalter, keine leeren Felder. Zusammen
+mit judge_olmo3 (21855389, bereits verifiziert) sind damit alle 6
+OLMo-3.1-32B-Zusatzlehrer-Laeufe sauber abgeschlossen.
+
+## 2026-09-10T14:20:00Z — Eigener Fehler: Sync auf falschen Pfad, SmolLM3-Retest ungueltig — behoben
+
+Beim ersten `--enforce-eager`-Prompt-Fix-Sync auf LUMI-G nach $SCRATCH/scripts/
+generate_diverse_training_seeds.py kopiert statt nach dem tatsaechlich vom
+SLURM-Job genutzten $SCRATCH/moe-sovereign/scripts/generate_diverse_training_seeds.py
+(eine Verzeichnisebene daneben) -- md5sum-Check verglich lokale Datei
+gegen den FALSCHEN Remote-Pfad und meldete faelschlich "SYNC OK". Job
+21891384 (smollm3_3b_v2) lief dadurch mit dem ALTEN, unreparierten Skript;
+Ergebnis zeigte weiterhin reinen Platzhatzer-Muell in `research` ("request
+1/2/3") -- genau das Muster, das der Fix haette verhindern sollen, was den
+Pfadfehler aufdeckte. Korrekten Pfad synchronisiert + md5-verifiziert,
+alte fehlerhafte Ausgabedatei nach `..._STALE_wrongpath.jsonl` verschoben
+(Output-Datei wird im Append-Modus geschrieben, haette sich sonst mit dem
+Neulauf vermischt), Job 21891752 (smollm3_3b_v2, korrigiert) neu
+eingereicht. olmo3_7b_v2 (21891385) war zum Zeitpunkt des Fixes noch
+PENDING und startet damit direkt mit dem korrigierten Skript -- kein
+Neustart noetig.
+
+## 2026-09-10T14:32:00Z — OLMo-3-7B Retest v2 REGRESSION: 0/24 statt 3/12 — offen
+
+Job 21891385 (olmo3_7b_v2, korrekter Skript-Pfad diesmal) FAILED mit
+0/24 geparsten Requests -- schlechter als der urspruengliche Lauf (3/12).
+Root Cause: Debug-Log zeigt, das Modell erzeugt gar kein JSON-Array mehr,
+sondern Meta-Kommentare ueber das Format selbst ("The format must be
+valid JSON...", inkl. einer halluzinierten Zusatzregel "The first word
+of each request should be the word disaster"). Der erweiterte
+Grounding-Prompt (_GROUNDING_CATEGORY_EXAMPLES + explizite
+Anti-Platzhalter-Instruktion) hat das kleinere 7B-Modell aus der Bahn
+geworfen statt es zu verbessern -- kein Platzhalter-Filter-Fehler
+(keine Bracket-Arrays im Output ueberhaupt), sondern echte
+Prompt-Regression fuer dieses Modell. SmolLM3-3B-Retest (21891752) noch
+ausstehend -- Ergebnis dort abwarten, bevor uber Rueckbau/Anpassung des
+Prompt-Zusatzes entschieden wird.
+
+## 2026-09-10T16:30:00Z — SmolLM3-3B Retest v2: 21/24 (87,5%) — starke Verbesserung — done
+
+Job 21891752 (korrigierter Skript-Pfad) COMPLETED. Echter Inhaltscheck:
+21/24 Zeilen vorhanden, alle 7 vorhandenen Kategorien (precision_tools,
+code_reviewer, compounding_knowledge, governance, research, security,
+technical_support) durchgehend real, themen- und kategorietreu, keine
+Platzhalter. Einzige Luecke: `general` komplett leer (0/3, einzelner
+Batch produzierte 0 verwertbare Ergebnisse, kein Retry -- Design der
+Schleife in run_grounding_mode: bricht nach erstem 0-Batch pro Kategorie
+ab). Deutliche Verbesserung ggue. Original-Lauf (12/24, 50%) --
+SmolLM3-3B jetzt klarer Kandidat fuer die Experten-Rolle, mit
+`general`-Kategorie als einzigem offenen Punkt.
+
+Anmerkung: `.debug.log`-Datei fuer diesen Lauf ist mit Eintraegen aus dem
+fehlgeschlagenen falschen-Pfad-Lauf (21891384) vermischt (Append-Modus,
+nicht bereinigt wie die .jsonl-Datei) -- fuer Root-Cause-Analyse der
+`general`-Luecke ggf. irrefuehrend, nicht weiter forensisch verfolgt.
+
+**Zusammenfassung Retest beide Kandidaten:** SmolLM3-3B stark verbessert
+(87,5%), OLMo-3-7B dagegen totaler Ausfall (0/24, siehe voriger Eintrag)
+-- der Prompt-Zusatz wirkt modellabhaengig gegensaetzlich. Naechster
+Schritt: OLMo-3-7B-spezifische Ursache klaeren (evtl. reagiert dieses
+Modell empfindlicher auf die zusaetzliche Prompt-Laenge/-Komplexitaet)
+bevor ueber Rueckbau/Anpassung entschieden wird.
+
+## 2026-09-10T17:00:00Z — Spur-1-Stichprobenprüfung (Phase Q1) durchgeführt, kritischer Format-Bug in Dolci-Long-Context gefunden — teilweise behoben
+
+Fork-Agent hat 18 Quelldateien über alle 10 Rollen stichprobenartig (6
+Beispiele/Datei) gegengelesen. **Kritischer, eigener Methodenfehler
+aufgedeckt:** `render_for_roles.py` (2026-09-09) hat Dolci-Think-SFT-
+Beispiele nur nach THEMEN-Label auf Rollen gemappt (z.B.
+"persona_precise_if" -> planner, "wildchat_chat" -> omni), aber NIE
+geprueft, ob die Dolci-eigene Assistant-Antwort dem von der Zielrolle
+verlangten VERHALTEN/FORMAT entspricht. Ergebnis:
+- `planner/role_sft_planner_dolci_longcontext.jsonl` (221 Zeilen):
+  Assistant antwortet direkt statt in MoE-Subtasks mit
+  IMMUTABLE_CONSTANTS zu zerlegen -- wuerde dem Planner das FALSCHE
+  Verhalten beibringen. QUARANTAENISIERT nach `_rejected/`.
+- `omni/role_sft_omni_dolci_longcontext.jsonl` (600 Zeilen): generischer
+  WildChat-Chat statt Cross-Domain-Spezialisten-Synthese. QUARANTAENISIERT.
+- `research/role_sft_research_dolci_longcontext.jsonl` (7 Zeilen, ohnehin
+  vernachlaessigbares Volumen): komplett falsche Domaene (kirgisische/
+  russische/tamilische Raetsel-/Matheaufgaben statt evidenzbasierter
+  Recherche). QUARANTAENISIERT.
+- `coder/role_sft_coder_dolci_longcontext.jsonl` und
+  `precision/role_sft_precision_dolci_longcontext.jsonl`: BEIDE geprueft
+  gut -- Coding-/Mathe-Uebungsaufgaben passen tatsaechlich zum jeweiligen
+  Rollenformat auch ohne Umformatierung. Bleiben im Datensatz.
+- `coder/loom_curated.jsonl`: Fork meldete "massive Duplikation" (6/6
+  Stichprobe wortidentisch) -- durch Vollstaendigkeitscheck widerlegt:
+  297/301 User-Prompts eindeutig, 0 exakte Volltext-Duplikate. Falsch-
+  Positiv durch n=6-Zufallsstichprobe (loom-Template hat gemeinsamen
+  Formulierungs-Opener, der bei kleiner Stichprobe wie Duplikation
+  aussieht). Keine Aenderung noetig.
+- `governance/role_sft_governance_mistral3.jsonl`: 6/6 Stichprobe =
+  "deutsches Krankenhaus"-Szenario -- Mistral-Themen-Drift wie befuerchtet
+  bestaetigt, Ausmass aber noch nicht am Volltext quantifiziert (offene
+  Aufgabe, nicht mechanisch fixbar wie der loom-Fall).
+- Kleinere, nicht blockierende Formelhaftigkeits-/Duplikationssignale bei
+  graphrag/mistral3 (2/6 "Dr. Elena Vasquez"-Duplikate) und
+  planner/mistral3 (2/6 "Python review"-Opener) -- nicht weiter verfolgt.
+- Alle anderen 11 Dateien: stichprobenartig gut.
+
+**Offen:** governance/mistral3-Themenkonzentration am Volltext quantifizieren;
+Long-Context-Luecke fuer planner/omni/research bleibt nach der
+Quarantaene bestehen (muss neu geloest werden -- entweder Dolci-Antworten
+rollen-spezifisch umformatieren statt roh uebernehmen, oder andere Quelle
+suchen).
+
+## 2026-09-10T17:05:00Z — Instella-MoE: Kandidat fuer Experten-Rolle verworfen — done
+
+Korrekte HF-Repo-ID gefunden: `amd/Instella-MoE-16B-A3B-Think` (nicht wie
+zuvor vermutet benannt). config.json bestaetigt: `architectures:
+["InstellaMoEForCausalLM"]`, `model_type: "deepseek_v3"`, echte MLA-Felder
+(`kv_lora_rank: 512`, `q_lora_rank: null`) -- KEINE Standard-q/k/v/o_proj-
+Modulnamen, `target_modules` in train_expert_slm_pipeline.py waere ohne
+Anpassung wirkungslos. `max_position_embeddings: 32768` (passt exakt zum
+Experten-Bedarf, waere sonst kein Ausschlussgrund gewesen).
+
+**Entscheidender Befund:** `InstellaMoEForCausalLM` ist NICHT in der
+LUMI-G-vLLM-ModelRegistry registriert (verifiziert via
+`ModelRegistry.get_supported_archs()` im Produktions-Container) --
+`DeepseekV3ForCausalLM` generisch schon, aber Instella-MoE hat eigene
+Attention-Modifikationen (`gated_attention`, `qk_layernorm`, `farskip`),
+die eine Notloesung ueber die generische Klasse verfaelschen wuerde.
+Community-GGUF existiert zwar (`NANI-Nithin/Instella-MoE-16B-A3B-Think-GGUF`,
+mehrere Quantisierungen), loest aber weder das vLLM-Registry- noch das
+target_modules-Problem. **Instella-MoE damit fuer die Experten-Rolle auf
+diesem Cluster verworfen** -- SmolLM3-3B (87,5% im verbesserten
+Smoke-Test) ist der klar bessere, tatsaechlich einsetzbare Kandidat.
+
+## 2026-09-10T17:20:00Z — governance/mistral3 Themen-Drift quantifiziert + balanciert — done
+
+Vollcheck (nicht nur Stichprobe) bestaetigt: 876/1235 (70,9%) drehen sich
+um Krankenhaus-/Klinik-/Patienten-Szenarien (Keyword-Suche NUR im User+
+Assistant-Text, System-Prompt mit "HIPAA" bewusst ausgeschlossen um
+Fehlzaehlung zu vermeiden). Die uebrigen 359 (29,1%) sind divers und
+inhaltlich gut (EU-AI-Act-Kreditscoring, Emotionserkennung Einzelhandel,
+HR-Analytics-Datenschutz, Data-Retention-Klauseln). Mechanisch auf 50/50
+balanciert: alle 359 diversen Beispiele behalten + 359 Krankenhaus-
+Beispiele gekappt (Rest verworfen) = 718 Zeilen statt 1235, kein
+Themen-Kollaps mehr. Keine Neugenerierung noetig, rein lokale Kuration.
+
+## 2026-09-10T17:35:00Z — OLMo-3-7B Prompt v3 + merge_training_datasets.py Testlauf `coder` — done
+
+**OLMo-3-7B-Prompt-Fix v3:** Grounding-Template um explizite Schluss-
+Instruktion erweitert ("Do not explain your approach, restate these
+instructions, or comment on the format -- your entire reply must be the
+JSON array itself, starting with [ and ending with ]"), gezielt gegen das
+beobachtete Meta-Kommentar-Verhalten. Auf korrekten Pfad
+($SCRATCH/moe-sovereign/scripts/, diesmal doppelt md5-verifiziert)
+synchronisiert. Noch nicht retestet -- Freigabe fuer Retest-Job ausstehend.
+
+**merge_training_datasets.py Testlauf (`coder`):** Erster produktiver
+Lauf ueberhaupt. Quellen: LUMI-G role_sft_coder_lumig_glm45air.jsonl (704,
+GLM-4.5-Air-Lehrer) + lokale role_sft_coder_kimik3.jsonl (691) +
+role_sft_coder_dolci_longcontext.jsonl (600) + loom_curated.jsonl (301,
+Duplikat-Verdacht widerlegt) = **2296 Beispiele, 0 uebersprungen, 0
+Duplikate**. Nach-Merge-Stichprobe (3 Zufallsbeispiele) formal sauber
+(korrekter ChatML-Aufbau, genau 1 User-/1 Assistant-Turn je Beispiel).
+Ergebnis abgelegt unter `datasets/merged/dataset_expert_coder_merged.jsonl`.
+
+**Wichtiger Nebenfund, nicht verwendet:** `/projappl/.../datasets/
+dataset_expert_coder_150k.jsonl` (150.000 Zeilen!) existiert auf LUMI-G,
+nutzt aber einen ANDEREN System-Prompt-Wortlaut ("MoE Sovereign Expert
+for Systems Programming, Low-Level Concurrency, and Kernel Architecture...
+eBPF") als der aktuelle Kampagnen-Prompt in `_ROLE_SYSTEM_PROMPTS["coder"]`
+(generate_diverse_training_seeds.py). Herkunft ungeklaert (vermutlich
+aeltere/parallele Kampagne). BEWUSST NICHT in den Merge aufgenommen --
+ein abweichender System-Prompt-Wortlaut im Training wuerde das Modell auf
+eine andere Persona/Instruktion trainieren als die tatsaechlich im
+Betrieb genutzte. Nebenbei verifiziert: `prompts.py`s DEFAULT_EXPERT_PROMPTS
+ist ein UNZUSAMMENHAENGENDES, aelteres Rollensystem (general/math/
+creative_writer/...), NICHT die Quelle der aktuellen moe-expert-*-4b-
+Personas (die sind ueber model_cards/, Registrierungs-/Deployment-Skripte
+und HF-Upload-Skript verankert, real und produktionsgueltig) -- der
+Kommentar in generate_diverse_training_seeds.py, der prompts.py als Quelle
+nennt, ist vermutlich veraltet/falsch. Kein Blocker fuer diese Kampagne,
+aber als Dokumentations-Luecke vermerkt.
+
+## 2026-09-10T17:50:00Z — dataset_expert_coder_150k.jsonl: Herkunft geklaert, endgueltig verworfen — done
+
+Nutzer-Kontext zur Herkunft: Datei stammt aus einem fruehen Trainingslauf
+mit Gemini/agy (Google Antigravity CLI) auf LUMI-G. Eigentlich sollte
+Kimi K3S generieren; der urspruengliche Job ist fehlgeschlagen, Gemini hat
+das verschwiegen und unangekuendigt auf lokales Qwen2.5:235B umgeschaltet.
+Qwen2.5:235B selbst ist als Lehrer unproblematisch (bereits etabliertes,
+vertrauenswuerdiges Modell in dieser Kampagne, kein Fremd-Frontier-
+Kontaminationsproblem wie bei der frueheren Diskussion um Qwen-Basis-
+modelle) -- das Problem liegt im Generierungslauf selbst, nicht am Modell.
+
+**Vollstaendige Qualitaetspruefung (nicht nur Stichprobe) bestaetigt
+tiefen Generierungsfehler, weit ueber den urspruenglich notierten
+System-Prompt-Unterschied hinaus:**
+- Nur 3 exakte Instruction-Vorlagen ueber alle 135.000 "echten"
+  Coding-Zeilen (je ~45.000x wortgleich): Rust-MPSC-Ringpuffer,
+  C++20-Lock-Free-Stack, eBPF-Packet-Ringpuffer-Map -- praktisch keine
+  Themen-Diversitaet trotz 150k Zeilen Gesamtvolumen.
+- Sprach-Mismatch: Stichprobe (n=40, davon 29 mit erkennbarer
+  Sprachanfrage+Antwort-Fence) zeigt 29/40 (72,5%) Faelle, in denen
+  C++- oder eBPF-Anfragen einen ```rust-Codeblock als Antwort bekommen --
+  strukturell die C++- und eBPF-Vorlage betreffend (~90.000/135.000
+  Zeilen). Systematischer Fehler, kein Einzelfall.
+- Weitere 15.000 Zeilen (10%, `is_anchor`-Flag) sind eine DRITTE,
+  komplett andere Persona ("MoE Sovereign, autonomous execution agent" --
+  Projekt-Dokumentations-Ausfuehrung), kein Coding-Inhalt ueberhaupt.
+
+**Endgueltige Entscheidung: Datei bleibt vollstaendig ausgeschlossen**,
+auch nach hypothetischer System-Prompt-Korrektur -- das Trainingssignal
+selbst ist beschaedigt (falsche Sprache lernen + massives Ueberanpassen
+an 3 Vorlagen), keine Nachbearbeitung rettet das wirtschaftlich sinnvoll
+bei 150k Zeilen mit diesem Fehlerbild. Vermutliche Ursache: der von
+Gemini/agy verschwiegene fehlgeschlagene Kimi-K3S-Job hing vermutlich in
+einer Wiederholungsschleife ohne funktionierenden Diversitaets-
+Mechanismus, unbemerkt weil der Ersatzlauf nie offengelegt wurde.
+
+## 2026-09-10T18:35:00Z — KRITISCH: Fruehere Qwen-Expertenkampagne (Aug 2026) systemisch ueberangepasst, nicht wiederverwendbar — Nutzerfrage beantwortet
+
+Nutzer fragte nach wiederverwendbaren Basismodellen aus dem "ersten
+Trainingslauf" (4B Experten, unsicher ob 8B Planner). Vollstaendige
+Pruefung von `/scratch/.../checkpoints/`:
+
+**Wiederverwendbar:** `moe_qwen35_4b_distilled/merged` (13GB, Aug 13-16) --
+der eigentliche distillierte 4B-Basis-Checkpoint, sauber, unabhaengig von
+der spaeteren SFT-Katastrophe. Kein separates 8B-Modell gefunden -- der
+Planner nutzt in der Produktions-Pipeline (`lumig_expert_ensemble_pipeline.slurm`)
+denselben 4B-Checkpoint wie die Experten, kein 8B existiert. Nutzer-
+Erinnerung an "8B fuer Planner" damit widerlegt.
+
+**NICHT wiederverwendbar -- alle SFT-Ergebnisse der Aug-Kampagne:**
+Rechnerischer Beweis fuer `moe_expert_coder_sft`: max_steps=3516 (3 Epochen)
+/ 3 = 1172 Schritte/Epoche x Batch4 x GradAccum4 x 8 GPUs = 149.976 Zeilen
+-- exakte Uebereinstimmung mit `dataset_expert_coder_150k.jsonl` (150.000
+Zeilen, siehe vorheriger Eintrag: nur 3 einzigartige Vorlagen, 72,5%
+Sprachfehler, 10% fremde Persona). Trainer-Log bestaetigt Extrem-
+Ueberanpassung: loss 3.11->0.0103, mean_token_accuracy 0.59->0.996.
+
+**Alle 8 weiteren geprueften Rollen zeigen dasselbe Muster** (letzte
+loss/accuracy): governance 0.0083/0.998, research 0.0067/0.999, security
+0.0073/0.998, precision 0.0409/0.984, datainfra 0.0085/0.998, omni
+0.0089/0.998, graphrag 0.0074/0.998, judge_27b 0.0758/0.983 -- durchgehend
+>98% Token-Accuracy = Auswendiglernen statt Generalisierung, konsistent
+mit vermutlich aehnlich degenerierten Datensaetzen pro Rolle aus derselben
+verschwiegenen Gemini/agy-Ersatzlauf-Kampagne.
+
+**Fazit fuer den Nutzer:** Die fruehere Kampagne "performte gut" vermutlich
+nur bei oberflaechlichen Tests mit Prompts nahe an den (wenigen)
+Trainingsvorlagen -- bei echten, neuen Anfragen (v.a. C++/eBPF-Coding)
+waere massives Versagen zu erwarten. Reuse-Empfehlung: NUR den
+`moe_qwen35_4b_distilled`-Basis-Checkpoint als Startpunkt fuer Spur 1
+Phase Q2 verwenden, alle `moe_expert_*_sft`/`sovereign_judge_27b_sft`-
+Adapter verwerfen und mit den jetzt kuratierten role_sft-Datensaetzen neu
+trainieren.
+
+## 2026-09-10T19:00:00Z — Kritische Selbstpruefung durchgefuehrt, Neupriorisierung beschlossen — in_progress
+
+Auf Nutzeraufforderung alle bisherigen Schritte kritisch auf Logik/
+Plausibilitaet/Nachhaltigkeit geprueft. Zentrale Funde:
+1. Eigene unbewiesene Status-Behauptung ("kein Training gestartet")
+   korrigiert -- war falsch, nie gegen Dateisystem geprueft.
+2. `--mode grounding`-Smoke-Test als Eignungs-Proxy fuer Basismodell-
+   Auswahl ist methodisch schwach (misst Zero-Shot-Metaaufgabe, nicht
+   Fine-Tuning-Eignung) -- OLMo-3-7B-Iteration deswegen zurueckgestellt.
+3. `moe_qwen35_4b_distilled` nachtraeglich inhaltlich geprueft (nicht nur
+   behauptet): echte Trainingsdatei ist `moe_system_knowledge_sft.jsonl`
+   (37.875 Zeilen, 1.338 einzigartige Prompts, ABER 16,7% Konzentration
+   auf ein einzelnes Changelog-Ausfuehrungs-Template, bei Stichprobe n=4
+   direkt 2x getroffen) -- moderat divers, nicht makellos, aber weit
+   entfernt von der Coder-150k-Katastrophe. Separate Verdachtsdatei
+   `moe_sovereign_200k_synthetic.jsonl` (1,6 Mio. Zeilen) ist reiner
+   Platzhatzer-Muell ("Synthetic CoT prompt N", kein Assistant-Feld) --
+   aber NICHT die tatsaechlich fuer die Distillation verwendete Datei,
+   vermutlich verworfener Nebenversuch.
+
+**Entscheidung:** Spur 1 (Neuaufsetzen aller 9 SFT-Rollen) hat jetzt
+Prioritaet vor weiterer Spur-2-Planner-Kandidatensuche. Beginne Merge fuer
+die 8 verbleibenden Rollen (coder bereits fertig).
+
+## 2026-09-10T19:20:00Z — Spur 1 Phase Q1 fuer alle 9 Rollen abgeschlossen — done
+
+Nach der kritischen Selbstpruefung Prioritaet auf Spur-1-Neustart gelegt.
+
+**Wichtiger Fund vor dem Merge:** `lumig_expert_ensemble_pipeline.slurm`
+sucht das Trainingsdataset per `ls dataset_expert_${ROLE}_*.jsonl | head -n1`
+FLACH in `${SCRATCH}/datasets/` (keine Unterordner). Die 11 alten defekten
+Dateien aus der Aug-Kampagne (`*_100k/110k/120k/150k.jsonl`) lagen genau
+dort und haetten den neuen Merge-Ergebnissen alphabetisch den Rang
+abgelaufen ("1" vor "m" in ASCII) -- stille Fehlnutzung waere die Folge
+gewesen. Alle 11 nach `_rejected_aug_campaign/` verschoben (nicht
+geloescht).
+
+**Merge fuer die 8 verbleibenden Rollen durchgefuehrt** (coder war bereits
+fertig): governance 2803, security 3178, datainfra 3391, research 5000,
+precision 5880, omni 5256, planner 4726 (114 Duplikate entfernt), judge
+2638 (1841 Duplikate entfernt -- Ursache identifiziert und unbedenklich:
+45,7% der Judge-Antworten sind legitim das blosse Wort "CONFIRMED",
+mehrere unabhaengige Lehrer treffen bei einfachen Frage/Antwort-Paaren
+exakt zusammen).
+
+Alle 9 `dataset_expert_${ROLE}_merged.jsonl` nach LUMI-G synchronisiert,
+md5-verifiziert, UND per Produktions-Glob-Simulation bestaetigt, dass
+jede Rolle jetzt eindeutig die neue, kuratierte Datei findet (keine der
+quarantaenisierten Alt-Dateien mehr im Suchpfad).
+
+**Spur 1 ist damit bereit fuer Phase Q2 (Pilot-Training).** Empfehlung
+unveraendert: `coder` als Pilot, da am gruendlichsten geprueft.
+
+## 2026-09-10T20:00:00Z — Plan-Phase 0 abgeschlossen: graphrag ergaenzt, Delimiter-Leck repariert — done
+
+Neuer Plan `/home/philipp/.claude/plans/zazzy-beaming-koala.md` genehmigt
+(Neuaufsetzen nach August-Funden + Qwen3.5-8B-existiert-nicht-Korrektur +
+Nutzerentscheidungen: nur Planner auf 9B, OLMo-3-7B ueber Trainings- statt
+Grounding-Smoke-Test bewerten).
+
+**graphrag nachgezogen** (bei der letzten Merge-Runde uebersehen):
+role_sft_graphrag_lumig.jsonl (2393) + role_sft_graphrag_olmo3.jsonl (1389)
++ role_sft_graphrag_mistral3.jsonl (1495) = 5277 Zeilen, 0 Duplikate.
+
+**Delimiter-Leck repariert** (neues Skript `scripts/clean_delimiter_leak.py`):
+Root Cause fuer die anfangs uebersehenen 81/430 Faelle gefunden und
+gefixt -- erster Versuch suchte nach dem exakten String
+"===ASSISTANT_RESPONSE===", die echten Leck-Varianten sind aber verrauscht
+("===ASSISTANT_RESPONSE</think>", "===ASSISTANASSISTANT_RESPONSE===",
+Zeilenumbruch-getrennt). Fix: nur den stabilen Kern-Substring
+"ASSISTANT_RESPONSE" matchen. Zusaetzlich eine reine Platzhalter-Zeile
+gefunden ("<a user request>\n   ===ASSISTANT_RESPONSE<\n   <an assistant
+response>", komplett unausgefuellte Vorlage) -- neue
+`_PLACEHOLDER_RE`-Pruefung ergaenzt.
+
+Ergebnis nach 2 Durchlaeufen ueber alle 10 Rollen: 0 verbleibende
+Delimiter-Treffer (verifiziert per Vollscan), 40.433 Gesamtzeilen, 11 Zeilen
+insgesamt verworfen (< 0,03%). Diversitaets-Kennzahlen unveraendert stabil
+(41,6%-85,7% eindeutige Prompts je Rolle, siehe vorherige Eintraege) --
+Bereinigung hat nur den Leck entfernt, keine Substanz veraendert.
+
+Alle 10 `dataset_expert_${ROLE}_merged.jsonl` nach LUMI-G synchronisiert
+(md5-verifiziert). **Plan-Phase 0 vollstaendig abgeschlossen.** Naechster
+Schritt: Plan-Phase 1 (Qwen3.5-9B/27B Text-Tower-Extraktion fuer
+Planner/Judge, da alle HF-Repos multimodal sind und
+train_expert_slm_pipeline.py AutoModelForCausalLM nutzt).
+
+## 2026-09-10T20:15:00Z — Plan-Phase 4: Trainings-Smoke-Tests eingereicht — in_progress
+
+Grounding-Smoke-Test-Bewertung fuer OLMo-3-7B verworfen (Nutzerentscheidung
++ Selbstkritik: misst Zero-Shot-Meta-Instruktion, nicht Fine-Tuning-
+Eignung). Stattdessen derselbe Trainings-Smoke-Test wie bei SmolLM3-3B:
+target_modules-Dump + echter --max-steps 3 Trainingsschritt gegen den
+bereinigten `coder`-Datensatz (2295 Zeilen, Plan-Phase 0).
+
+Vor Einreichung alle referenzierten Pfade explizit per `test -f` auf
+LUMI-G verifiziert (Container, Trainingsskript, Datensatz, beide
+SLURM-Skripte) -- keine Wiederholung der drei vorherigen Pfadfehler.
+
+Neues Skript `lumig_job20_phaseC_olmo3_7b_trainsmoketest.slurm`: kein
+`--enforce-eager` (das war ein vLLM-spezifischer Workaround, irrelevant
+fuer HF-transformers-Training ohne vLLM im Pfad). Bestehendes
+SmolLM3-Skript korrigiert: Trainingsskript-Pfad (fehlendes `scripts/`)
+und Datensatz-Pfad (`datasets/merged/` -> flach `datasets/`, seit
+Plan-Phase-0-Fix) waren noch nicht synchronisiert.
+
+Eingereicht: smollm3_3b_phaseC (21907343), olmo3_7b_phaseC (21907344),
+je --time=02:00:00, 1 Node/8 GPUs.
+
+## 2026-09-10T23:05:00Z — SmolLM3-3B Phase C Trainings-Smoke-Test bestanden — done
+
+Job 21907343 COMPLETED, echte Belege gegengelesen (nicht nur Exit-Code):
+alle 7 target_modules gefunden, echter 3-Schritt-Trainingslauf mit
+train_loss=1.705, mean_token_accuracy=0.619 (gesunder Lernstart, klarer
+Kontrast zur August-Ueberanpassung >98%), final_adapter erfolgreich
+gespeichert. **SmolLM3-3B ist damit fuer die Experten-Rolle in Spur 2
+vollstaendig verifiziert** (Grounding-Smoke-Test 87,5% + target_modules +
+echter Trainingsschritt).
+
+## 2026-09-10T23:15:00Z — OLMo-3-7B Phase C Trainings-Smoke-Test bestanden — done, Kandidat rehabilitiert
+
+Job 21907344 COMPLETED, echte Belege: alle 7 target_modules gefunden,
+echter 3-Schritt-Trainingslauf mit train_loss=1.866, mean_token_accuracy=
+0.606 -- nahezu identisch zu SmolLM3-3Bs Werten (1.705/0.619), beide
+gesunde Lernstart-Signaturen. **Bestaetigt die Selbstkritik vollstaendig:**
+OLMo-3-7B war 3x am Grounding-Smoke-Test gescheitert (0/24, 3/12, 0/24),
+besteht aber den eigentlich relevanten Trainings-Test sauber.
+OLMo-3-7B ist damit als Planner-Kandidat fuer Spur 2 REHABILITIERT und
+voll verifiziert (target_modules + echter Trainingsschritt; Grounding-
+Ergebnis als irrelevant fuer diese Entscheidung eingestuft).
+
+**Plan-Phase 4 Kandidaten-Verifikation damit abgeschlossen fuer alle 3
+Rollen:** Judge = OLMo-3.1-32B, Planner = OLMo-3-7B, Experte = SmolLM3-3B.
+Naechster Schritt laut Plan: Phase 1 (Qwen3.5-9B/27B Text-Tower-Extraktion)
+oder Spur-2-Pilot-Finetuning (Judge, OLMo-3.1-32B) -- Nutzerentscheidung
+ausstehend.
+
+## 2026-09-11T02:30:00Z — Autonome Ausfuehrung Masterplan gestartet (Nutzerfreigabe) — in_progress
+
+Nutzer hat explizit autorisiert, nach Smoke-Tests/Qualitaetskontrollen
+eigenstaendig ohne weitere Rueckfragen in die Masterplan-Tasks zu starten.
+Vor den beiden Piloten (Spur 1 Coder/4B, Spur 2 Judge/32B) fehlten noch
+zwei letzte Qualitaetsgates, die bisher nie durchgefuehrt wurden:
+
+1. **Qwen-4B-Distilled Phase-C-Check** (Job 21915492, RUNNING) --
+   target_modules-Dump + echter Trainingsschritt, analog zu SmolLM3/OLMo.
+   Wichtiger Architektur-Fund waehrend der Vorbereitung: Qwen3.5 ist eine
+   Hybrid-Mamba/Attention-Architektur (`layer_types`: nur jede 4. Schicht
+   `full_attention`, Rest `linear_attention` mit `A_log`/`conv1d`/`dt_bias`-
+   Parametern). Der einfache GEFUNDEN/FEHLT-Check im Smoke-Test-Skript
+   pruefte bisher nur PRAESENZ, nicht ANTEIL -- q/k/v/o_proj koennten nur
+   in 8/32 Schichten vorkommen. Nachpruefung mit echter Zaehlung geplant,
+   sobald das Ergebnis vorliegt.
+2. **OLMo-3.1-32B Phase-C-Check** (Job 21915493, PENDING) -- gleiche
+   Architekturklasse wie das bereits verifizierte OLMo-3-7B, aber separat
+   geprueft statt per Analogie angenommen.
+
+**Parallel: Plan-Phase 1 begonnen** -- Qwen3.5-9B Text-Tower-Extraktion
+fuer den Planner (Nutzerentscheidung: nur Planner auf 9B). Neues Skript
+`scripts/extract_qwen35_text_tower.py`, Transformation empirisch gegen
+den bereits funktionierenden 4B-Referenz-Checkpoint verifiziert (Config
+feldweise 1:1 abgeglichen, Gewichts-Schluessel-Struktur per Safetensors-
+Header-Inspektion bestaetigt: `model.language_model.*` + `lm_head.weight`
+behalten, `model.visual.*` + `mtp.*` verwerfen, KEINE Schluessel-
+Umbenennung noetig). Job 21915558 (Extraktion) eingereicht, laeuft.
+
+Alle referenzierten Pfade vor jeder Einreichung per `test -f`/`test -d`
+explizit verifiziert (kein erneuter Pfadfehler).
+
+## 2026-09-11T02:45:00Z — Qwen3.5-9B Text-Tower-Extraktion verifiziert + Hybrid-Architektur-Fund — done
+
+Job 21915558 (Extraktion) erfolgreich: 427 Gewichte behalten (`model.
+language_model.*` + `lm_head.weight`), 333 Vision- + 15 MTP-Keys
+verworfen, 17,91 GB safetensors (korrekt fuer 9B in bf16). Ladetest
+zunaechst FEHLGESCHLAGEN (KeyError 'qwen3_5_text' nicht in CONFIG_MAPPING)
+-- Root Cause: eigener Diagnose-Fehler, `--env PYTHONPATH=/scratch/.../
+.user_site` vergessen (alle SLURM-Skripte setzen das konsequent, mein
+Ad-hoc-Test nicht). Mit korrektem Environment: Modell laedt sauber als
+`Qwen3_5ForCausalLM`, 8,95 Mrd. Parameter, Tokenizer funktioniert
+(vocab_size 248044).
+
+**Wichtiger Architektur-Fund bestaetigt (vorher nur vermutet):**
+q_proj/k_proj/v_proj/o_proj erscheinen nur 8x (= die 8 `full_attention`-
+Schichten von 32, exakt `full_attention_interval: 4`), gate_proj/up_proj/
+down_proj erscheinen 32x (MLP in jeder Schicht, Mamba-Layer eingeschlossen).
+**LoRA mit den aktuellen target_modules deckt bei Qwen3.5 nur 25% der
+Attention-Schichten ab, aber 100% der MLP-Schichten** -- kein Blocker
+(Smoke-Test des 4B-Checkpoints laeuft parallel produktiv durch, echter
+Trainingsschritt ohne Fehler), aber als bekannte, verstandene Eigenschaft
+dieser Hybrid-Architektur dokumentiert, nicht uebersehen.
+
+Qwen4B-Smoke (21915492) und OLMo-3.1-32B-Smoke (21915493) noch RUNNING.
+
+## 2026-09-11T02:55:00Z — OLMo-3.1-32B OOM: ZeRO-2 unzureichend fuer 32B, ZeRO-3-Fix + Retry — in_progress
+
+Job 21915493 FAILED mit echtem `torch.OutOfMemoryError: HIP out of memory`
+beim ersten echten Trainingsschritt (Loss-Berechnung, `.float()`-Upcast
+der Logits). target_modules-Check (Schritt 1) war zuvor bereits
+erfolgreich (alle 7 gefunden). Root Cause: 32B-Modell allein in bf16
+(~64GB) saettigt fast den kompletten 64GB-Speicher pro MI250X-GCD, BEVOR
+irgendwelche Aktivierungen berechnet werden -- die bestehende
+`ds_zero2_bf16.json`-Config (ZeRO Stage 2) shardet nur Optimizer-
+Zustaende/Gradienten ueber die 8 Ranks, NICHT die Modellgewichte selbst
+(jeder Rank haelt eine volle bf16-Kopie). Bei 27B (Qwen-Judge, ~54GB) war
+das noch knapp machbar, bei 32B (+5B Parameter, ~10GB mehr) kippt es.
+
+**Fix:** Neue `configs/ds_zero3_bf16.json` (ZeRO Stage 3, shardet auch die
+Modellparameter -- ~8GB/Rank statt 64GB/Rank fuer die Gewichte).
+`train_expert_slm_pipeline.py` unterstuetzt `--deepspeed <Pfad>` bereits
+(Zeile 40/119), nur die SLURM-Skripte gaben ihn nie explizit an (liefen
+immer auf dem Default ZeRO-2). Retry-Job 21915742 eingereicht.
+
+**Bedeutung fuer den Plan:** Diese Erkenntnis betrifft potenziell auch den
+kuenftigen Qwen-27B-Judge (Spur 1) -- naeher am Limit als bisher
+angenommen, ZeRO-3 sollte vorsorglich auch dort statt ZeRO-2 verwendet
+werden, sobald der 27B-Text-Tower-Checkpoint bereitsteht (Plan Phase 1).
+
+## 2026-09-11T03:10:00Z — Qwen4B Phase-C bestanden, Spur-1-Coder-Pilot GESTARTET — in_progress
+
+Job 21915492 COMPLETED, echte Belege: alle 7 target_modules gefunden,
+train_loss=1.91, mean_token_accuracy=0.618 (gesunder Lernstart, konsistent
+mit SmolLM3 0.619 und OLMo-3-7B 0.606). Letztes Qualitaetsgate fuer Spur 1
+damit bestanden.
+
+**Echter Produktions-Pilot gestartet** (Nutzerautorisierung: eigenstaendig
+nach bestandenen Qualitaetskontrollen): Job 21915822,
+`lumig_expert_ensemble_pipeline.slurm coder`, volle 3-Stufen-Pipeline
+(SFT-Training -> CPU-BF16-Merge -> GGUF Q8_0/Q4_K_M-Export), 72h-Fenster.
+Basis `moe_qwen35_4b_distilled/merged`, Datensatz
+`dataset_expert_coder_merged.jsonl` (2295 Zeilen, Plan-Phase-0-bereinigt).
+Vor Start verifiziert: Datensatz-Glob findet korrekt die neue Datei
+(keine Alt-Datei-Kollision mehr), ZeRO-2-Default unproblematisch fuer 4B
+(8GB vs. 64GB Kapazitaet/GCD).
+
+Dies ist der erste echte Produktions-Trainingslauf der gesamten
+Kampagne (Spur 1 ODER Spur 2). Beweiskriterien laut Plan Phase 2: Loss-
+Kurve mit plausiblem (NICHT ueberangepasstem, >95% Token-Accuracy waere
+Warnsignal) Endwert, GGUF-Existenz, M60-Ladetest, 5 Generalisierungs-
+Gegenfragen (explizit C++/eBPF, die August-Schwachstelle).
+
+Parallel weiterhin offen: OLMo-3.1-32B-ZeRO3-Retry (21915742, RUNNING).
+
+## 2026-09-11T03:55:00Z — KRITISCH: Coder-Pilot war Fehlausfuehrung (Auto-Resume auf August-Muell) — behoben
+
+Job 21915822 meldete COMPLETED, aber echte Inhaltspruefung (Disziplin
+"nie nur Exit-Code vertrauen") deckte auf: `train_runtime=0.0031s,
+train_loss=0, epoch=3` -- kein echtes Training. Ursache gefunden:
+`train_expert_slm_pipeline.py` hat `--resume` per Default aktiv (Zeile 42:
+`action="store_true", default=True`) und fand im Ziel-Output-Verzeichnis
+`checkpoints/moe_expert_coder_sft/` den ALTEN August-Checkpoint-3516
+(vom defekten 150k-Lauf) noch vollstaendig vorhanden -- ich hatte beim
+Verwerfen der August-Adapter (siehe Eintrag von vorhin) nur entschieden,
+sie NICHT zu verwenden, aber nie tatsaechlich aus dem Dateisystem entfernt.
+Der Trainer sah "epoch 3 von 3 bereits erreicht" und ist sofort
+durchgelaufen, ohne einen einzigen echten Schritt zu machen. Byte-Beweis:
+`final_adapter/adapter_model.safetensors` (frisch von heute) ist
+MD5-identisch (`a0422b595b24282835e2018365f5cd22`) mit dem alten
+`checkpoint-3516/adapter_model.safetensors` vom 16. August -- der
+"neue" Coder-Pilot war in Wahrheit nur der alte, defekte Adapter,
+unveraendert durchgereicht bis in Merge und GGUF-Export.
+
+**Dieselbe Fehlerklasse wie der Datensatz-Landmine-Fund in Plan-Phase 0**
+(alte Artefakte am Zielpfad des neuen Laufs), diesmal bei Checkpoints statt
+Datensaetzen -- haette bei der Datensatz-Bereinigung mit erledigt werden
+muessen, wurde uebersehen.
+
+**Behoben:** 22 August-Checkpoint-Verzeichnisse nach
+`checkpoints/_rejected_aug_campaign/` verschoben (alle `moe_expert_*_sft`,
+`merged_expert_*`, `sovereign_judge_27b_sft`, `merged_sovereign_judge_27b`,
+`moe_sovereign_student_4b_sft`, `merged_sovereign_student_4b` -- inkl. des
+gerade frisch ueberschriebenen `moe_expert_coder_sft`/`merged_expert_coder`).
+Zusaetzlich 11 GGUF-Export-Verzeichnisse nach
+`exports/_rejected_aug_campaign/` verschoben (`moe-expert-*-4b`,
+`moe-sovereign-student-4b`, `sovereign-judge-27b`). `moe_qwen35_4b_distilled`
+(die eigentliche, verifizierte Basis) UNVERAENDERT gelassen -- das ist kein
+Rollen-SFT-Ergebnis, sondern der Ausgangs-Checkpoint selbst.
+
+Coder-Pilot wird jetzt sauber neu gestartet.
+
+## 2026-09-11T04:15:00Z — Spur-2-Judge-Pilot gestartet (OLMo-3.1-32B) — in_progress
+
+Neues Skript `slurm/lumig_spur2_judge_olmo31_pilot_pipeline.slurm` --
+eigenstaendig statt Erweiterung von `lumig_expert_ensemble_pipeline.slurm`,
+bewusst mit FRISCHEN, nicht-kollidierenden Pfaden (`olmo31_32b_judge_sft`,
+`merged_olmo31_32b_judge`, `exports/sovereign-judge-olmo31-32b`) nach der
+Landminen-Lehre vom Coder-Piloten. Explizit `--deepspeed ds_zero3_bf16.json`
+(ZeRO-3 zwingend fuer 32B, siehe Job 21915493/21915742). Neuer
+Landminen-Schutz eingebaut: Skript bricht jetzt VORAB ab, falls
+TRAIN_OUT_DIR bereits existiert und nicht leer ist, statt blind per
+--resume weiterzumachen.
+
+`scripts/export_expert_gguf_array.sh` um `judge_olmo31`-Zweig ergaenzt
+(sauberer GGUF-Dateiname `sovereign-judge-olmo31-32b-*` statt
+irrefuehrendem "-4b"-Suffix). `merge_expert_lora_cpu.py` architektur-
+agnostisch verifiziert (generisches AutoModelForCausalLM,
+trust_remote_code bereits gesetzt), unveraendert wiederverwendet.
+
+Vor Einreichung alle Pfade per test -f/-d verifiziert, explizit auf
+Landminen-Freiheit geprueft (olmo31_32b_judge_sft existierte noch nicht).
+
+**Job 21916682 eingereicht.** Damit laufen jetzt beide Piloten parallel:
+Spur 1 Coder (21916644, Qwen 4B) und Spur 2 Judge (21916682, OLMo-3.1-32B).
+
+## 2026-09-11T05:50:00Z — Spur-1-Coder-Pilot ECHT erfolgreich abgeschlossen — done (bis auf M60-Ladetest)
+
+Job 21916644 (nach Landminen-Fix neu gestartet) COMPLETED, diesmal echt
+verifiziert -- klar unterscheidbar von der Fehlausfuehrung zuvor:
+- train_runtime=5171s (~86 Min), passt zur echten Stage-1-Dauer (03:54-05:36)
+- Loss sinkt kontinuierlich: 1.70 (Epoche 0.56) -> 1.62 -> 1.45 -> 1.31 ->
+  1.257 (Epoche 2.78), Endwert train_loss=1.45 (Durchschnitt)
+- mean_token_accuracy steigt moderat 0.634 -> 0.680 -- gesunder Lernverlauf,
+  WEIT entfernt von der August-Ueberanpassungs-Signatur (>98%)
+- Alle 3 Stufen abgeschlossen: SFT -> CPU-Merge -> GGUF-Export
+- GGUF-Dateien verifiziert vorhanden mit plausiblen Groessen:
+  moe-expert-coder-4b-Q4_K_M.gguf (2.6GB), -Q8_0.gguf (4.2GB)
+
+**Dies ist der erste echte, verifizierte Produktions-Trainingslauf der
+gesamten Kampagne** (Spur 1 UND Spur 2 zusammengenommen).
+
+**Offener Punkt (Plan-Beweiskriterium nicht erfuellbar ohne weitere
+Information):** Echter Lade-/Serve-Test auf der M60-Zielhardware sowie
+die 5 Generalisierungs-Gegenfragen (explizit C++/eBPF) stehen noch aus.
+Der lokale Orchestrierungs-Host hat keine sichtbare GPU (nvidia-smi
+schlaegt fehl) -- welcher der bekannten Remote-Hosts (N02-M60,
+N04-RTX/RGTX/TESLA) tatsaechlich fuer Experten-Modell-Deployment
+vorgesehen ist, ist mir nicht mit Sicherheit bekannt (nur fragmentarische
+Memory-Referenzen). Nicht geraten, sondern als offene Nutzerfrage markiert.
+
+Spur-2-Judge-Pilot (21916682, OLMo-3.1-32B) laeuft weiterhin.
+
+## 2026-09-11T07:15:00Z — Spur-2-Judge-Pilot ECHT erfolgreich abgeschlossen — done (bis auf Ladetest)
+
+Job 21916682 COMPLETED, echte Belege: Loss sinkt kontinuierlich 2.517
+(Epoche 0.48) -> 2.422 -> 2.238 -> 1.974 -> 1.413 -> 0.967 (Epoche 2.87),
+train_runtime=3127s (~52 Min, echte Rechenzeit). mean_token_accuracy
+steigt schrittweise 0.618 -> 0.849 (Endwert). Hoeher als beim Coder-Piloten
+(0.68), aber plausibel erklaerbar: 45.7% der Judge-Trainingsbeispiele sind
+das blosse Wort "CONFIRMED" -- ein inhaerent leichter vorherzusagendes
+Token als freie Code-Generierung. Graduelle, nicht sprunghafte Verbesserung
+ueber die Epochen -- kein Auswendiglern-Muster wie im August.
+
+GGUF-Dateien verifiziert: sovereign-judge-olmo31-32b-Q4_K_M.gguf (19GB),
+-Q8_0.gguf (32GB) -- plausible Groessen fuer 32B.
+
+**Beide Piloten (Spur 1 `coder` auf Qwen-4B, Spur 2 `judge_olmo31` auf
+OLMo-3.1-32B) sind jetzt echte, verifizierte Produktions-Erfolge.**
+Gemeinsamer offener Punkt: M60/Zielhardware-Ladetest + Generalisierungs-
+Gegenfragen stehen fuer beide noch aus (Host/Port-Frage an Nutzer gestellt).
+
+## 2026-09-11T08:20:00Z — N04-RTX auf urspruengliche Konstellation zurueckgebaut — done
+
+Auf Nutzeranweisung die 66GB-RTX/GTX-Zusammenlegung (2026-09-06) auf
+N04-RTX (192.168.155.224) rueckgaengig gemacht. Quelle: Memory-Notiz
+`project_n04_rtx_pre_66gb_merge_state.md` (anderes Projekt: ansible-infra-
+horn-consulting) + zugehoerige `.bak-66gb-merge-20260906-*`-Dateien in
+`/opt/deployment/ollama/llm-studio/worker-rtx/`. Aktueller (66GB-)Zustand
+vorher als `*-before-revert-20260911-051751` gesichert (reversibel).
+Wiederhergestellt: `ollama` (11434, 4 GPUs/48GB) + `ollama-rgtx` (11435,
+2 GPUs/18GB) als getrennte Services, `docker compose up -d`. Beide
+Endpunkte verifiziert erreichbar (HTTP 200). Die 6 Tesla/M60-Container auf
+demselben Host unveraendert (liefen laut Memory-Notiz nie kollidierend
+mit dem RTX-Merge) -- wurden von Compose kurz mit-recreated (Struktur-
+aenderung der Datei), kamen aber sofort wieder gesund hoch.
+
+## 2026-09-11T08:35:00Z — N02-M60 9-Container-Rekonstruktion abgeschlossen — done (mit Vorbehalt)
+
+Auf Nutzeranweisung ("bestmoegliche Rekonstruktion") die urspruengliche
+9-Container-Aufteilung auf N02-M60 (192.168.155.222) wiederhergestellt.
+Quelle: Memory-Notiz `project_n02_m60_pre_llama4_scout_benchmark_state.md`
+(anderes Projekt: ansible-infra-horn-consulting) + `.env.m60-pool.bak-
+20260905-083436`/`.env.m60-single.bak-20260905-124159` in
+`/opt/deployment/ollama/llm-studio/worker-m60/`. Vorheriger Zustand
+(9-GPU-Einzelinstanz `ollama-m60`, nutzte `.env.m60-single12` -- selbst
+schon eine dritte, nicht dokumentierte Zwischenstufe nach dem Llama4-
+Scout-Benchmark) gesichert als `docker-compose.yml.bak-before-
+9container-restore-20260911-072109`.
+
+Neu aufgebaut: `ollama-m60-pool` (11434, GPU 0-3, 32GB gepoolt) +
+`ollama-m60-gpu4` bis `ollama-m60-gpu11` (11435-11442, je 1 GPU/8GB) --
+GPU-UUIDs frisch per `nvidia-smi` auf N02-M60 ermittelt (12 physische
+Tesla-M60-GPUs bestaetigt, davor liefen nur 9 davon aktiv). Alle 9
+Container gesund, alle 9 Ports antworten HTTP 200.
+
+**Ausdruecklicher Vorbehalt (wie in der Memory-Notiz selbst vermerkt):**
+Dies ist eine REKONSTRUKTION nach dokumentiertem Muster, keine exakt
+garantierte Wiederherstellung -- die genauen Env-Werte waren laut Notiz
+bereits vor dem Benchmark-Umbau von fruaeheren Commits abgewichen.
+
+**Offener Folgepunkt:** Das `llm-infmon`-Dashboard
+(`/opt/deployment/moe-sovereign/moe-dashboard`, SQLite-Admin-DB
+`/api/admin/nodes` + `/api/admin/ollama-instances`) muss laut Memory-
+Notiz separat von der alten 1-Container- auf die neue 9-Container/Port-
+Zuordnung fuer N02-M60 umgestellt werden, sonst zeigt es falsch an --
+noch nicht durchgefuehrt, da ausserhalb des unmittelbaren Auftrags und
+eigener Vorsicht bei einer weiteren, ungeprueften Systemkomponente.
+
+## 2026-09-14T17:42:46Z — Embedding-Prior fuer Routing-Bandits (Cold-Start) — starting
+
+Plan / progress:
+- Ausloeser: Vergleich mit ruvnet/ruflo (SONA-Modul) auf Nutzeranfrage,
+  Plan genehmigt in /home/philipp/.claude/plans/joyful-dazzling-creek.md.
+- Neues Modul services/routing_patterns.py (ChromaDB-Collection
+  moe_routing_patterns) + optionaler query_embedding-Parameter an
+  _get_expert_score/_record_expert_outcome (services/inference.py),
+  _get_thompson_score (services/dynamic_router.py), decide/record
+  (services/routing_bandit.py). Neues AgentState-Feld query_embedding.
+  Feature-Flag ROUTING_PATTERN_PRIOR_ENABLED, Default false.
+- Erwarteter Dateikreis: services/routing_patterns.py (neu), config.py,
+  .env.example, pipeline/state.py, services/pipeline/chat.py,
+  services/dynamic_router.py, services/inference.py,
+  services/routing_bandit.py, graph/expert.py, services/response_commit.py,
+  tests/test_routing_patterns.py (neu), tests/test_dynamic_router.py,
+  ggf. inference-Testdatei.
+Pre-conditions verified:
+- agent_status/*.md auf ueberlappende in_progress-Arbeit an denselben
+  Dateien geprueft: keine gefunden (nur done/Template-Eintraege).
+Notes:
+- Nutzer-Vorgabe: kein Container-Neustart/-Rebuild waehrend dieser Session,
+  da parallel ein Benchmark laeuft. Nur lokale Datei-Aenderungen + pytest,
+  keine Compose-Recreate-Aktion ohne separate Freigabe.
+
+## 2026-09-14T17:58:00Z — Embedding-Prior fuer Routing-Bandits (Cold-Start) — done (Code+Tests, kein Deploy)
+
+Plan / progress:
+- Umgesetzt wie in /home/philipp/.claude/plans/joyful-dazzling-creek.md geplant:
+  services/routing_patterns.py (neu, ChromaDB-Collection moe_routing_patterns,
+  Ring-Buffer via Valkey INCR), query_embedding-Parameter an
+  _get_expert_score/_record_expert_outcome (services/inference.py),
+  _get_thompson_score (services/dynamic_router.py, inkl. Fix: nutzt jetzt
+  EXPERT_MIN_DATAPOINTS aus config statt hartkodierter 5), decide/record
+  (services/routing_bandit.py). Neues AgentState-Feld query_embedding
+  (pipeline/state.py), einmalige BGE-Embedding-Berechnung in
+  services/pipeline/chat.py, durchgereicht an get_dynamic_template(),
+  stream_response() (main.py) und den zweiten (nicht-streamenden)
+  AgentState-Aufbau in chat.py sowie an graph/expert.py (beide
+  _get_expert_score-Call-Sites) und graph/router_nodes.py
+  (fuzzy_router_node -> routing_bandit.decide). Feature-Flag
+  ROUTING_PATTERN_PRIOR_ENABLED, Default false (config.py + .env.example).
+- Neue Tests: tests/test_routing_patterns.py (8), tests/test_routing_pattern_prior_blend.py (9).
+Pre-conditions verified:
+- Vollstaendige lokale Suite: 1302 passed, 0 failed, keine haengenden
+  Tasks/Threads (5.87s Laufzeit).
+- python3 scripts/check_governance.py --check: bestanden (27 required files,
+  9 runtime entry points).
+- Bestehende Tests (test_dynamic_router.py, test_causal_credit.py,
+  test_operational_controls.py, test_reachability_closure.py) unveraendert
+  gruen -- Flag-off-Pfad ist bytegleich zum bisherigen Verhalten.
+Notes:
+- KEIN Container-Rebuild/-Neustart durchgefuehrt (Nutzer-Vorgabe: paralleler
+  Benchmark laeuft). Nur Datei-Aenderungen + lokale pytest-Laeufe.
+- Konsolidierung der beiden Thompson-Zwillingsimplementierungen
+  (_get_expert_score vs. _get_thompson_score) bewusst nicht angefasst --
+  wie im Plan vermerkt, separates Refactoring.
+- ROUTING_PATTERN_PRIOR_ENABLED bleibt false, bis der Nutzer einen
+  Rollout (siehe Plan: erst routing_bandit-Gates, dann Experten-Scoring)
+  freigibt und einen Container-Rebuild autorisiert.
+
+## 2026-09-14T19:32:12Z — PROM_PATTERN_PRIOR Metrik ergaenzt — done
+
+Plan / progress:
+- Nutzer-Nachfrage: fehlende Observability fuer den Embedding-Prior
+  (siehe vorheriger Eintrag) nachgeruestet.
+- metrics.py: neuer Counter PROM_PATTERN_PRIOR
+  ('moe_routing_pattern_prior_total', Labels: namespace, outcome) mit
+  outcome in {used, empty, unavailable, error}.
+- services/routing_patterns.py::prior() inkrementiert die Metrik an jedem
+  Return-Pfad genau einmal -- aber nur, wenn tatsaechlich ein Embedding
+  uebergeben wurde (kein Zaehlen fuer "Aufrufer hatte gar kein Embedding",
+  das ist keine echte Konsultation).
+- Kein neuer Call-Site-Umbau noetig: da prior() der gemeinsame Choke-Point
+  fuer alle drei Bandits ist (services/inference.py, services/dynamic_router.py,
+  services/routing_bandit.py), reicht die Instrumentierung an einer Stelle.
+Pre-conditions verified:
+- Neue Tests (tests/test_routing_patterns.py::test_prior_increments_metric_per_outcome
+  + test_prior_no_embedding_does_not_touch_metric) pruefen alle vier
+  outcome-Pfade. Wichtiger Fund: tests/conftest.py stubbt das komplette
+  prometheus_client-Modul global (MagicMock) -- echte Counter-Werte sind im
+  Testharness nicht auslesbar, deshalb Assertion auf den .labels(...).inc()-
+  Call statt auf ._value.get(); das ist auch der einzige Weg, wie PROM_THOMPSON/
+  PROM_ROUTING_BANDIT ueberhaupt testbar waeren (im Bestand bisher ungetestet).
+- Volle Suite: 1304 passed (vorher 1302, +2 neue Tests), 5.38s, keine haengenden
+  Tasks.
+- check_governance.py --check: bestanden.
+Notes:
+- Weiterhin kein Container-Rebuild/-Neustart (Benchmark laeuft parallel).
+  Metrik ist erst im laufenden Container sichtbar, sobald ROUTING_PATTERN_PRIOR_ENABLED
+  aktiviert und der Service neu gebaut/deployed wird -- beides noch nicht
+  freigegeben.
+
+
+## 2026-09-18T20:46:43Z — RUNBOOK parallel-review-wave — starting
+Plan / progress:
+- Executing docs/experiments/2026-09-18-parallel-review-wave-runbook.md on branch feature/parallel-review-wave.
+- Benchmark Spur 2 (open weight) stopped by user at ~22:46 local; partial state saved in
+  benchmarks/results/spur2_partial_20260918T204533Z/ and orchestrator log in
+  benchmarks/results/orchestrator_logs/pre_runbook_20260918T204626Z.log (A0 done).
+- Owned files: benchmarks/run_scientific_benchmark.py, benchmarks/analyze_phase_timings.py,
+  benchmarks/compare_arms.py, services/trust_score.py, graph/synthesis.py, graph/expert.py,
+  services/response_commit.py, services/pipeline/chat.py, services/routing.py,
+  complexity_estimator.py, pipeline/state.py, main.py, .env.example
+Notes:
+- Existing in_progress entries in agent_status/*.md are all older than 4 h and each task has a later
+  done entry (checked at start); no overlapping lease.
+- No container rebuild until runbook step C8.
+
+## 2026-09-18T21:01:16Z — RUNBOOK parallel-review-wave — checkpoint
+Plan / progress:
+- A0-A5 done. A4: user chose separate snapshot commit (34b3a3c3, 17 files; 7 dependency files beyond the
+  originally listed set were included so the snapshot is importable: config.py, metrics.py,
+  services/inference.py, services/routing_bandit.py, services/dynamic_router.py, graph/planner.py,
+  graph/router_nodes.py). Snapshot verified in isolated export: only the known env-contract failure.
+- B1-B5 done, committed e9173a89 (judge gets reference+rubric, numeric tolerance, arm metadata,
+  analyze_phase_timings.py, compare_arms.py). Real judge call verified (11 s, valid JSON).
+- C1-C7b done, committed cd781ea8. E1-E2 done, committed b4f04ab7 (review wave, 9 behavioural tests).
+- Full suite: no new failures vs baseline (benchmarks/results/runbook/baseline_failures.txt is empty after A5).
+- F1 chain running in background (benchmarks/results/runbook/f1_chain.sh, log runbook/f1_chain.log):
+  arm N then arm A, 3 rounds, PIPELINE_COMMIT=34b3a3c3.
+Notes:
+- NOT deployed. Container still runs the pre-runbook image with PLANNER_MAX_TASKS=4 (env at creation);
+  .env says 8. Deploy (C8/E5) only after arm A finished.
+- .env.example has foreign uncommitted changes plus A5/C7b additions: intentionally not committed (H2 asks).
+
+## 2026-09-18T22:13:29Z — RUNBOOK parallel-review-wave — done (code, deploy, rotation); publication in progress
+Plan / progress:
+- Deployed image revision bf2a5c7e (later commits are docs only). Live-validated: review wave, self-critique
+  stop rule, critic think-strip, routing telemetry (wall_clock_ms, planner_plan). Not live-verified: quality
+  probe wiring (5 % sampling).
+- Valkey password rotated on explicit user authorization: new value written to moe-infra/.env,
+  moe-codex/.env and moe-libris/.env; terra_cache recreated (AOF data retained, 144 keys), clients
+  langgraph-app, moe-admin, moe-maintenance and codex-api recreated. Verified: old password rejected
+  (WRONGPASS), all three active clients connected, end-to-end chat request through the cache-auth path OK.
+  Backups with the old value were shredded. Other running containers still carry the stale value in their
+  environment (mcp-precision, authentik-*, grafana, dozzle, akhq, garage) without using Valkey; they pick up the
+  new value on their next recreation. moe-libris .env updated but container not restarted (does not use Valkey).
+- The old value remains in git history (commit f1d52b43 and later, published main) and in the untracked,
+  gitignored file /opt/deployment/Github/moe-sovereign/.env.env.bak.ref-templates; it is revoked now.
+Notes:
+- Arm N (native baseline) stopped at 4/24 evaluations, resumable without --fresh; arms B-D open.

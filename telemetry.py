@@ -189,7 +189,9 @@ async def record_routing_decision(
     try:
         user_input = state.get("input", "")
         experts_used = state.get("expert_models_used", [])
-        plan_raw = state.get("planner_plan") or state.get("planned_tasks") or []
+        # response_commit's payload carries the executed plan under "plan"; the
+        # older keys are kept for callers that pass a raw graph state.
+        plan_raw = state.get("planner_plan") or state.get("plan") or state.get("planned_tasks") or []
         mcp_tools = state.get("mcp_tools_used", [])
 
         # ── Causal Path: structured cognitive trace ──────────────────────────

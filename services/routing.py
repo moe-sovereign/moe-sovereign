@@ -150,6 +150,13 @@ def _resolve_user_experts(
             # Per-expert MCP tools and Skills (set by dynamic_router or admin template config)
             _mcp_tools = list(cat_cfg.get("mcp_tools") or []) if isinstance(cat_cfg, dict) else []
             _skills    = list(cat_cfg.get("skills") or []) if isinstance(cat_cfg, dict) else []
+            # Complementary review wave (graph/expert.py): categories whose
+            # models review this category's output, opt-in per template.
+            _review_lenses = [
+                str(x) for x in (cat_cfg.get("review_lenses") or [])
+                if isinstance(x, str) and x.strip()
+            ] if isinstance(cat_cfg, dict) else []
+            _review_replaces_sc = bool(cat_cfg.get("review_replaces_self_critique", False)) if isinstance(cat_cfg, dict) else False
             if isinstance(cat_cfg, dict) and "models" in cat_cfg:
                 models_list = []
                 for m in cat_cfg.get("models", []):
@@ -190,6 +197,8 @@ def _resolve_user_experts(
                         ),
                         "_mcp_tools":     _mcp_tools,
                         "_skills":        _skills,
+                        "_review_lenses": _review_lenses,
+                        "_review_replaces_self_critique": _review_replaces_sc,
                     })
                 result[cat] = models_list
             elif isinstance(cat_cfg, dict):
@@ -217,6 +226,8 @@ def _resolve_user_experts(
                     ),
                     "_mcp_tools":     _mcp_tools,
                     "_skills":        _skills,
+                    "_review_lenses": _review_lenses,
+                    "_review_replaces_self_critique": _review_replaces_sc,
                 }]
         return result or None
     except Exception:

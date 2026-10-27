@@ -277,3 +277,17 @@ def test_creative_task_does_not_require_fact_sources():
 
     assert ts.verdict == TrustVerdict.PROCEED
     assert ts.factors["creative_task_fit"] == 1.0
+
+
+def test_self_critique_and_review_entries_do_not_count_as_experts():
+    from services.trust_score import compute_trust_score
+    base = {
+        "expert_results": ["[m / code_reviewer]: " + "x" * 50],
+        "plan": [{"task": "t", "category": "code_reviewer"}],
+    }
+    inflated = dict(base)
+    inflated["expert_results"] = base["expert_results"] + [
+        "[SELF_CRITIQUE_R1 / judge]: " + "y" * 50,
+        "[REVIEW:security→code_reviewer / security]: " + "z" * 50,
+    ]
+    assert compute_trust_score(inflated).factors["expert_count"] == compute_trust_score(base).factors["expert_count"]

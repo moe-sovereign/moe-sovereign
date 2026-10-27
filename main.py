@@ -1262,6 +1262,18 @@ async def lifespan(app_: FastAPI):
         await prewarm_bge_model()
     asyncio.create_task(_prewarm_bge())
 
+    # Pre-warm the guard model (llama-guard3:8b) for the same reason. With
+    # GUARD_WARM_ONLY=true (default), ainvoke_guard_decision refuses to pay
+    # for a cold load and fails open instead -- but nothing else ever
+    # triggers that first load either, so the guard failed open on every
+    # single request (observed live: 9/9 requests in one benchmark run).
+    # One cold load here breaks that deadlock; normal traffic afterwards
+    # keeps it resident via GUARD_KEEP_ALIVE.
+    async def _prewarm_guard() -> None:
+        from services.inference import prewarm_guard_model
+        await prewarm_guard_model()
+    asyncio.create_task(_prewarm_guard())
+
     # Kafka Consumer as persistent background task
     consumer_task  = asyncio.create_task(_kafka_consumer_loop())
     gauge_task     = asyncio.create_task(_gauge_updater_loop())
@@ -1895,7 +1907,8 @@ async def stream_response(user_input: str, chat_id: str, mode: str = "default",
                           deliberation_policy: Optional[dict] = None,
                           no_cache: bool = False,
                           client_max_output_tokens: int = 0,
-                          local_only: bool = False):
+                          local_only: bool = False,
+                          query_embedding: Optional[List[float]] = None):
     from services.helpers import current_chat_id
     current_chat_id.set(chat_id)
     _deregistered = False
@@ -1939,6 +1952,7 @@ async def stream_response(user_input: str, chat_id: str, mode: str = "default",
                  "user_conn_prompt_tokens": 0, "user_conn_completion_tokens": 0,
                  "chat_history": chat_history or [], "reasoning_trace": "",
                  "system_prompt": system_prompt, "behavioral_directives": "", "images": images or [],
+                 "query_embedding": query_embedding or [],
                  "user_id": user_id, "api_key_id": api_key_id,
                  "user_permissions": user_permissions or {},
                  "user_experts": user_experts or {},
@@ -1993,6 +2007,8 @@ async def stream_response(user_input: str, chat_id: str, mode: str = "default",
                  "trust_verdict": "",
                  "self_critique_round": 0,
                  "self_critique_max": int(__import__("os").getenv("SELF_CRITIQUE_MAX_ROUNDS", "2")),
+                 "self_critique_prev_score": 0.0,
+                 "review_replaces_self_critique": False,
                  "constitution_violations": [],
                  "retrieved_graph_chunks": [],
                  "cynefin_domain": "",

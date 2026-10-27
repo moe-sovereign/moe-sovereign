@@ -191,6 +191,13 @@ GUARD_WARM_ONLY     = os.getenv("GUARD_WARM_ONLY", "true").lower() in ("1", "tru
 GUARD_PROBE_TIMEOUT = float(os.getenv("GUARD_PROBE_TIMEOUT", "2"))
 GUARD_TIMEOUT       = float(os.getenv("GUARD_TIMEOUT", "15"))
 GUARD_KEEP_ALIVE    = os.getenv("GUARD_KEEP_ALIVE", "30m")
+# Llama Guard classifies a single exchange (safe/unsafe + category) — it never
+# needs a large context window. Left at the endpoint's OLLAMA_CONTEXT_LENGTH
+# default (32768 here), the KV cache alone made the resident model ~12GB,
+# large enough to contend with Judge/Planner/Expert models sharing the same
+# endpoint (observed live: 422s during a benchmark run right after guard
+# pre-warming was added). 4096 comfortably covers policy_context + user_input.
+GUARD_NUM_CTX       = int(os.getenv("GUARD_NUM_CTX", "4096"))
 
 GRAPH_INGEST_MODEL    = os.getenv("GRAPH_INGEST_MODEL", "")
 _GRAPH_INGEST_EP_NAME = os.getenv("GRAPH_INGEST_ENDPOINT", "")
@@ -364,6 +371,19 @@ ROUTING_BANDIT_MIN_DATAPOINTS = int(os.getenv("ROUTING_BANDIT_MIN_DATAPOINTS", "
 ROUTING_BANDIT_COST_PRIOR     = float(os.getenv("ROUTING_BANDIT_COST_PRIOR",   "0.5"))
 ROUTING_BANDIT_CONTEXT_BANDS  = int(os.getenv("ROUTING_BANDIT_CONTEXT_BANDS",  "2"))
 
+# Embedding-space prior for cold-start bridging (services/routing_patterns.py).
+# Both Thompson bandits above key on discrete buckets (category string / banded
+# fuzzy score); similar-but-distinct contexts share no statistics until their
+# own bucket clears MIN_DATAPOINTS. When enabled and a bucket is still below
+# its MIN_DATAPOINTS threshold, the k nearest historical observations in BGE
+# embedding space are blended in as a capped, distance-weighted Beta
+# pseudo-count prior. Disabled by default: additive, opt-in, and a no-op once
+# a bucket has real observations — existing behaviour is unchanged either way.
+ROUTING_PATTERN_PRIOR_ENABLED = os.getenv("ROUTING_PATTERN_PRIOR_ENABLED", "false").lower() in ("1", "true", "yes")
+ROUTING_PATTERN_PRIOR_K       = int(os.getenv("ROUTING_PATTERN_PRIOR_K",   "3"))
+ROUTING_PATTERN_PRIOR_CAP     = float(os.getenv("ROUTING_PATTERN_PRIOR_CAP", "3.0"))
+ROUTING_PATTERN_RING_SIZE     = int(os.getenv("ROUTING_PATTERN_RING_SIZE", "200"))
+
 # Trivial fast-path: a conservative eligibility gate in graph/planner.py excludes
 # calculations, legal/current/research/file/image and conversation-context work.
 # Only the remaining unambiguous one-shot requests skip the planner LLM.
@@ -441,7 +461,8 @@ TOOL_MAX_TOKENS      = int(os.getenv("TOOL_MAX_TOKENS",      "8192"))
 REASONING_MAX_TOKENS = int(os.getenv("REASONING_MAX_TOKENS", "16384"))
 
 PLANNER_RETRIES   = int(os.getenv("PLANNER_RETRIES",   "2"))
-PLANNER_MAX_TASKS = int(os.getenv("PLANNER_MAX_TASKS", "4"))
+# Maximum planner tasks per request (increased to 8 for multi-step composite workloads)
+PLANNER_MAX_TASKS = int(os.getenv("PLANNER_MAX_TASKS", "8"))
 # Structured planning needs the executable JSON plan, not a hidden reasoning
 # transcript that can consume the entire output budget before ``content`` is
 # emitted. Operators can opt back in for a planner model proven to benefit.
