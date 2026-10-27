@@ -2661,11 +2661,13 @@ async def _anthropic_reasoning_handler(
 
     # Determine model/node — explicit override takes precedence over dynamic selection
     _reasoning_node_name = "unknown"
+    _reasoning_api_type  = "openai"
     if CLAUDE_CODE_REASONING_MODEL and _CLAUDE_CODE_REASONING_URL:
         reasoning_model = CLAUDE_CODE_REASONING_MODEL
         reasoning_url   = _CLAUDE_CODE_REASONING_URL
         reasoning_token = "ollama"
         _reasoning_node_name = CLAUDE_CODE_REASONING_ENDPOINT or "unknown"
+        _reasoning_api_type  = API_TYPE_MAP.get(CLAUDE_CODE_REASONING_ENDPOINT, "openai")
         _reasoning_timeout = float(_server_info(_reasoning_node_name).get("timeout", EXPERT_TIMEOUT))
         logger.info(f"🧠 Reasoning: Override {reasoning_model} @ {CLAUDE_CODE_REASONING_ENDPOINT}")
     elif session.tool_model and session.tool_api_type == "ollama" and session.tool_url:
@@ -2677,6 +2679,7 @@ async def _anthropic_reasoning_handler(
         reasoning_url        = session.tool_url
         reasoning_token      = session.tool_token or "ollama"
         _reasoning_node_name = session.tool_endpoint or "unknown"
+        _reasoning_api_type  = session.tool_api_type
         _reasoning_timeout   = float(_server_info(_reasoning_node_name).get("timeout", EXPERT_TIMEOUT))
         logger.info("🧠 Reasoning: reusing loaded tool model %s @ %s (avoids eviction)", reasoning_model, _reasoning_node_name)
     else:
@@ -2693,6 +2696,7 @@ async def _anthropic_reasoning_handler(
             reasoning_url   = node.get("url") or URL_MAP.get(node["name"])
             reasoning_token = node.get("token", "ollama")
             _reasoning_node_name = node.get("name", "unknown")
+            _reasoning_api_type  = node.get("api_type", "openai")
             _reasoning_timeout = float(node.get("timeout", EXPERT_TIMEOUT))
             logger.info(f"🧠 Reasoning: Dynamic {reasoning_model} @ {node.get('name','?')} (score={scored[0][0]:.2f})")
         else:
@@ -2700,19 +2704,67 @@ async def _anthropic_reasoning_handler(
             reasoning_url   = _CLAUDE_CODE_TOOL_URL
             reasoning_token = "ollama"
             _reasoning_node_name = CLAUDE_CODE_TOOL_ENDPOINT or "unknown"
+            _reasoning_api_type  = API_TYPE_MAP.get(CLAUDE_CODE_TOOL_ENDPOINT, "openai")
             _reasoning_timeout = float(_server_info(_reasoning_node_name).get("timeout", EXPERT_TIMEOUT))
             logger.info(f"🧠 Reasoning: Fallback to tool model {reasoning_model}")
 
+    _reasoning_max_tok = body.get("max_tokens", session.reasoning_max_tokens or REASONING_MAX_TOKENS)
     payload = {
         "model":      reasoning_model,
         "messages":   oai_messages,
         "stream":     False,
-        "max_tokens": body.get("max_tokens", session.reasoning_max_tokens or REASONING_MAX_TOKENS),
+        "max_tokens": _reasoning_max_tok,
     }
+    # For Ollama endpoints, per-request context sizing only works on the native
+    # /api/chat path — /v1/chat/completions silently discards "options" (same
+    # limitation documented in _anthropic_tool_handler). Without this, a
+    # reasoning-mode CC profile whose model isn't already warm loads at
+    # Ollama's Modelfile-default context instead of the profile's configured
+    # window (observed: 32k instead of the intended 256k after the model had
+    # been evicted and reloaded cold).
+    _call_url = f"{reasoning_url}/chat/completions"
+    if _reasoning_api_type == "ollama":
+        _reasoning_num_ctx = (
+            session.context_window
+            or session.reasoning_max_tokens
+            or session.tool_max_tokens
+            or session.template_num_ctx
+            or JUDGE_NUM_CTX
+            or 32768
+        )
+        _reasoning_ollama_base = reasoning_url.rstrip("/").removesuffix("/v1")
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as _ps_cl:
+                _ps_r = await _ps_cl.get(
+                    f"{_reasoning_ollama_base}/api/ps",
+                    headers={"Authorization": f"Bearer {reasoning_token}"},
+                )
+                for _loaded in _ps_r.json().get("models", []):
+                    _lname = _loaded.get("name", "").split(":")[0]
+                    _ename = reasoning_model.split(":")[0]
+                    _loaded_ctx = _loaded.get("context_length", 0)
+                    if _lname == _ename and _loaded_ctx >= _reasoning_num_ctx:
+                        _reasoning_num_ctx = _loaded_ctx
+                        break
+        except Exception:
+            pass  # non-fatal — fall through to the configured num_ctx
+        _call_url = f"{_reasoning_ollama_base}/api/chat"
+        payload = {
+            "model":    reasoning_model,
+            "messages": oai_messages,
+            "stream":   False,
+            "options":  {"num_ctx": _reasoning_num_ctx, "num_predict": _reasoning_max_tok},
+        }
+        if not session.stream_think:
+            payload["think"] = False
+        logger.info(
+            "cc_reasoning: Ollama native /api/chat — num_ctx=%d num_predict=%d model=%s",
+            _reasoning_num_ctx, _reasoning_max_tok, reasoning_model,
+        )
     try:
         async with httpx.AsyncClient(timeout=_reasoning_timeout) as client:
             resp = await client.post(
-                f"{reasoning_url}/chat/completions",
+                _call_url,
                 json=payload,
                 headers={"Authorization": f"Bearer {reasoning_token}"}
             )
@@ -2747,10 +2799,16 @@ async def _anthropic_reasoning_handler(
                 "content": [{"type": "text", "text": _err_text}], "model": model_id,
                 "stop_reason": "end_turn", "stop_sequence": None, "usage": {"input_tokens": 0, "output_tokens": 0}}
 
-    raw   = oai_resp["choices"][0]["message"].get("content", "") or ""
-    usage = oai_resp.get("usage", {})
-    in_tok  = usage.get("prompt_tokens", 0)
-    out_tok = usage.get("completion_tokens", 0)
+    if _reasoning_api_type == "ollama":
+        # Native /api/chat response shape differs from OpenAI's.
+        raw     = oai_resp.get("message", {}).get("content", "") or ""
+        in_tok  = oai_resp.get("prompt_eval_count", 0)
+        out_tok = oai_resp.get("eval_count", 0)
+    else:
+        raw   = oai_resp["choices"][0]["message"].get("content", "") or ""
+        usage = oai_resp.get("usage", {})
+        in_tok  = usage.get("prompt_tokens", 0)
+        out_tok = usage.get("completion_tokens", 0)
 
     if user_id != "anon":
         asyncio.create_task(_log_usage_to_db(
@@ -3277,7 +3335,11 @@ async def anthropic_messages(request: Request):
         "cc_moe"
     )
     _cc_backend_model = session.tool_model if _cc_moe_mode != "cc_moe" else "MoE"
-    asyncio.create_task(_register_active_request(
+    # Await registration so every subsequent error/return path can reliably
+    # remove the exact entry; fire-and-forget registration races used to
+    # recreate keys after a fast failure had already deregistered them
+    # (see services/pipeline/chat.py for the same fix applied earlier).
+    await _register_active_request(
         chat_id=chat_id, user_id=_user_id, model=model,
         moe_mode=_cc_moe_mode, req_type="streaming" if body.get("stream") else "batch",
         client_ip=request.client.host if request.client else "",
@@ -3289,7 +3351,7 @@ async def anthropic_messages(request: Request):
         # auto-derivation (see cc_session.py Phase 5.5).
         template_name=session.expert_template_id,
         resolved_tmpl_id=session.expert_template_id,
-    ))
+    )
 
     # Fast-path triage: CC utility calls and trivially short prompts bypass the
     # MoE pipeline entirely — a 5-line topic-detection request must never run
