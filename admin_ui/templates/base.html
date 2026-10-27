@@ -18,7 +18,8 @@
   <script>
     /* Apply saved theme before first paint to avoid flash */
     (function(){
-      const t = localStorage.getItem('moe-theme') || 'light';
+      let t = 'light';
+      try { t = localStorage.getItem('moe-theme') || t; } catch (_) {}
       document.documentElement.setAttribute('data-bs-theme', t);
     })();
     /* Register service worker */
@@ -90,8 +91,11 @@
     th.sortable .sort-ind { font-size: .65em; opacity: .3; margin-left: .3em; vertical-align: middle; }
     th.sortable.sort-asc .sort-ind, th.sortable.sort-desc .sort-ind { opacity: 1; }
   </style>
+<link rel="stylesheet" href="/static/css/moe-ui.css?v=1">
+<script src="/static/js/moe-ui.js?v=1" defer></script>
 </head>
-<body>
+<body class="moe-app">
+<a class="moe-skip-link" href="#main-content">{{ t(request, "ui.skip_content") }}</a>
 
 <nav class="navbar navbar-dark bg-dark sticky-top">
   <div class="container-fluid px-3">
@@ -398,7 +402,7 @@
       </div>
       {# Theme Toggle #}
       <button type="button" id="themeToggleBtn" class="btn btn-sm btn-outline-light"
-              onclick="toggleTheme()" title="{{ t(request, 'btn.toggle_theme') }}">
+              aria-label="{{ t(request, 'btn.toggle_theme') }}" onclick="toggleTheme()" title="{{ t(request, 'btn.toggle_theme') }}">
         <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
       </button>
       {# Logout #}
@@ -646,7 +650,7 @@
 
 {% block flash %}{% endblock %}
 
-<main class="container py-4">
+<main id="main-content" tabindex="-1" class="container moe-main py-4">
   {% block content %}{% endblock %}
 </main>
 
@@ -754,9 +758,9 @@ function buildSingleDropdown(wrapperId, items, currentVal, onChange) {
   wrap.innerHTML = `
     <input type="hidden" id="${valId}" value="${escHtml(currentVal||'')}">
     <div class="dropdown">
-      <button class="btn btn-sm btn-outline-secondary dropdown-toggle w-100 text-start" type="button"
+      <button class="btn btn-sm btn-outline-secondary dropdown-toggle w-100 text-start d-flex align-items-center" type="button"
               data-bs-toggle="dropdown" data-bs-auto-close="outside">
-        <span id="${lblId}">${escHtml(cur ? cur.label : (currentVal||window.MoeI18n.select_placeholder))}</span>
+        <span id="${lblId}" class="text-truncate flex-grow-1">${escHtml(cur ? cur.label : (currentVal||window.MoeI18n.select_placeholder))}</span>
       </button>
       <ul class="dropdown-menu p-1" style="max-height:320px;overflow-y:auto;min-width:100%">
         <li class="px-2 pt-1 pb-1 sticky-top bg-white">
@@ -843,7 +847,7 @@ function syncDropdown(selectId) {
 /* ─── Dark / Light theme toggle ─────────────────────────────────────────── */
 function _applyTheme(theme) {
   document.documentElement.setAttribute('data-bs-theme', theme);
-  localStorage.setItem('moe-theme', theme);
+  try { localStorage.setItem('moe-theme', theme); } catch (_) {}
   const icon = document.getElementById('themeIcon');
   if (icon) icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
 }
@@ -853,10 +857,11 @@ function toggleTheme() {
 }
 /* Sync icon after page load */
 document.addEventListener('DOMContentLoaded', function() {
-  const cur = localStorage.getItem('moe-theme') || 'light';
+  const cur = document.documentElement.getAttribute('data-bs-theme') || 'light';
   _applyTheme(cur);
 });
 </script>
+{% include "table_columns.html" %}
 {% block scripts %}{% endblock %}
 <script>
 /* ─── PWA Install Prompt ────────────────────────────────────────────────── */

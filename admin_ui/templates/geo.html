@@ -92,15 +92,10 @@
           <i class="bi bi-map me-1"></i>Map
         </span>
         <div class="d-flex gap-2 align-items-center">
-          <select id="tile-select" class="form-select form-select-sm" style="width:auto"
-                  onchange="changeTiles()">
-            <option value="osm">OpenStreetMap</option>
-            <option value="dark">CartoDB Dark</option>
-            <option value="topo">OpenTopoMap</option>
-          </select>
           <span class="text-muted small" id="feature-count"></span>
         </div>
       </div>
+      <div class="small text-body-secondary px-3 py-2" role="status">{{ t(request, 'ui.geo_local') }}</div>
       <div id="map"></div>
     </div>
   </div>
@@ -111,17 +106,8 @@
 <script src="/static/js/leaflet.min.js"></script>
 <script>
 // ── Map init ──────────────────────────────────────────────────────────────────
-const TILE_PROVIDERS = {
-  osm:  {url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-         attr: '© <a href="https://osm.org/copyright">OpenStreetMap</a>'},
-  dark: {url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-         attr: '© <a href="https://carto.com">CARTO</a>'},
-  topo: {url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-         attr: '© <a href="https://opentopomap.org">OpenTopoMap</a>'},
-};
-
-// Override tile server for airgap deployments via env var injected by the template
-const AIRGAP_TILE_URL = "{{ tile_url | default('') }}";
+// No public basemap fallback: air-gapped installs display local data layers.
+const LOCAL_TILE_URL = {{ tile_url | default('') | tojson }};
 
 const map = L.map('map', {preferCanvas: true}).setView([51.0, 10.0], 5);
 let tileLayer = null;
@@ -131,15 +117,12 @@ let colorIdx = 0;
 
 function getColor() { return layerColors[colorIdx++ % layerColors.length]; }
 
-function setTiles(provider) {
-  if (tileLayer) map.removeLayer(tileLayer);
-  const p = TILE_PROVIDERS[provider] || TILE_PROVIDERS.osm;
-  const url = AIRGAP_TILE_URL || p.url;
-  tileLayer = L.tileLayer(url, {attribution: p.attr, maxZoom: 19}).addTo(map);
+if (LOCAL_TILE_URL) {
+  const localTiles = new URL(LOCAL_TILE_URL, location.href);
+  if (localTiles.origin === location.origin) {
+    tileLayer = L.tileLayer(LOCAL_TILE_URL, {maxZoom: 19}).addTo(map);
+  }
 }
-setTiles('dark');
-
-function changeTiles() { setTiles(document.getElementById('tile-select').value); }
 
 // ── Layer management ──────────────────────────────────────────────────────────
 async function checkStatus() {

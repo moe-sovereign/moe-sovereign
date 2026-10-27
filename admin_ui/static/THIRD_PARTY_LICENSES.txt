@@ -1,0 +1,57 @@
+Licenses for the existing shared Admin/Portal assets
+==================================================
+
+The UI modernization adds no third-party dependency. moe-ui.css and moe-ui.js
+are original project code under Apache-2.0 (see the repository LICENSE).
+Existing copyright banners in vendor files are retained.
+
+The MIT license below applies to these existing assets and embedded components:
+
+Bootstrap 5.3.3 (CSS and bundle)
+Copyright 2011-2024 The Bootstrap Authors
+https://github.com/twbs/bootstrap
+
+Bootstrap Icons 1.11.3 (CSS and local icon fonts)
+Copyright 2019-2024 The Bootstrap Authors
+https://github.com/twbs/icons
+
+Chart.js 4.4.4
+Copyright 2024 Chart.js Contributors
+https://github.com/chartjs/Chart.js
+
+@kurkle/color 0.3.2 (embedded in Chart.js)
+Copyright 2023 Jukka Kurkela
+https://github.com/kurkle/color
+
+Cytoscape.js 3.29.2
+Copyright (c) 2016-2024, The Cytoscape Consortium
+https://github.com/cytoscape/cytoscape.js
+
+Embedded Cytoscape notices:
+Embeddable Minimum Strictly-Compliant Promises/A+ 1.1.1 Thenable
+Copyright (c) 2013-2014 Ralf S. Engelschall
+Bezier curve function generator: Copyright Gaetan Renaudeau
+Runge-Kutta spring physics function generator: adapted from Framer.js,
+Copyright Koen Bok
+
+MIT License
+-----------
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+These source URLs are provenance references, not runtime resources.

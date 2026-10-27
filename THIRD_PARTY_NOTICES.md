@@ -24,6 +24,16 @@ along with their licenses and copyright notices.
 
 ---
 
+## Shared UI license texts
+
+The existing shared Admin/Portal asset notices and full MIT license text are
+also shipped locally in `admin_ui/static/THIRD_PARTY_LICENSES.txt`. This includes
+Cytoscape.js 3.29.2 (Copyright 2016–2024 The Cytoscape Consortium) and the embedded
+MIT notices retained in that vendor file. The new `moe-ui.css` and `moe-ui.js`
+are original project code under Apache-2.0 and add no dependencies.
+
+---
+
 ## Documentation Search (`site/assets/javascripts/lunr/`)
 
 ### Lunr.js

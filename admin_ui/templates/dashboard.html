@@ -12,6 +12,8 @@
 {% endblock %}
 
 {% block content %}
+<div class="moe-page-heading"><div><h1 class="h3 mb-1">{{ t(request, 'nav.config') }}</h1><p class="text-body-secondary mb-0">{{ t(request, 'ui.config_hint') }}</p></div>
+<label class="moe-section-picker" hidden>{{ t(request, 'ui.jump_section') }}<select id="config-section" class="form-select form-select-sm"><option value="">{{ t(request, 'ui.choose_section') }}</option></select></label></div>
 
 {# ── Service status (outside the save form) ── #}
 <div class="card mb-4">
@@ -107,27 +109,50 @@
             </div>
           </div>
           <div class="mt-3">
-            <div class="d-flex align-items-center mb-2 gap-2">
+            <div class="d-flex align-items-center justify-content-between flex-wrap mb-2 gap-2">
               <span class="form-label mb-0">{{ t(request, 'lbl.ollama_servers') }}</span>
-              <span class="text-muted small">{{ t(request, 'lbl.inference_changes') }}</span>
+              <div class="server-column-tools">
+                <div class="dropdown">
+                  <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">{{ t(request, 'ui.column_width') }}</button>
+                  <div class="dropdown-menu dropdown-menu-end p-3 moe-column-options">
+                    <label class="form-label" for="server-width-column">{{ t(request, 'ui.column_width') }}</label>
+                    <select id="server-width-column" class="form-select form-select-sm mb-2"></select>
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary" data-column-step="-24">− {{ t(request, 'ui.narrower') }}</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary" data-column-step="24">+ {{ t(request, 'ui.wider') }}</button>
+                    </div>
+                    <p class="small text-body-secondary mt-2 mb-0">{{ t(request, 'ui.column_help') }}</p>
+                  </div>
+                </div>
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="server-extra-columns">
+                  <label class="form-check-label small" for="server-extra-columns">{{ t(request, 'table.extra_columns') }}</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-link text-secondary p-1" data-reset-columns="servers-table"
+                        title="{{ t(request, 'table.reset_widths') }}" aria-label="{{ t(request, 'table.reset_widths') }}">
+                  <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                </button>
+              </div>
             </div>
-            <table class="table table-sm mb-2" id="servers-table">
+            {% with filter_id="server-search", filter_target="#server-tbody > tr", filter_label=t(request, "ui.search_servers") %}{% include "list_toolbar.html" %}{% endwith %}
+            <div class="table-responsive">
+            <table class="table table-sm mb-2" id="servers-table" data-resizable-columns="inference-servers">
               <thead>
                 <tr>
-                  <th style="width:100px">Name</th>
-                  <th>URL (/v1)</th>
-                  <th style="width:55px">GPUs</th>
-                  <th style="width:65px" title="Total usable VRAM in GB. Used for floating node selection — models larger than this are not routed here.">VRAM GB <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
-                  <th style="width:60px" title="{{ t(request, 'tip.factor') }}">{{ t(request, 'table.factor') }} <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
-                  <th style="width:75px" title="{{ t(request, 'tip.timeout') }}">{{ t(request, 'lbl.timeout') }} <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
-                  <th style="width:70px" title="Pre-analysis delay in seconds before the planner fires (per server). Accounts for slow model load times (e.g. large fp16 models).">Delay s <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
-                  <th style="width:150px" title="Self-imposed outbound rate limit toward this provider: N requests per M seconds/minutes/hours. MoE-Sovereign queues and waits internally instead of forwarding calls the provider would answer with 429. Empty = unlimited.">Rate-Limit <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
-                  <th style="width:80px">API-Typ</th>
-                  <th style="width:130px">{{ t(request, 'lbl.token') }}</th>
-                  <th style="width:45px" title="{{ t(request, 'tip.active_toggle') }}">{{ t(request, 'status.active') }}</th>
-                  <th style="width:55px" title="{{ t(request, 'tip.ontology_cronjob') }}">{{ t(request, 'lbl.ontology_short') }}</th>
-                  <th style="width:90px">Status</th>
-                  <th style="width:68px"></th>
+                  <th data-column-width="220" data-column-min="150">Name</th>
+                  <th data-column-width="360" data-column-min="240">URL (/v1)</th>
+                  <th data-column-width="75" data-column-min="64">GPUs</th>
+                  <th data-column-width="100" data-column-min="85" title="Total usable VRAM in GB. Used for floating node selection — models larger than this are not routed here.">VRAM GB <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
+                  <th data-column-width="85" data-column-min="75" title="{{ t(request, 'tip.factor') }}">{{ t(request, 'table.factor') }} <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
+                  <th data-column-width="100" data-column-min="85" title="{{ t(request, 'tip.timeout') }}">{{ t(request, 'lbl.timeout') }} <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
+                  <th data-column-width="85" data-column-min="75" title="Pre-analysis delay in seconds before the planner fires (per server). Accounts for slow model load times (e.g. large fp16 models).">Delay s <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
+                  <th data-column-width="230" data-column-min="210" title="Self-imposed outbound rate limit toward this provider: N requests per M seconds/minutes/hours. MoE-Sovereign queues and waits internally instead of forwarding calls the provider would answer with 429. Empty = unlimited.">Rate-Limit <i class="bi bi-info-circle text-muted" style="font-size:.75rem"></i></th>
+                  <th data-column-width="160" data-column-min="130">API-Typ</th>
+                  <th data-column-width="160" data-column-min="130">{{ t(request, 'lbl.token') }}</th>
+                  <th data-column-width="80" data-column-min="64" title="{{ t(request, 'tip.active_toggle') }}">{{ t(request, 'status.active') }}</th>
+                  <th data-column-width="95" data-column-min="80" title="{{ t(request, 'tip.ontology_cronjob') }}">{{ t(request, 'lbl.ontology_short') }}</th>
+                  <th data-column-width="95" data-column-min="80">Status</th>
+                  <th data-column-width="76" data-column-min="76"></th>
                 </tr>
               </thead>
               <tbody id="server-tbody">
@@ -191,18 +216,19 @@
                            {% if srv.get('ontology_enabled') %}checked{% endif %}>
                   </td>
                   <td><span class="badge bg-secondary srv-status-badge" style="font-size:.75rem">–</span></td>
-                  <td class="d-flex gap-1">
+                  <td><div class="d-flex gap-1">
                     <button type="button" class="btn btn-sm btn-outline-secondary px-1 py-0"
                             title="Modell-Tags bearbeiten"
                             onclick="openSrvTagModal(this.closest('tr').querySelector('input[name^=srv_name_]').value)">
                       <i class="bi bi-tags"></i></button>
                     <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0"
                             onclick="removeServerRow(this)"><i class="bi bi-x"></i></button>
-                  </td>
+                  </div></td>
                 </tr>
                 {% endfor %}
               </tbody>
             </table>
+            </div>
             <button type="button" class="btn btn-sm btn-outline-success me-2" onclick="addServerRow()">
               <i class="bi bi-plus"></i> {{ t(request, 'btn.add_server') }}
             </button>
@@ -222,33 +248,33 @@
         </div>
         <div class="card-body">
           <div class="row g-3">
-            <div class="col-8">
+            <div class="col-12 col-sm-8">
               <label class="form-label" for="JUDGE_MODEL">Judge-Modell (Merger / Critic)</label>
               <input type="text" id="JUDGE_MODEL" name="JUDGE_MODEL" class="form-control font-monospace"
                      value="{{ config.get('JUDGE_MODEL','magistral:24b') }}">
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <label class="form-label" for="JUDGE_ENDPOINT">Endpoint</label>
               <select id="JUDGE_ENDPOINT" name="JUDGE_ENDPOINT" class="form-select endpoint-select"
                       data-selected="{{ config.get('JUDGE_ENDPOINT','RTX') }}"></select>
             </div>
-            <div class="col-8">
+            <div class="col-12 col-sm-8">
               <label class="form-label" for="PLANNER_MODEL">Planner-Modell (Task-Zerlegung)</label>
               <input type="text" id="PLANNER_MODEL" name="PLANNER_MODEL" class="form-control font-monospace"
                      value="{{ config.get('PLANNER_MODEL','phi4:14b') }}">
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <label class="form-label" for="PLANNER_ENDPOINT">Endpoint</label>
               <select id="PLANNER_ENDPOINT" name="PLANNER_ENDPOINT" class="form-select endpoint-select"
                       data-selected="{{ config.get('PLANNER_ENDPOINT','RTX') }}"></select>
             </div>
-            <div class="col-8">
+            <div class="col-12 col-sm-8">
               <label class="form-label" for="GRAPH_INGEST_MODEL">Graph Ingest-Modell (Kausal-Extraktion)</label>
               <input type="text" id="GRAPH_INGEST_MODEL" name="GRAPH_INGEST_MODEL" class="form-control font-monospace"
                      placeholder="— same as Judge —"
                      value="{{ config.get('GRAPH_INGEST_MODEL','') }}">
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <label class="form-label" for="GRAPH_INGEST_ENDPOINT">Endpoint</label>
               <select id="GRAPH_INGEST_ENDPOINT" name="GRAPH_INGEST_ENDPOINT" class="form-select endpoint-select"
                       data-selected="{{ config.get('GRAPH_INGEST_ENDPOINT','') }}"></select>
@@ -326,7 +352,7 @@
                 </div>
               </div>
               <div class="row g-3 mt-1">
-                <div class="col-8">
+                <div class="col-12 col-sm-8">
                   <label class="form-label" for="CLAUDE_CODE_TOOL_MODEL">
                     Tool Model
                     <i class="bi bi-info-circle text-muted" style="font-size:.75rem"
@@ -336,7 +362,7 @@
                          class="form-control font-monospace"
                          value="{{ config.get('CLAUDE_CODE_TOOL_MODEL','devstral:24b') }}">
                 </div>
-                <div class="col-4">
+                <div class="col-12 col-sm-4">
                   <label class="form-label" for="CLAUDE_CODE_TOOL_ENDPOINT">Endpoint</label>
                   <select id="CLAUDE_CODE_TOOL_ENDPOINT" name="CLAUDE_CODE_TOOL_ENDPOINT"
                           class="form-select endpoint-select"
@@ -368,7 +394,7 @@
                 </div>
               </div>
               <div class="row g-3 mt-1" id="reasoning-model-row">
-                <div class="col-8">
+                <div class="col-12 col-sm-8">
                   <label class="form-label" for="CLAUDE_CODE_REASONING_MODEL">
                     Reasoning Model
                     <span class="text-muted small">(empty = from expert models)</span>
@@ -378,7 +404,7 @@
                          placeholder="e.g. deepseek-r1:32b or qwq:32b"
                          value="{{ config.get('CLAUDE_CODE_REASONING_MODEL','') }}">
                 </div>
-                <div class="col-4">
+                <div class="col-12 col-sm-4">
                   <label class="form-label" for="CLAUDE_CODE_REASONING_ENDPOINT">Endpoint</label>
                   <select id="CLAUDE_CODE_REASONING_ENDPOINT" name="CLAUDE_CODE_REASONING_ENDPOINT"
                           class="form-select endpoint-select"
@@ -773,10 +799,9 @@
   </div>{# end row #}
 
   {# ── Save ── #}
-  <div class="d-flex justify-content-end mt-4 gap-2">
-    <a href="/" class="btn btn-secondary">
-      <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
-    </a>
+  <div class="moe-save-bar mt-4" id="config-save-bar" data-clean="{{ t(request, 'ui.no_changes') }}" data-dirty="{{ t(request, 'ui.unsaved') }}" data-saving="{{ t(request, 'ui.saving') }}" data-discard="{{ t(request, 'ui.discard_confirm') }}">
+    <span id="config-save-status" role="status" aria-live="polite">{{ t(request, 'ui.no_changes') }}</span>
+    <a href="/" class="btn btn-outline-secondary" id="config-discard">{{ t(request, 'ui.discard') }}</a>
     <button type="submit" class="btn btn-primary px-4" id="save-btn">
       <i class="bi bi-floppy me-1"></i>{{ t(request, 'btn.save') }}
     </button>
@@ -924,14 +949,14 @@ function buildServerRow(idx, name, url, gpuCount, vramGb, apiType, token, timeou
        <input type="checkbox" name="srv_ontology_enabled_${idx}" value="1" class="form-check-input">
      </td>
      <td><span class="badge bg-secondary srv-status-badge" style="font-size:.75rem">–</span></td>
-     <td class="d-flex gap-1">
+     <td><div class="d-flex gap-1">
        <button type="button" class="btn btn-sm btn-outline-secondary px-1 py-0"
                title="Modell-Tags bearbeiten"
                onclick="openSrvTagModal(this.closest('tr').querySelector('input[name^=srv_name_]').value)">
          <i class="bi bi-tags"></i></button>
        <button type="button" class="btn btn-sm btn-outline-danger px-1 py-0"
                onclick="removeServerRow(this)"><i class="bi bi-x"></i></button>
-     </td>`;
+     </div></td>`;
   return tr;
 }
 
@@ -939,11 +964,13 @@ function addServerRow() {
   const tbody = document.getElementById('server-tbody');
   tbody.appendChild(buildServerRow(tbody.rows.length, '', '', 1, '', 'ollama', 'ollama', '', 1.0));
   reindexServerRows();
+  document.getElementById('config-form').dispatchEvent(new Event('moe:form-change'));
 }
 
 function removeServerRow(btn) {
   btn.closest('tr').remove();
   reindexServerRows();
+  document.getElementById('config-form').dispatchEvent(new Event('moe:form-change'));
 }
 
 function reindexServerRows() {
@@ -1083,11 +1110,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 })();
 
-document.getElementById('config-form').addEventListener('submit', () => {
-  const btn = document.getElementById('save-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-});
+
 
 // ─── Server-Modell-Tag-Editor ─────────────────────────────────────────────────
 

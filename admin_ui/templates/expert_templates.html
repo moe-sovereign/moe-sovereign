@@ -2,6 +2,33 @@
 
 {% block title %}Expert Templates – MoE Admin{% endblock %}
 
+{% block head_extra %}
+<style>
+  .template-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .65rem 1rem;
+  }
+  .template-heading { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+  .template-toggle { display: flex; align-items: center; gap: .5rem; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; }
+  .template-toggle > i { flex-shrink: 0; }
+  .template-toggle:focus-visible { outline: 2px solid #6ea8fe; outline-offset: 4px; border-radius: 2px; }
+  .template-name { min-width: 0; overflow-wrap: anywhere; }
+  .template-actions { display: flex; align-items: flex-start; gap: .4rem; }
+  .template-metadata { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem; }
+  .template-metadata .badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .template-models { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem 1.5rem; }
+  .template-model { min-width: 0; }
+  .template-model dt { font-size: .72rem; font-weight: 500; color: #adb5bd; margin-bottom: .15rem; }
+  .template-model dd { margin: 0; font-family: var(--bs-font-monospace); font-size: .78rem; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere; }
+  @media (max-width: 767.98px) {
+    .template-header { grid-template-columns: minmax(0, 1fr); }
+    .template-actions { justify-self: end; }
+    .template-models { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+{% endblock %}
+
 {% block flash %}
 {% if flash %}
 <div class="alert alert-{{ flash_type }} flash-bar mb-0 text-center py-2">{{ flash }}</div>
@@ -9,9 +36,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0"><i class="bi bi-collection-fill me-2 text-primary"></i>{{ t(request, 'page.templates') }}</h5>
-  <div class="d-flex gap-2 align-items-center">
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0"><i class="bi bi-collection-fill me-2 text-primary"></i>{{ t(request, 'page.templates') }}</h1>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
+      <i class="bi bi-plus-circle me-1"></i>{{ t(request, 'btn.new_template') }}
+    </button>
+</div>
+<details class="moe-template-tools mb-3">
+  <summary>{{ t(request, "ui.manage_templates") }}</summary>
+  <div class="d-flex flex-wrap gap-2 align-items-center">
     <div class="form-check mb-0 d-flex align-items-center" title="Alle auswählen">
       <input class="form-check-input mt-0" type="checkbox" id="tmpl-select-all">
       <label class="form-check-label ms-2 small text-muted" for="tmpl-select-all">Alle</label>
@@ -37,9 +70,7 @@
     <button class="btn btn-outline-secondary btn-sm" title="Paste JSON code directly" data-bs-toggle="modal" data-bs-target="#importTemplateCodeModal">
       <i class="bi bi-code-slash me-1"></i>{{ t(request, 'btn.import_code') }}
     </button>
-    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createTemplateModal">
-      <i class="bi bi-plus-circle me-1"></i>{{ t(request, 'btn.new_template') }}
-    </button>
+
     <div class="btn-group ms-1">
       <button class="btn btn-outline-secondary btn-sm" onclick="toggleAllTemplates(true)" title="Alle aufklappen">
         <i class="bi bi-chevron-bar-expand"></i>
@@ -49,7 +80,7 @@
       </button>
     </div>
   </div>
-</div>
+</details>
 
 <div class="alert alert-info py-2 small mb-3">
   <i class="bi bi-info-circle me-1"></i>
@@ -60,21 +91,36 @@
 
 <!-- Template Cards -->
 {% if templates %}
-<div class="row g-3">
+{% with filter_id="template-search", filter_target="#templates-list > .col-12", filter_label=t(request, "ui.search_templates") %}{% include "list_toolbar.html" %}{% endwith %}
+<div class="row g-3" id="templates-list">
   {% for tmpl in templates %}
-  <div class="col-12">
+  <div class="col-12" data-privacy="{{ tmpl._privacy_level }}">
     <div class="card">
-      <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center"
-           style="cursor:pointer;user-select:none"
-           data-bs-toggle="collapse" data-bs-target="#tmpl-body-{{ tmpl.id }}"
-           aria-expanded="false" aria-controls="tmpl-body-{{ tmpl.id }}">
-        <span class="d-flex align-items-center gap-2">
+      <div class="card-header bg-dark text-white template-header">
+        <div class="template-heading">
           <input type="checkbox" class="form-check-input tmpl-cb mt-0 flex-shrink-0" value="{{ tmpl.id }}"
                  onchange="updateTmplExportCount()" onclick="event.stopPropagation()" title="Für Export auswählen">
+          <button type="button" class="template-toggle" data-bs-toggle="collapse" data-bs-target="#tmpl-body-{{ tmpl.id }}"
+                  aria-expanded="false" aria-controls="tmpl-body-{{ tmpl.id }}">
           <i class="bi bi-chevron-down tmpl-chevron me-1" style="transition:transform 0.2s;font-size:.8rem"></i>
-          <i class="bi bi-collection me-1"></i>{{ tmpl.name }}
-        </span>
-        <div class="d-flex gap-2 align-items-center">
+          <i class="bi bi-collection me-1"></i><span class="template-name">{{ tmpl.name }}</span>
+          </button>
+        </div>
+        <div class="template-actions">
+          <button class="btn btn-xs btn-outline-light" style="font-size:.75rem;padding:.2rem .5rem"
+                  onclick="event.stopPropagation();copyTemplate('{{ tmpl.id }}')" title="{{ t(request, 'btn.copy_template') }}" aria-label="{{ t(request, 'btn.copy_template') }}">
+            <i class="bi bi-copy"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-light" style="font-size:.75rem;padding:.2rem .5rem"
+                  onclick="event.stopPropagation();openEditModal('{{ tmpl.id }}')" title="{{ t(request, 'btn.edit') }}" aria-label="{{ t(request, 'btn.edit') }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-danger" style="font-size:.75rem;padding:.2rem .5rem"
+                  onclick="event.stopPropagation();deleteTemplate('{{ tmpl.id }}', '{{ tmpl.name }}')" title="{{ t(request, 'btn.delete') }}" aria-label="{{ t(request, 'btn.delete') }}">
+            <i class="bi bi-trash"></i>
+          </button>
+        </div>
+        <div class="template-metadata">
           {% if tmpl._privacy_level == 'local_only' %}
           <span class="badge bg-success" style="font-size:.72rem" title="All models run on local infrastructure — no data leaves your network"><i class="bi bi-shield-check me-1"></i>Local Only</span>
           {% elif tmpl._privacy_level == 'mixed' %}
@@ -93,28 +139,26 @@
           {% if tmpl.planner_prompt is defined and tmpl.planner_prompt %}
           <span class="badge bg-info text-dark" style="font-size:.65rem" title="{{ tmpl.planner_prompt[:80] }}"><i class="bi bi-diagram-3 me-1"></i>Planner</span>
           {% endif %}
-          {% if tmpl.planner_model is defined and tmpl.planner_model %}
-          <span class="badge bg-info" style="font-size:.65rem" title="Planner-LLM: {{ tmpl.planner_model }}"><i class="bi bi-cpu me-1"></i>{{ tmpl.planner_model }}</span>
-          {% endif %}
           {% if tmpl.judge_prompt is defined and tmpl.judge_prompt %}
           <span class="badge bg-secondary" style="font-size:.65rem" title="{{ tmpl.judge_prompt[:80] }}"><i class="bi bi-shield-check me-1"></i>Judge</span>
           {% endif %}
-          {% if tmpl.judge_model is defined and tmpl.judge_model %}
-          <span class="badge bg-dark" style="font-size:.65rem" title="Judge-LLM: {{ tmpl.judge_model }}"><i class="bi bi-cpu me-1"></i>{{ tmpl.judge_model }}</span>
-          {% endif %}
-          <button class="btn btn-xs btn-outline-light" style="font-size:.75rem;padding:.2rem .5rem"
-                  onclick="event.stopPropagation();copyTemplate('{{ tmpl.id }}')" title="Copy as template">
-            <i class="bi bi-copy"></i>
-          </button>
-          <button class="btn btn-xs btn-outline-light" style="font-size:.75rem;padding:.2rem .5rem"
-                  onclick="event.stopPropagation();openEditModal('{{ tmpl.id }}')">
-            <i class="bi bi-pencil"></i>
-          </button>
-          <button class="btn btn-xs btn-outline-danger" style="font-size:.75rem;padding:.2rem .5rem"
-                  onclick="event.stopPropagation();deleteTemplate('{{ tmpl.id }}', '{{ tmpl.name }}')">
-            <i class="bi bi-trash"></i>
-          </button>
         </div>
+        {% if tmpl.planner_model or tmpl.judge_model %}
+        <dl class="template-models mb-0">
+          {% if tmpl.planner_model %}
+          <div class="template-model">
+            <dt>{{ t(request, 'portal.tmpl_planner_model') }}</dt>
+            <dd>{{ tmpl.planner_model }}</dd>
+          </div>
+          {% endif %}
+          {% if tmpl.judge_model %}
+          <div class="template-model">
+            <dt>{{ t(request, 'portal.tmpl_judge_model') }}</dt>
+            <dd>{{ tmpl.judge_model }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+        {% endif %}
       </div>
       <div class="collapse tmpl-collapse" id="tmpl-body-{{ tmpl.id }}">
       <div class="card-body py-2">
