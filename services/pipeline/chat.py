@@ -2470,6 +2470,10 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                 )
             except asyncio.CancelledError:
                 await _audit_cancel(_native_audit)
+                # Client gave up (e.g. Hermes timeout while the node is still loading
+                # the model): the shielded upstream call keeps running, but the request
+                # must not stay "active" in live monitoring for the 2 h key TTL.
+                asyncio.create_task(_deregister_active_request(chat_id))
                 raise
             except Exception as _native_exc:
                 await _audit_complete(
@@ -2479,6 +2483,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                     None,
                     "error",
                 )
+                asyncio.create_task(_deregister_active_request(chat_id))
                 raise
             # Convert native Ollama response to OpenAI format
             _rmsg = _rdata.get("message", {})
@@ -2580,6 +2585,10 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                 )
             except asyncio.CancelledError:
                 await _audit_cancel(_native_audit)
+                # Client gave up (e.g. Hermes timeout while the node is still loading
+                # the model): the shielded upstream call keeps running, but the request
+                # must not stay "active" in live monitoring for the 2 h key TTL.
+                asyncio.create_task(_deregister_active_request(chat_id))
                 raise
             except Exception as _native_exc:
                 await _audit_complete(
@@ -2589,6 +2598,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                     None,
                     "error",
                 )
+                asyncio.create_task(_deregister_active_request(chat_id))
                 raise
         _nu = _nj.get("usage", {})
         _native_latency_ms = round(
