@@ -3,6 +3,8 @@ global:
   evaluation_interval: 15s
   external_labels:
     system: moe-sovereign
+rule_files:
+- /etc/prometheus/alert_rules.yml
 scrape_configs:
 - job_name: moe-orchestrator
   static_configs:
