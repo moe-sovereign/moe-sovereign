@@ -70,7 +70,7 @@ async def run_backup(body: dict = None):
         # to need its own retention/privacy decision rather than riding along here.
         try:
             import chromadb
-            client = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "chromadb-vector"), port=8000)
+            client = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "chromadb-vector"), port=int(os.getenv("CHROMA_PORT", "8000")))
             for _coll_name in ("moe_template_cache", "moe_fact_cache", "moe_agent_cache"):
                 try:
                     collection = client.get_collection(_coll_name)

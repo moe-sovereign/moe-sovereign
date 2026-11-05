@@ -442,7 +442,7 @@ if _EDGE_MODE:
     # with the interactive cache_collection. See services/agent_enrichment.py.
     agent_cache_collection = chroma_client.get_or_create_collection("moe_agent_cache")
 else:
-    chroma_client    = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "chromadb-vector"), port=8000)
+    chroma_client    = chromadb.HttpClient(host=os.getenv("CHROMA_HOST", "chromadb-vector"), port=int(os.getenv("CHROMA_PORT", "8000")))
     default_ef       = embedding_functions.DefaultEmbeddingFunction()
     cache_collection = chroma_client.get_or_create_collection(name="moe_fact_cache", embedding_function=default_ef)
     # Second collection for semantic pre-routing: prototypical task queries per category
