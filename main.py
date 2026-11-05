@@ -1356,6 +1356,7 @@ from routes.gates            import router as _gates_router
 from routes.handover         import router as _handover_router
 from routes.kpi              import router as _kpi_router
 from routes.debate_analysis  import router as _debate_analysis_router
+from routes.research         import router as _research_router
 app.include_router(_health_router)
 app.include_router(_watchdog_router)
 app.include_router(_mc_router)
@@ -1377,6 +1378,7 @@ app.include_router(_handover_router)
 app.include_router(_embeddings_router)
 app.include_router(_kpi_router)
 app.include_router(_debate_analysis_router)
+app.include_router(_research_router)  # every route 404s unless RESEARCH_ROUTES_ENABLED
 
 # ── HTTP middleware (extracted to services/middleware.py) ─────────────────────
 # Added in the original order; Starlette executes add_middleware in reverse.

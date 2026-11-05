@@ -432,6 +432,10 @@ CC_CONTEXT_INDEX_ENABLED = os.getenv("CC_CONTEXT_INDEX_ENABLED", "false").lower(
 # entirely. All flags default OFF; enabled per CC profile / expert template.
 # See moe-infra/UMSETZUNGSPLAN_AGENT_ENRICHMENT_2026-07-09.md for the design.
 AGENT_CACHE_ENABLED       = os.getenv("AGENT_CACHE_ENABLED", "false").lower() in ("1", "true", "yes")
+# Research-only: caller-chosen LangGraph thread ids plus checkpoint history/fork routes
+# (routes/research.py) for counterfactual rollouts. Never enable on a multi-tenant
+# deployment: thread ids become addressable by any admin/system caller.
+RESEARCH_ROUTES_ENABLED   = os.getenv("RESEARCH_ROUTES_ENABLED", "false").lower() in ("1", "true", "yes")
 AGENT_CACHE_MIN_CONF      = float(os.getenv("AGENT_CACHE_MIN_CONF", str(KNOWLEDGE_BYPASS_MIN_CONF)))
 AGENT_CACHE_TTL_DAYS      = int(os.getenv("AGENT_CACHE_TTL_DAYS", str(KNOWLEDGE_BYPASS_TTL_DAYS)))
 AGENT_CACHE_L0_TTL        = int(os.getenv("AGENT_CACHE_L0_TTL", "1800"))

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 import state
 from services.pipeline.disconnect import ClientDisconnected, run_until_disconnect
+from services.research_threads import research_thread_id
 import starfleet_config as _starfleet
 import mission_context as _mission_context
 from parsing import _oai_content_to_str, _extract_oai_images
@@ -26,6 +27,7 @@ from config import (
     CLAUDE_CODE_MODE, CLAUDE_CODE_REASONING_MODEL, CLAUDE_CODE_REASONING_ENDPOINT,
     _CLAUDE_CODE_TOOL_URL, _CLAUDE_CODE_TOOL_TOKEN, _CLAUDE_CODE_REASONING_URL,
     JUDGE_TIMEOUT, EXPERT_TIMEOUT, PLANNER_TIMEOUT, ORCHESTRATION_TIMEOUT,
+    RESEARCH_ROUTES_ENABLED,
     JUDGE_MODEL, JUDGE_URL, JUDGE_TOKEN,
     PLANNER_MODEL, PLANNER_URL, PLANNER_TOKEN,
     URL_MAP, TOKEN_MAP, API_TYPE_MAP, TIMEOUT_MAP, INFERENCE_SERVERS_LIST,
@@ -2947,6 +2949,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
         0.001,
         ORCHESTRATION_TIMEOUT - (time.monotonic() - _request_started),
     )
+    _thread_id = research_thread_id(raw_request.headers.get("x-moe-research-thread")) or str(uuid.uuid4())
     try:
         result = await run_until_disconnect(raw_request, state.app_graph.ainvoke(
         {"input": user_input, "response_id": chat_id, "mode": mode,
@@ -3061,7 +3064,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
          "response_commit_sinks": {},
          "response_commit_errors": [],
          },
-        {"configurable": {"thread_id": str(uuid.uuid4())}},
+        {"configurable": {"thread_id": _thread_id}},
         ), timeout=_remaining_timeout)
     except ClientDisconnected:
         _elapsed_ms = round((time.monotonic() - _t_start) * 1000)
@@ -3295,6 +3298,8 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             "total_tokens":      p_tok + c_tok,
         },
     }
+    if RESEARCH_ROUTES_ENABLED:
+        resp["moe_thread_id"] = _thread_id  # handle for routes/research.py history/fork
     # Add provenance metadata if available (non-standard, backward-compatible)
     _prov = result.get("provenance_sources")
     if _prov:
