@@ -227,7 +227,9 @@ def inline_data(setup: dict, v: dict) -> str:
     if "sql" in setup:
         rows = _ROW.findall(setup["sql"])
         header = f"id,{v['group']},{v['value']},{v['day']}"
-        parts.append(f"{v['table']}.csv\n```csv\n{header}\n" + "\n".join(",".join(r) for r in rows) + "\n```")
+        # no "<name>.csv" label: services/skills.py _detect_file_skill treats file names in the text as attachments
+        # and prepends the /xlsx skill (LUMI smoke 23515108)
+        parts.append(f"Table {v['table']} (CSV)\n```csv\n{header}\n" + "\n".join(",".join(r) for r in rows) + "\n```")
     if "cypher" in setup:
         edges = _EDGE.findall(setup["cypher"])
         parts.append(f"{v['link']} edges ({v['weight']})\n```text\n" + "\n".join(f"{a} -- {b}: {w}" for a, _l, _k, w, b in edges) + "\n```")

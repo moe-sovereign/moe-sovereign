@@ -65,15 +65,28 @@ class Client:
         self.user_h = {"Authorization": f"Bearer {user_key}"}
         self.admin_h = {"Authorization": f"Bearer {admin_key}"}
 
+    async def approve(self, gate_id: str) -> str:
+        """Release a HITL gate's draft. Nobody approves on LUMI; like run_scientific_benchmark.py the
+        draft is auto-approved and the outcome is labelled 'hitl' so it can be filtered later."""
+        r = await self.http.post(f"{self.api}/gates/{gate_id}/approve", headers=self.user_h)
+        r.raise_for_status()
+        return r.json().get("response_draft", "")
+
     async def episode(self, template: str, prompt: str, thread: str, temperature: float):
+        """Returns (answer, outcome, usage). outcome: 'answer' | 'hitl' (auto-approved draft) |
+        'blocked:<reason>' (quality gate withheld the response; scored as wrong)."""
         body = {"model": template, "messages": [{"role": "user", "content": prompt}], "stream": False,
                 "temperature": temperature, "no_cache": True}
         r = await self.http.post(f"{self.api}/v1/chat/completions", json=body, headers=self.user_h | {"X-MoE-Research-Thread": thread})
+        if r.status_code == 422 and (r.json().get("error") or {}).get("type") == "quality_blocked":
+            return "", f"blocked:{r.json()['error'].get('code', '')}", {}
         r.raise_for_status()
         data = r.json()
+        if r.status_code == 202 and data.get("gate_id"):
+            return await self.approve(data["gate_id"]), "hitl", {}
         if data.get("moe_thread_id") != thread:
             raise RuntimeError("research thread id not honoured: is RESEARCH_ROUTES_ENABLED set on the stack?")
-        return data["choices"][0]["message"]["content"], data.get("usage", {})
+        return data["choices"][0]["message"]["content"], "answer", data.get("usage", {})
 
     async def history(self, thread: str):
         r = await self.http.get(f"{self.api}/v1/admin/research/threads/{thread}/history", params={"keys": STATE_KEYS}, headers=self.admin_h)
@@ -84,7 +97,12 @@ class Client:
         r = await self.http.post(f"{self.api}/v1/admin/research/threads/{thread}/fork",
                                  json={"checkpoint_id": checkpoint_id, "overrides": {"query_temperature": temperature}}, headers=self.admin_h)
         r.raise_for_status()
-        return r.json()
+        f = r.json()
+        if f.get("hitl_gate_id"):
+            return await self.approve(f["hitl_gate_id"]), "hitl", f
+        if f.get("quality_blocked"):
+            return "", f"blocked:{f.get('quality_block_reason') or ''}", f
+        return f["final_response"], "answer", f
 
 
 async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
@@ -97,16 +115,17 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                "started": time.time(), "base": None, "decision_points": [], "errors": []}
         try:
             t0 = time.monotonic()
-            answer, usage = await cli.episode(a.template, prompt, thread, a.temperature)
-            rec["base"] = {"answer": answer, "correct": correct(answer, ref, tol, lang), "usage": usage, "seconds": time.monotonic() - t0}
+            answer, outcome, usage = await cli.episode(a.template, prompt, thread, a.temperature)
+            rec["base"] = {"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang), "usage": usage,
+                           "seconds": time.monotonic() - t0}
             hist = await cli.history(thread)
             base_cps = [c for c in hist if set(c["next"]) & DECISION_NODES]
             for cp in reversed(base_cps):  # chronological order
                 point = {"checkpoint_id": cp["checkpoint_id"], "step": cp["step"], "next": cp["next"], "state": cp["values"], "forks": []}
                 for _ in range(a.forks):
                     try:
-                        f = await cli.fork(thread, cp["checkpoint_id"], a.temperature)
-                        point["forks"].append({"answer": f["final_response"], "correct": correct(f["final_response"], ref, tol, lang),
+                        answer, outcome, f = await cli.fork(thread, cp["checkpoint_id"], a.temperature)
+                        point["forks"].append({"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang),
                                                "final_checkpoint_id": f["final_checkpoint_id"]})
                     except (httpx.HTTPError, KeyError) as exc:
                         rec["errors"].append(f"fork {cp['checkpoint_id']}: {str(exc)[:200]}")
@@ -133,7 +152,12 @@ async def main(a):
         recs = await asyncio.gather(*(run_task(cli, t, a, sem, out) for t in tasks))
     base = [r["base"]["correct"] for r in recs if r["base"]]
     forks = sum(len(p["forks"]) for r in recs for p in r["decision_points"])
-    print(json.dumps({"tasks": len(recs), "base_ok": sum(base), "base_n": len(base), "forks": forks,
+    outcomes = {}
+    for r in recs:
+        for o in ([r["base"]["outcome"]] if r["base"] else []) + [f["outcome"] for p in r["decision_points"] for f in p["forks"]]:
+            k = o.split(":")[0]
+            outcomes[k] = outcomes.get(k, 0) + 1
+    print(json.dumps({"tasks": len(recs), "base_ok": sum(base), "base_n": len(base), "forks": forks, "outcomes": outcomes,
                       "errors": sum(len(r["errors"]) for r in recs), "seconds": round(time.monotonic() - t0)}))
 
 

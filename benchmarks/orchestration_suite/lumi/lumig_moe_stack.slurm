@@ -156,12 +156,15 @@ bg shim SX "$OS" python3 "$R/app/benchmarks/orchestration_suite/lumi/ollama_shim
 wait_http http://127.0.0.1:18100/api/tags shim 60
 
 # ---- MCP precision + orchestrator --------------------------------------------------------------
-bg mcp SX --env-file "$RUN/stack.env" --pwd /app "$R/sif/moe-mcp-precision_lumi.sif" python server.py
+mkdir -p "$RUN/mcp_generated"   # /app is read-only in the SIF (smoke 23515108: MCP died on mkdir /app/generated)
+bg mcp SX --env-file "$RUN/stack.env" --env "MOE_GENERATED_DIR=$RUN/mcp_generated" --pwd /app "$R/sif/moe-mcp-precision_lumi.sif" python server.py
+MCP_PID=$LASTPID
 mkdir -p "$RUN/applogs"
 APPB=(--bind "$R/app:/app" --bind "$R/data:/app/data" --bind "$RUN/applogs:/app/logs" --bind "$RUN/stack.env:/app/.env" --env-file "$RUN/stack.env" --pwd /app)
 wait_http http://127.0.0.1:18001/api/v2/heartbeat chroma 120
 wait_http http://127.0.0.1:7474/ neo4j 120
 wait_http http://127.0.0.1:21434/api/tags embed 120
+wait_http http://127.0.0.1:8003/health mcp 120 "$MCP_PID"   # orchestrator clears the tool catalog if MCP is down at startup
 SX "${APPB[@]}" "$OS" python3 benchmarks/orchestration_suite/lumi/bootstrap_research_user.py --key-file "$RUN/research.key" \
     --templates tmpl-11f532fc,tmpl-smollm3-delib,tmpl-smollm3-nograph,tmpl-smollm3-review,tmpl-smollm3-review-nosc \
     --nodes N04-RGTX,N04-RTX,N02-M60-02,N02-M60-03,N02-M60-04,N02-M60-05,N02-M60-06,N02-M60-07,N02-M60-08,N02-M60-09

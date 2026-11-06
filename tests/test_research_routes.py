@@ -79,7 +79,18 @@ def test_fork_resumes_from_checkpoint_without_new_input():
     g = FakeGraph()
     out = asyncio.run(R.fork(g, TID, "c1", {}, 5.0, True))
     assert g.invocations == [(None, {"configurable": {"thread_id": TID, "checkpoint_id": "c1"}})]
-    assert out == {"thread_id": TID, "forked_from": "c1", "final_checkpoint_id": "c3", "final_response": "forked answer"}
+    assert out == {"thread_id": TID, "forked_from": "c1", "final_checkpoint_id": "c3", "final_response": "forked answer",
+                   **{k: None for k in R.OUTCOME_KEYS}}
+
+
+def test_fork_reports_quality_gate_outcome():
+    class Gated(FakeGraph):
+        async def ainvoke(self, inp, config):
+            return {"final_response": "", "hitl_gate_id": "g1", "hitl_gate_reason": "r", "quality_gate_status": "pending",
+                    "quality_blocked": False, "unrelated": 1}
+
+    out = asyncio.run(R.fork(Gated(), TID, "c1", {}, 5.0, True))
+    assert out["hitl_gate_id"] == "g1" and out["quality_gate_status"] == "pending" and "unrelated" not in out
 
 
 def test_fork_applies_only_allowlisted_overrides():

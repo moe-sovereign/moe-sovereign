@@ -64,3 +64,11 @@ def test_answer_scoring_uses_last_number_of_closing_passage():
     assert not drv.correct("Endergebnis: 370,75 EUR", 370.76, 0.004, "de")
     assert not drv.correct("Ich kann das nicht berechnen.", 370.76, 0.005, "en")
     assert drv.correct("Total cost: 1,234.50 EUR", 1234.5, 0.005, "en")
+
+
+def test_inline_prompts_do_not_trigger_file_skills():
+    # The orchestrator auto-attaches a file skill (/xlsx) when the text names a file like "shipments.csv".
+    from services.skills import _detect_file_skill
+    for t in gen.generate(300, 7):
+        for lang, prompt in t["prompts_inline"].items():
+            assert _detect_file_skill(None, prompt, None) is None, (t["id"], lang)
