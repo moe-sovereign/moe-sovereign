@@ -55,7 +55,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--prod-env", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--shim-url", default="http://127.0.0.1:18100")
+    ap.add_argument("--shim-url", default="http://127.0.0.1:18100/v1")  # prod URLs end in /v1; native paths strip it
     ap.add_argument("--planner", default="hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M")
     ap.add_argument("--judge", default="hf.co/h3rb3rn/sovereign-judge-olmo31-32b:Q4_K_M")
     ap.add_argument("--nodes", default="N04-RGTX,N04-RTX," + ",".join(f"N02-M60-0{i}" for i in range(2, 10)))
