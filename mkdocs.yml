@@ -138,6 +138,7 @@ nav:
     - Infrastructure: system/infrastructure.md
     - Hardware: system/hardware.md
     - LUMI-G Training Paper: system/lumi_training_paper.md
+    - LUMI-G Activity Log: system/lumi_activity_log.md
     - Tool Stack:
       - system/toolstack/index.md
       - LangGraph: system/toolstack/langgraph.md
@@ -187,6 +188,7 @@ nav:
     - GPU-Monitoring: deployment/de/gpu-monitoring.md
     - Import & Export: reference/de/import-export.md
     - LUMI-G Trainingsbericht: system/de/lumi_training_paper.md
+    - LUMI-G-Aktivitätslogbuch: system/de/lumi_activity_log.md
   - Publications: publications.md
   - Changelog: changelog.md
   - Legal:

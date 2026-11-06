@@ -1,7 +1,11 @@
 # LUMI-G Trainingsbericht
 
 **LLM-Fine-Tuning auf AMD MI250X: Ein Praxisbericht**
-*EuroHPC-Grant EHPC-DEV-2026D06-XXX · Juli–August 2026*
+*EuroHPC-Grant EHPC-DEV-2026D06-XXX · Juli–August 2026 · Aktualisierung 06.11.2026*
+
+Das PDF deckt die Kampagne bis August 2026 ab. Spätere Phasen, Sackgassen und Korrekturen fasst der Abschnitt
+[Spätere Phasen](#spatere-phasen-august-november-2026) unten zusammen; jeder Job des Grants steht im
+[LUMI-G-Aktivitätslogbuch](lumi_activity_log.md).
 
 [PDF herunterladen (23 Seiten)](../../assets/papers/moe-sovereign-lumi-paper.pdf){ .md-button .md-button--primary }
 
@@ -37,6 +41,10 @@ oder vergleichbarer AMD-ROCm-Infrastruktur planen.
 | 5 | **Durchsatz bei Schritt 25 messen und ETA berechnen.** Das Schritt-Zeit-Signal ist innerhalb der ersten 25 Schritte stabil. | Job abbrechen und neu konfigurieren, wenn ETA > SLURM-Zeitlimit. |
 | 6 | **`max_seq_len` reduzieren hilft nur zusammen mit `--packing`.** Mit `--no-packing` werden Micro-Batches auf die längste Probe aufgefüllt, nicht auf `max_seq_len`. Der gemessene Speedup von 8192 → 4096 war nur **1,2×** (erwartet: 4×). | Packing-Verhalten analysieren, bevor Speedup-Vorhersagen getroffen werden. |
 | 7 | **`expandable_segments` kann still inaktiv sein.** Der LUMI-G-PyTorch/ROCm-Build (Juli 2026) gibt eine Warnung pro Rank aus und lässt den Fragmentierungsschutz deaktiviert. | Job-Logs auf `expandable_segments not supported` prüfen. |
+| 8 | **Sehr hohe Token-Accuracy auf SFT-Daten zeigt Auswendiglernen, keinen Erfolg.** Alle Experten-Adapter vom August 2026 endeten über 98 % Token-Accuracy auf Template-Daten und wurden verworfen. | Vor dem Training echte Beispiele lesen und Diversität prüfen; Modelle nur an zurückgehaltenen, per Ausführung geprüften Aufgaben bewerten. |
+| 9 | **GRPO mit Ausführungsprüfung brachte die ersten klaren Held-out-Gewinne.** SmolLM3-3B precision 5/7 → 26/27 von 36 (P200, Oktober 2026). | Für Fähigkeiten mit prüfbarer Antwort Verifier-Belohnungen statt weiterer SFT-Runden. |
+| 10 | **Der TRL-Standardmodus für vLLM-Importance-Sampling kann das Lernen still stoppen.** `sequence_mask` trieb das Verhältnis über ~380 Tokens auf ≈ 0,005. | `vllm_importance_sampling_mode=token_truncate` setzen und `sampling/importance_sampling_ratio` loggen. |
+| 11 | **Mit transformers 5 gespeicherte Checkpoints lädt vLLM 0.20.1 nicht** (verschachtelte `rope_parameters` je Layer-Typ, OLMo-3). | Bibliotheksversionen mit jedem Checkpoint festhalten; Serving testen, bevor man sich auf einen Merge verlässt. |
 
 ---
 
@@ -49,9 +57,11 @@ auf einem parakonsistenten Datensatz von 90.000 Samples trainiert, die
 asynchron auf LUMI-G generiert wurden.
 Die Ground-Truth-Qualität wurde durch eine
 GPT-4-Fürsprecher / Mixtral-8x22B-Kritiker / Qwen2.5-32B-Lehrer-Synthese-Pipeline
-sichergestellt.
-Das Judge-Modell schloss das Training im Juli 2026 ab und ist
-**seit dem 19. Juli 2026 produktiv im Einsatz**.
+sichergestellt (so im PDF beschrieben; beim Abgleich 11/2026 nicht erneut geprüft).
+Das Judge-Modell schloss das Training im Juli 2026 ab und war
+**ab dem 19. Juli 2026 produktiv im Einsatz**. Inzwischen ist es abgelöst: durch einen Qwen3.8-27B-Judge
+(August 2026, im September 2026 neu trainiert, nachdem die August-Daten verworfen wurden) und in der
+Open-Source-Spur durch einen OLMo-3.1-32B-Judge (September 2026).
 
 ### Phase 2 — Planner v4
 
@@ -68,6 +78,12 @@ Drei Resume-Bugs wurden identifiziert und behoben:
 | Kein Checkpoint erstellt | `save_steps=500` > Job-Schrittbudget | Reduziert auf `save_steps=100` (~3,5 h bei 125 s/Schritt) |
 | Sofortiger OOM | Gradient Checkpointing durch Speed-Experiment deaktiviert | Einstellung im SLURM-Skript gesperrt |
 
+Die v4-Kette erreichte `checkpoint-6060` und wurde nach GGUF exportiert (Job 20933544, 10.08.2026).
+Der vorherige Lauf (Jobs 20188267/20190726) war **wirkungslos**: `max_seq_len=1536` bei einem
+tokenisierten p99 von 3.628 schnitt jedes Beispiel ab. Ein früherer Phi-4-Planner-Versuch (Jobs
+20053764–20081793) wurde nach API-Inkompatibilitäten und einer ETA über 100 h aufgegeben.
+Seit 19.09.2026 ist der OLMo-3-7B-Planner der Open-Source-Spur der Standard-Planner.
+
 ### Phase 3 — Teacher-Student-Distillation
 
 Eine Distillationskampagne zielt auf ein kleineres 4B-Studentenmodell ab,
@@ -76,13 +92,31 @@ um On-Device-Inferenz auf `N04-RTX` (24 GiB VRAM) zu ermöglichen:
 | Schritt | Konfiguration |
 |---------|--------------|
 | Teacher | Qwen3.5-35B-A3B (ZeRO-3, no-4bit, `max_seq_len=4096`) |
-| Student-SFT | Qwen3.5-4B, ZeRO-2, lr=2×10⁻⁴, LoRA r=16/α=32, no-packing |
+| Student-SFT | Qwen3.5-4B, ZeRO-2, lr=2×10⁻⁴, LoRA r=16/α=32, no-packing — erledigt: `moe_qwen35_4b_distilled` (13.08.2026) |
 | DPO-Alignment | geplant: lr=1×10⁻⁵, Basis = SFT-Checkpoint; **noch kein brauchbarer Präferenzdatensatz** |
 
 Verbleibende Schritte: verifizierte Präferenzpaare, DPO, LoRA-Merge, GGUF-Quantisierung, On-Device-Validierung.
 Das frühere `moe_rule_based_rl_dpo.jsonl` (aus `scripts/compile_rule_based_rl_dataset.py`) besteht aus
 schablonenhaften Platzhalter-Paaren ohne ausgeführten Verifier und darf nicht für Training verwendet
 werden; daraus ist kein DPO-Checkpoint entstanden.
+
+---
+
+## Spätere Phasen (August – November 2026)
+
+Zusammenfassung dessen, was nach dem PDF geschah; Details, Job-IDs und Quellen stehen im
+[LUMI-G-Aktivitätslogbuch](lumi_activity_log.md).
+
+| Zeitraum | Aktivität | Ergebnis | Status |
+|---|---|---|---|
+| 15.–17.08.2026 | Expertenkampagne (`moe_expert_pipe`, Planner + 8 Experten + 27B-Judge) | Trainiert, aber **am 10.09. verworfen**: Daten aus einem Template-Generator ohne LLM (z. B. coder: 3 Vorlagen, 150.000 Zeilen), Token-Accuracy > 98 % = Auswendiglernen | Sackgasse, dokumentiert |
+| 01.–11.09.2026 | Lehrer-Smoketests (5 Open-Weight-Lehrer + OLMo-3.1-32B), kuratierte Rollendatensätze, Trainings-Smoketests | Alle Lehrer nach Fixes verifiziert; OLMo-3 braucht `--enforce-eager`; OLMo-3.1-32B braucht ZeRO-3 | validiert |
+| 11.–12.09.2026 | Neutraining zweier Spuren: Open Weight (Qwen3.5-4B-Experten, 9B-Planner, Qwen3.8-27B-Judge) und Open Source (SmolLM3-3B-Experten, OLMo-3-7B-Planner, OLMo-3.1-32B-Judge) | Gesunde Trainingsverläufe; 20 Modelle veröffentlicht | verifiziert |
+| 19.–22.09.2026 | Lokaler Benchmark der Fine-Tunes | Open-Weight-Spur: fine-getuntes Compound 6,91 gegen Pre-Finetune 7,20 gegen native Baseline 8,16 (n = 8 Aufgaben, 1 Runde): **kein gemessener Gewinn durch SFT**. Open-Source-Lauf unvollständig | validiert (Open Weight), offen (Open Source) |
+| 25.–31.10.2026 | P200: GRPO + LoRA mit Ausführungsbelohnungen (PostgreSQL/Neo4j im Job) | Erste klare Held-out-Gewinne (precision, graphrag); DPO allein, volles Fine-Tuning, Gewichtsmischung, OSRM: kein Gewinn | validiert, siehe [P200-Momentaufnahme](../../experiments/2026-11-05-lumi-p200-snapshot.md) |
+| ab 05.11.2026 | Endspurt: vLLM-beschleunigtes GRPO (3,85× schnellere Rollouts) und Rollout-Umgebung mit vollem Stack für ein Wertmodell der Orchestrierung | IS-Modus-Falle behoben; Stackstart durch die RoPE-Konfiguration von transformers 5 blockiert | läuft; Phasen 1–3 bis 05.12.2026 geplant |
+
+Zähler am 06.11.2026: 2.944 von 18.000 GPU-Stunden verbraucht; der Grant verfällt am 05.12.2026.
 
 ---
 
