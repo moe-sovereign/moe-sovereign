@@ -110,11 +110,26 @@ VS="$SCRATCH/lumi-multitorch-latest.sif"
 VENV="PYTHONPATH=$SCRATCH/.user_site,HF_HOME=$SCRATCH/cache/huggingface,XDG_CACHE_HOME=$SCRATCH/cache,TRITON_CACHE_DIR=$SCRATCH/cache/triton,TMPDIR=$SCRATCH/tmp,HF_HUB_OFFLINE=1"
 SHIM_CFG="$RUN/shim.json"; echo '{"models": {' > "$SHIM_CFG"; FIRST=1; declare -A VPID
 serve() {  # name gcds port path max_len mem_util tp family size
-    local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9
+    local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9 ov=()
+    # transformers 5 nests rope_parameters per layer type (OLMo-3); vLLM's olmo2.py expects the flat full-attention
+    # dict and derives the sliding layers itself (default rope, same theta) -> pass that dict as override
+    local flat; flat=$(python3 - "$path/config.json" <<'PY'
+import json, sys
+rp = json.load(open(sys.argv[1])).get("rope_parameters") or {}
+fa = rp.get("full_attention")
+if fa:
+    sa = rp.get("sliding_attention", {})
+    assert float(sa.get("rope_theta", fa["rope_theta"])) == float(fa["rope_theta"]), "sliding/full rope_theta differ"
+    print(json.dumps({"rope_parameters": fa}))
+PY
+)
+    [ -n "$flat" ] && ov=(--hf-overrides "$flat")
+    # OLMo-3 on ROCm: CUDA-graph capture fails with hipErrorCapturedEvent (teacher smoke 21848558, Sept. 2026)
+    [ "$fam" = olmo3 ] && ov+=(--enforce-eager)
     # ROCR only: HIP indices are renumbered after ROCR filtering, so HIP_VISIBLE_DEVICES=2 on top would hide the GCD
     bg "vllm_$port" env -u HIP_VISIBLE_DEVICES -u CUDA_VISIBLE_DEVICES ROCR_VISIBLE_DEVICES="$gcds" singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
         python3 -m vllm.entrypoints.openai.api_server --model "$path" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
-        --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16
+        --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16 "${ov[@]}"
     VPID[$port]=$LASTPID
     [ $FIRST = 1 ] && FIRST=0 || echo ',' >> "$SHIM_CFG"
     printf '"%s": {"url": "http://127.0.0.1:%s", "context_length": %s, "family": "%s", "parameter_size": "%s"}' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_CFG"
