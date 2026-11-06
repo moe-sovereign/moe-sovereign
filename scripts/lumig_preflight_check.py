@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -141,19 +142,48 @@ def check_gpu_environment():
         logger.error("  ✗ PyTorch GPU check failed: %s", e)
         return False
 
+# CSC rule since 2026-11-05: dev-g/debug are for interactive, human-supervised debugging only
+# (1 running job per user and per project); agent-submitted jobs and chains belong on small-g/standard-g.
+INTERACTIVE_ONLY_PARTITIONS = {"dev-g", "debug"}
+_PARTITION_RE = re.compile(r"^#SBATCH\s+(?:--partition[=\s]+|-p\s*)(\S+)", re.MULTILINE)
+
+
+def slurm_partitions(text: str) -> list:
+    """Partitions requested by #SBATCH lines (comma lists are split)."""
+    return [p for m in _PARTITION_RE.findall(text) for p in m.split(",")]
+
+
+def check_partition(slurm_script: str = None) -> bool:
+    logger.info("Checking Slurm partition policy (dev-g/debug are interactive-only)...")
+    requested = []
+    if slurm_script:
+        with open(slurm_script, encoding="utf-8") as f:
+            requested += slurm_partitions(f.read())
+    env_partition = os.environ.get("SBATCH_PARTITION")
+    if env_partition:
+        requested += env_partition.split(",")
+    bad = sorted(set(requested) & INTERACTIVE_ONLY_PARTITIONS)
+    if bad:
+        logger.error("  ✗ Batch submission to interactive-only partition(s) %s; use small-g or standard-g", bad)
+        return False
+    logger.info("  ✓ Partition(s): %s", ", ".join(requested) or "not specified")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="LUMI-G Pre-Flight Validation")
     parser.add_argument("--model-id", required=True)
     parser.add_argument("--dataset", required=True)
     parser.add_argument("--deepspeed", default=None)
     parser.add_argument("--max-seq-len", type=int, default=4096)
+    parser.add_argument("--slurm-script", default=None, help="job script to check against the partition policy")
     args = parser.parse_args()
 
     logger.info("==================================================================")
     logger.info("LUMI-G PRE-FLIGHT VALIDATION CHECK")
     logger.info("==================================================================")
 
-    ok = True
+    ok = check_partition(args.slurm_script)
     ok = check_imports() and ok
     ok = check_tokenizer_and_template(args.model_id) and ok
     ok = check_dataset(args.dataset, args.max_seq_len) and ok

@@ -65,7 +65,7 @@ bg postgres SX "$PG" postgres -D "$SHM/pg" -p 15432 -k "$SHM/pgsock" -c listen_a
 for _ in $(seq 60); do SX "$PG" pg_isready -h 127.0.0.1 -p 15432 >/dev/null 2>&1 && break; sleep 1; done
 PSQL() { SX "$PG" psql -h 127.0.0.1 -p 15432 -U postgres -v ON_ERROR_STOP=1 -q "$@"; }
 PSQL -c "CREATE ROLE langgraph LOGIN PASSWORD '$PG_PASS'; CREATE ROLE moe_admin LOGIN PASSWORD '$PG_PASS';"
-PSQL -c "CREATE DATABASE langgraph OWNER langgraph; CREATE DATABASE moe_userdb OWNER moe_admin;"
+PSQL -c "CREATE DATABASE langgraph OWNER langgraph" -c "CREATE DATABASE moe_userdb OWNER moe_admin"  # separate -c: no implicit transaction
 PSQL -d moe_userdb -c "SET ROLE moe_admin" -f "$R/config/moe_userdb_schema.sql" >/dev/null
 PSQL -d moe_userdb -c "SET ROLE moe_admin" -f "$R/config/moe_userdb_config_data.sql" >/dev/null
 log "postgres loaded: $(PSQL -d moe_userdb -At -c 'SELECT count(*) FROM admin_expert_templates') templates"
