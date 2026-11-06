@@ -25,6 +25,7 @@ import itertools
 import json
 import os
 import random
+import re
 import sys
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal
@@ -215,6 +216,24 @@ def fam_direct(v, rnd):
     return user, {}, [{"id": "s1", "kind": "calc", "depends_on": [], "gold": f"{a}*{p}/100", "ref": final}], final
 
 
+_ROW = re.compile(r"\((\d+),'([^']*)',(\d+),'([\d-]+)'\)")
+_EDGE = re.compile(r"\(`([^`]+)`\)-\[:(\w+) \{(\w+):(\d+)\}\]->\(`([^`]+)`\)")
+INLINE_HEAD = {"en": "Data for this request:", "de": "Daten zu dieser Anfrage:"}
+
+
+def inline_data(setup: dict, v: dict) -> str:
+    """Render the sandbox contents into the prompt for stacks without SQL/Cypher execution tools."""
+    parts = []
+    if "sql" in setup:
+        rows = _ROW.findall(setup["sql"])
+        header = f"id,{v['group']},{v['value']},{v['day']}"
+        parts.append(f"{v['table']}.csv\n```csv\n{header}\n" + "\n".join(",".join(r) for r in rows) + "\n```")
+    if "cypher" in setup:
+        edges = _EDGE.findall(setup["cypher"])
+        parts.append(f"{v['link']} edges ({v['weight']})\n```text\n" + "\n".join(f"{a} -- {b}: {w}" for a, _l, _k, w, b in edges) + "\n```")
+    return "\n\n".join(parts)
+
+
 GEN = {"sql_calc": fam_sql_calc, "cypher_calc": fam_cypher_calc, "cypher_sql_calc": fam_cypher_sql_calc,
        "tool_chain": fam_tool_chain, "direct": fam_direct}
 
@@ -232,9 +251,12 @@ def generate(n, seed, de_share=0.3):
             continue
         seen.add(h)
         prompts = {lang: user[lang] + SUFFIX[lang] for lang in ("en", "de")}
+        data = inline_data(setup, v)
+        prompts_inline = {lang: user[lang] + (f"\n\n{INLINE_HEAD[lang]}\n{data}" if data else "") + SUFFIX[lang] for lang in ("en", "de")}
         lang = "de" if lang_rnd.random() < de_share else "en"
         out.append({"id": f"{fam}-{v['name']}-{h}", "family": fam, "vocab": v["name"], "lang": lang, "user": prompts[lang],
-                    "prompts": prompts, "setup": setup, "steps": steps, "final": {"ref": final, "tol": 0.005}})
+                    "prompts": prompts, "prompts_inline": prompts_inline, "setup": setup, "steps": steps,
+                    "final": {"ref": final, "tol": 0.005}})
     return out
 
 

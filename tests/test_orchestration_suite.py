@@ -43,3 +43,24 @@ def test_shortest_path_and_hops_reference():
     assert gen.shortest(names, edges, "A", "D") == 11
     assert gen.within_hops(names, edges, "A", 1) == ["B", "C"]
     assert gen.within_hops(names, edges, "A", 2) == ["B", "C", "D"]
+
+
+_DPATH = Path(__file__).resolve().parents[1] / "benchmarks" / "orchestration_suite" / "rollout_driver.py"
+_dspec = importlib.util.spec_from_file_location("orch_driver", _DPATH)
+drv = importlib.util.module_from_spec(_dspec)
+_dspec.loader.exec_module(drv)
+
+
+def test_number_parsing_follows_request_language():
+    cases = [("370,76", "de", 370.76), ("1.234,56", "de", 1234.56), ("1.500", "de", 1500.0), ("370.76", "de", 370.76),
+             ("1,234.56", "en", 1234.56), ("1,500", "en", 1500.0), ("370.76", "en", 370.76), ("3,5", "en", 3.5),
+             ("12", "en", 12.0), ("-7,25", "de", -7.25)]
+    for tok, lang, want in cases:
+        assert drv.parse_number(tok, lang) == want, (tok, lang)
+
+
+def test_answer_scoring_uses_last_number_of_closing_passage():
+    assert drv.correct("Zwischenwert 205. Endergebnis: **370,76 EUR**", 370.76, 0.005, "de")
+    assert not drv.correct("Endergebnis: 370,75 EUR", 370.76, 0.004, "de")
+    assert not drv.correct("Ich kann das nicht berechnen.", 370.76, 0.005, "en")
+    assert drv.correct("Total cost: 1,234.50 EUR", 1234.5, 0.005, "en")
