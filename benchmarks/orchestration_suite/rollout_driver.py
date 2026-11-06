@@ -97,12 +97,15 @@ class Client:
 
     async def episode(self, template: str, prompt: str, thread: str, temperature: float):
         """Returns (answer, outcome, usage). outcome: 'answer' | 'hitl' (auto-approved draft) |
-        'blocked:<reason>' (quality gate withheld the response; scored as wrong)."""
+        'blocked:<reason>' (quality gate withheld the response) | 'failed:<cause>' (pipeline raised);
+        blocked and failed are scored as wrong."""
         body = {"model": template, "messages": [{"role": "user", "content": prompt}], "stream": False,
                 "temperature": temperature, "no_cache": True}
         r = await self.http.post(f"{self.api}/v1/chat/completions", json=body, headers=self.user_h | {"X-MoE-Research-Thread": thread})
         if r.status_code == 422 and (r.json().get("error") or {}).get("type") == "quality_blocked":
             return "", f"blocked:{r.json()['error'].get('code', '')}", {}
+        if r.status_code == 500 and (r.json().get("error") or {}).get("code") == "orchestration_failed":
+            return "", "failed:orchestration_failed", {}  # pipeline raised (e.g. PlannerContractError); scored wrong
         r.raise_for_status()
         data = r.json()
         if r.status_code == 202 and data.get("gate_id"):
@@ -121,6 +124,8 @@ class Client:
                                  json={"checkpoint_id": checkpoint_id, "overrides": {"query_temperature": temperature}}, headers=self.admin_h)
         r.raise_for_status()
         f = r.json()
+        if f.get("pipeline_error"):
+            return "", f"failed:{f['pipeline_error'].split(':')[0]}", f
         if f.get("hitl_gate_id"):
             return await self.approve(f["hitl_gate_id"]), "hitl", f
         if f.get("quality_blocked"):

@@ -8,6 +8,7 @@ same thread, so every branch keeps its full provenance.
 """
 import asyncio
 import json
+import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,6 +18,8 @@ import state
 from config import ORCHESTRATION_TIMEOUT, RESEARCH_ROUTES_ENABLED
 from services.auth import require_admin_or_system
 from services.research_threads import THREAD_RE as _THREAD_RE, research_thread_id  # noqa: F401  (re-export)
+
+logger = logging.getLogger("MOE-SOVEREIGN")
 
 router = APIRouter(prefix="/v1/admin/research", dependencies=[Depends(require_admin_or_system)])
 
@@ -90,10 +93,14 @@ async def fork(graph, thread_id: str, checkpoint_id: str, overrides: dict, timeo
             raise ResearchError(404, "unknown checkpoint")
         if overrides:
             config = await graph.aupdate_state(config, overrides)
+        pipeline_error = None
         try:
             result = await asyncio.wait_for(graph.ainvoke(None, config), timeout=timeout_s)
         except asyncio.TimeoutError as exc:
             raise ResearchError(504, "fork timed out") from exc
+        except Exception as exc:  # noqa: BLE001 - a failing branch is a pipeline outcome, like chat's orchestration_failed
+            logger.info("research fork %s@%s ended in pipeline error: %s", thread_id, checkpoint_id, exc)
+            result, pipeline_error = None, f"{type(exc).__name__}: {str(exc)[:300]}"
         final = await graph.aget_state({"configurable": {"thread_id": thread_id}})
     return {
         "thread_id": thread_id,
@@ -102,6 +109,7 @@ async def fork(graph, thread_id: str, checkpoint_id: str, overrides: dict, timeo
         "final_response": (result or {}).get("final_response", ""),
         # quality-gate outcome: a HITL gate keeps the draft in the gate store (final_response stays empty)
         **{k: (result or {}).get(k) for k in OUTCOME_KEYS},
+        "pipeline_error": pipeline_error,
     }
 
 

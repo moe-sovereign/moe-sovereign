@@ -80,7 +80,7 @@ def test_fork_resumes_from_checkpoint_without_new_input():
     out = asyncio.run(R.fork(g, TID, "c1", {}, 5.0, True))
     assert g.invocations == [(None, {"configurable": {"thread_id": TID, "checkpoint_id": "c1"}})]
     assert out == {"thread_id": TID, "forked_from": "c1", "final_checkpoint_id": "c3", "final_response": "forked answer",
-                   **{k: None for k in R.OUTCOME_KEYS}}
+                   **{k: None for k in R.OUTCOME_KEYS}, "pipeline_error": None}
 
 
 def test_fork_reports_quality_gate_outcome():
@@ -121,3 +121,12 @@ def test_fork_timeout_maps_to_504():
     with pytest.raises(R.ResearchError) as exc:
         asyncio.run(R.fork(Slow(), TID, "c1", {}, 0.01, True))
     assert exc.value.status == 504
+
+
+def test_fork_reports_pipeline_errors_as_outcome():
+    class Failing(FakeGraph):
+        async def ainvoke(self, inp, config):
+            raise ValueError("MCP tool 'sql_query' is not present in the discovered catalog")
+
+    out = asyncio.run(R.fork(Failing(), TID, "c1", {}, 5.0, True))
+    assert out["pipeline_error"].startswith("ValueError: MCP tool") and out["final_response"] == ""

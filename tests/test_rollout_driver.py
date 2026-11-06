@@ -76,3 +76,11 @@ def test_hitl_gates_are_auto_approved_and_labelled():
 def test_missing_thread_id_on_plain_answer_is_an_error():
     rec, _ = run(lambda t: (200, {"choices": [{"message": {"content": "42"}}]}), [])
     assert rec["base"] is None and "not honoured" in rec["errors"][0]
+
+
+def test_pipeline_failures_are_wrong_outcomes():
+    failed = {"error": {"type": "server_error", "code": "orchestration_failed"}}
+    rec, _ = run(lambda t: (500, failed), [fork(pipeline_error="PlannerContractError: MCP tool 'sql_query' ..."), fork("42")])
+    assert rec["errors"] == [] and rec["base"]["outcome"] == "failed:orchestration_failed"
+    assert rec["decision_points"][0]["forks"][0]["outcome"] == "failed:PlannerContractError"
+    assert rec["decision_points"][1]["value"] == 1.0
