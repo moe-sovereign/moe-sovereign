@@ -111,7 +111,8 @@ VENV="PYTHONPATH=$SCRATCH/.user_site,HF_HOME=$SCRATCH/cache/huggingface,XDG_CACH
 SHIM_CFG="$RUN/shim.json"; echo '{"models": {' > "$SHIM_CFG"; FIRST=1; declare -A VPID
 serve() {  # name gcds port path max_len mem_util tp family size
     local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9
-    bg "vllm_$port" env HIP_VISIBLE_DEVICES="$gcds" ROCR_VISIBLE_DEVICES="$gcds" singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
+    # ROCR only: HIP indices are renumbered after ROCR filtering, so HIP_VISIBLE_DEVICES=2 on top would hide the GCD
+    bg "vllm_$port" env -u HIP_VISIBLE_DEVICES -u CUDA_VISIBLE_DEVICES ROCR_VISIBLE_DEVICES="$gcds" singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
         python3 -m vllm.entrypoints.openai.api_server --model "$path" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
         --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16
     VPID[$port]=$LASTPID
