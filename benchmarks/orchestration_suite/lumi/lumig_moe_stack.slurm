@@ -32,8 +32,13 @@ PIDS=()
 cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; sleep 5; rm -rf "$SHM"; }
 trap cleanup EXIT
 log() { echo "[$(date +%H:%M:%S)] $*"; }
-wait_http() { for _ in $(seq "${3:-180}"); do curl -sf -m 3 "$1" >/dev/null 2>&1 && { log "ready: $2"; return 0; }; sleep 2; done; log "TIMEOUT: $2 ($1)"; return 1; }
-bg() { local name=$1; shift; "$@" > "$RUN/logs/$name.log" 2>&1 & PIDS+=($!); }
+wait_http() {  # url name [tries] [pid: fail fast once that process is gone]
+    for _ in $(seq "${3:-180}"); do
+        curl -sf -m 3 "$1" >/dev/null 2>&1 && { log "ready: $2"; return 0; }
+        [ -n "${4:-}" ] && ! kill -0 "$4" 2>/dev/null && { log "DIED: $2 (see logs)"; return 1; }
+        sleep 2
+    done; log "TIMEOUT: $2 ($1)"; return 1; }
+bg() { local name=$1; shift; "$@" > "$RUN/logs/$name.log" 2>&1 & LASTPID=$!; PIDS+=($LASTPID); }
 SX() { singularity exec --bind "$SCRATCH:$SCRATCH" --bind "$SHM:$SHM" "$@"; }
 
 # ---- runtime secrets (never leave $RUN) ------------------------------------------------------
@@ -100,32 +105,35 @@ bg embed env OLLAMA_HOST=127.0.0.1:21434 OLLAMA_MODELS="$R/ollama-models/models"
 
 # ---- vLLM servers (one per model) + Ollama shim -----------------------------------------------
 VS="$SCRATCH/lumi-multitorch-latest.sif"
-VENV="HF_HOME=$SCRATCH/cache/huggingface,XDG_CACHE_HOME=$SCRATCH/cache,TRITON_CACHE_DIR=$SCRATCH/cache/triton,TMPDIR=$SCRATCH/tmp,HF_HUB_OFFLINE=1"
-SHIM_CFG="$RUN/shim.json"; echo '{"models": {' > "$SHIM_CFG"; FIRST=1
+# .user_site = transformers 5.x overlay: the merged checkpoints were saved with it (rope_parameters format
+# unknown to the container's transformers 4.57); same overlay as the vLLM-GRPO pilot
+VENV="PYTHONPATH=$SCRATCH/.user_site,HF_HOME=$SCRATCH/cache/huggingface,XDG_CACHE_HOME=$SCRATCH/cache,TRITON_CACHE_DIR=$SCRATCH/cache/triton,TMPDIR=$SCRATCH/tmp,HF_HUB_OFFLINE=1"
+SHIM_CFG="$RUN/shim.json"; echo '{"models": {' > "$SHIM_CFG"; FIRST=1; declare -A VPID
 serve() {  # name gcds port path max_len mem_util tp family size
     local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9
     bg "vllm_$port" env HIP_VISIBLE_DEVICES="$gcds" ROCR_VISIBLE_DEVICES="$gcds" singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
         python3 -m vllm.entrypoints.openai.api_server --model "$path" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
         --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16
+    VPID[$port]=$LASTPID
     [ $FIRST = 1 ] && FIRST=0 || echo ',' >> "$SHIM_CFG"
     printf '"%s": {"url": "http://127.0.0.1:%s", "context_length": %s, "family": "%s", "parameter_size": "%s"}' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_CFG"
 }
 E=hf.co/h3rb3rn
 serve "$E/sovereign-judge-olmo31-32b:Q4_K_M"       0,1 8101 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
 serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M"   2   8102 "$CK/merged_olmo3_7b_planner" 65536 0.90 1 olmo3 7B
-wait_http http://127.0.0.1:8102/v1/models planner 600
+wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
 i=0; for pair in "omni research" "security governance" "datainfra coder" "precision graphrag"; do
     gcd=$((3 + i)); j=0
     for role in $pair; do
         port=$((8103 + 2 * i + j))
         serve "$E/smollm3-expert-$role-3b:Q4_K_M" "$gcd" "$port" "$CK/merged_smollm3_expert_$role" 48128 0.44 1 smollm3 3B
-        wait_http "http://127.0.0.1:$port/v1/models" "expert $role" 600   # sequential start: the 2nd server on a GCD sizes against free memory
+        wait_http "http://127.0.0.1:$port/v1/models" "expert $role" 600 "${VPID[$port]}"   # sequential start: the 2nd server on a GCD sizes against free memory
         j=$((j + 1))
     done
     i=$((i + 1))
 done
 echo '}, "embed_url": "http://127.0.0.1:21434"}' >> "$SHIM_CFG"
-wait_http http://127.0.0.1:8101/v1/models judge 900
+wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
 OS="$R/sif/moe-sovereign-orchestrator_local.sif"
 bg shim SX "$OS" python3 "$R/app/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
 wait_http http://127.0.0.1:18100/api/tags shim 60
