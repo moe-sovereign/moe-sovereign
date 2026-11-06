@@ -145,5 +145,15 @@ Werte greedy / Sampling. Suite P183: Alle Arme liegen gleichauf mit dem Start (1
    | Gruppen ohne Streuung | 0,38–0,81 | 0,38–0,75 |
    | Fehler | keine | keine |
 
-   Der vLLM-Pfad lief auf allen 8 Rängen (`trl/generation/vllm_generation.py` aktiv). TRL warnt, dass vLLM 0.20.1 außerhalb des getesteten Bereichs 0.12–0.18 liegt. Dass die Gewichte zwischen den Schritten synchronisiert werden, ist nur indirekt belegt: Die Belohnung steigt wie im HF-Arm. Ein längerer Lauf (z. B. 150 Schritte bis zur bekannten Belohnung von ≈ 0,9 bei SmolLM3) steht als Bestätigung noch aus.
+   Der vLLM-Pfad lief auf allen 8 Rängen (`trl/generation/vllm_generation.py` aktiv). TRL warnt, dass vLLM 0.20.1 außerhalb des getesteten Bereichs 0.12–0.18 liegt.
+
+   **150-Schritte-Läufe (06.11.2026):**
+
+   | Lauf | Belohnung (Start → Ende) | IS-Verhältnis (Mittel) | precision (36) | OOD (70) |
+   |---|---|---|---|---|
+   | HF generate aus P200 | 0,36 → 0,98 | – | 26 / 27 | 54 / 52 |
+   | vLLM, TRL-Standard `sequence_mask` (23501446) | 0,19 → ≈ 0,65 | **0,005** | 10 / 10 | 17 / 23 |
+   | vLLM, `token_truncate` (23503154) | 0,16 → 0,94 | 0,975 | 24 / 22 | 41 / 46 |
+
+   Ursache für den Einbruch im Standardmodus: Die Logprob-Abweichung zwischen vLLM und Training war klein (0,026 pro Token, stabil; der Gewichtsabgleich funktioniert also). `sequence_mask` multipliziert diese Abweichungen jedoch über rund 380 Tokens auf, das Verhältnis sinkt auf ≈ 0,005 und die Gradienten werden fast vollständig gedämpft. `train_grpo_pilot.py --vllm` nutzt deshalb jetzt standardmäßig `token_truncate`. Mit dem Fix liegt der vLLM-Lauf nahe am HF-Lauf, bei OOD aber 6–13 Aufgaben darunter (nur 1 Seed, Ursache offen). Die Trainingszeit sinkt von etwa 2,5–3 h auf 37 min.
 6. Die P200-Sitzung nutzte dev-g/debug für Smoketests (28./29.10., insgesamt 11 Jobs). Seit der CSC-Mail vom 05.11.2026 gilt dort maximal 1 Job pro Nutzer und Projekt, und agenteneingereichte Arbeit gehört auf small-g/standard-g. Künftige Smokes laufen deshalb auf small-g.
