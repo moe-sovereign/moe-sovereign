@@ -7,7 +7,7 @@ Das PDF deckt die Kampagne bis August 2026 ab. Spätere Phasen, Sackgassen und K
 [Spätere Phasen](#spatere-phasen-august-november-2026) unten zusammen; jeder Job des Grants steht im
 [LUMI-G-Aktivitätslogbuch](lumi_activity_log.md).
 
-[PDF herunterladen (23 Seiten)](../../assets/papers/moe-sovereign-lumi-paper.pdf){ .md-button .md-button--primary }
+[PDF herunterladen (25 Seiten)](../../assets/papers/moe-sovereign-lumi-paper.pdf){ .md-button .md-button--primary }
 
 ---
 

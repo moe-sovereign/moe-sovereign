@@ -7,7 +7,7 @@ The PDF covers the campaign up to August 2026. Later phases, dead ends and corre
 [Later Phases](#later-phases-august-november-2026) below; every job of the grant is listed in the
 [LUMI-G Activity Log](lumi_activity_log.md).
 
-[Download PDF (23 pages)](../assets/papers/moe-sovereign-lumi-paper.pdf){ .md-button .md-button--primary }
+[Download PDF (25 pages)](../assets/papers/moe-sovereign-lumi-paper.pdf){ .md-button .md-button--primary }
 
 ---
 
