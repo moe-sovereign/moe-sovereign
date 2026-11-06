@@ -66,6 +66,18 @@ def test_answer_scoring_uses_last_number_of_closing_passage():
     assert drv.correct("Total cost: 1,234.50 EUR", 1234.5, 0.005, "en")
 
 
+def test_answer_scoring_ignores_correction_note_and_prefers_result_marker():
+    # shapes seen on LUMI (smoke 23515523)
+    note = "796.19  \n[Correction-Note: The value 836 for plant 'Hall' on 2026-05-17 is sourced from the table.]"
+    assert drv.final_number(note, "en") == 796.19
+    inline = "385.20 [Correction-Note: (836 * 0.80) = 668.8; (668.8 * 1.19) = 796.192 → 796.19.]"
+    assert drv.final_number(inline, "en") == 385.20
+    table = "| After +19%  | 795.87 |\n\nFinal result: 795.87 EUR (rounded to 2 decimals)"
+    assert drv.correct(table, 795.87, 0.005, "en")
+    assert drv.final_number("Endergebnis: **1.234,50 EUR**, berechnet aus 3 Werten.", "de") == 1234.5
+    assert drv.final_number("Then add 19 % to the result. 668.8 * 1.19 = 795.87", "en") == 795.87
+
+
 def test_inline_prompts_do_not_trigger_file_skills():
     # The orchestrator auto-attaches a file skill (/xlsx) when the text names a file like "shipments.csv".
     from services.skills import _detect_file_skill

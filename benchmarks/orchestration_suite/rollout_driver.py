@@ -51,11 +51,34 @@ def parse_number(token: str, lang: str):
         return None
 
 
-def correct(answer: str, ref: float, tol: float, lang: str) -> bool:
-    """True when the last number in the closing passage matches the reference."""
-    tail = (answer or "")[-600:]
+# The self-critique prompt (graph/synthesis.py) lets the model append "[Correction-Note: ...]" at the very end;
+# its numbers (dates, intermediate values) are commentary, not the answer.
+_NOTE = re.compile(r"\[\s*Correction-Note\s*:", re.IGNORECASE)
+_MARKER = re.compile(r"(?:\b(?:final (?:result|answer)|endergebnis)\b\s*(?:is|ist|lautet)?\s*[:=]?"
+                     r"|\b(?:result|answer|ergebnis|antwort)\b\s*\**\s*[:=])\s*\**", re.IGNORECASE)
+
+
+def final_number(answer: str, lang: str):
+    """The answer's final number: the first number after the last result marker of the closing passage,
+    otherwise the last number; a trailing Correction-Note is removed first."""
+    text = answer or ""
+    notes = list(_NOTE.finditer(text))
+    if notes:
+        text = text[:notes[-1].start()]
+    tail = text[-600:]
+    markers = list(_MARKER.finditer(tail))
+    if markers:
+        after = [n for n in (parse_number(m, lang) for m in _NUM.findall(tail[markers[-1].end():])) if n is not None]
+        if after:
+            return after[0]
     nums = [n for n in (parse_number(m, lang) for m in _NUM.findall(tail)) if n is not None]
-    return bool(nums) and abs(nums[-1] - ref) <= max(tol, 1e-9) + 1e-9
+    return nums[-1] if nums else None
+
+
+def correct(answer: str, ref: float, tol: float, lang: str) -> bool:
+    """True when the answer's final number matches the reference."""
+    n = final_number(answer, lang)
+    return n is not None and abs(n - ref) <= max(tol, 1e-9) + 1e-9
 
 
 class Client:
