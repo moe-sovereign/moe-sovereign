@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """MoE Sovereign Rule-Based Reinforcement Learning (RLVR / Rule-Based DPO) Dataset Compiler.
 
-Generates DPO preference pairs (prompt, chosen, rejected) using deterministic mathematical
-verifiers instead of stochastic human preference reward models:
+Scores DPO preference pairs (prompt, chosen, rejected) with deterministic verifier flags
+instead of stochastic human preference reward models:
 
 Reward Functions:
 1. R_DAG (+1.0 / -1.0): Kahn DAG Cycle-Free Topological Sorting (validate_dag_kahn)
@@ -10,9 +10,14 @@ Reward Functions:
 3. R_GBNF (+1.0 / -1.0): Pre-compiled GBNF Bit-Mask JSON Grammar Compliance
 4. R_Entropy (+1.0 / -1.0): Shannon Entropy Egress Bounds H(X) <= 5.6 bits/char
 
-Outputs DPO preference pairs for LUMI-G RL/DPO training (lumig_job3_sft_dpo.slurm).
+LIMITATION: compile_dpo_preference_pairs() does not run any verifier. It emits four fixed
+prompts with constant "chosen"/"rejected" texts and hard-coded flags, i.e. placeholder data.
+Training DPO on it teaches the template string, not verified behaviour. The CLI therefore
+refuses to write it unless --allow-placeholder is given (pipeline/format tests only).
+Real preference pairs must come from executed, verifier-scored traces.
 """
 
+import argparse
 import json
 import logging
 import os
@@ -23,6 +28,9 @@ from typing import Dict, List
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s")
 logger = logging.getLogger("RuleBasedRLCompiler")
 
+REWARD_FLAGS = ("dag_valid", "smt_sat", "gbnf_valid", "entropy_safe")
+PLACEHOLDER_MARKER = "[VERIFIED EXECUTION PLAN #"
+
 
 def evaluate_rule_based_reward(trace: Dict) -> float:
     """Calculates deterministic composite reward R in [-4.0, +4.0].
@@ -32,19 +40,17 @@ def evaluate_rule_based_reward(trace: Dict) -> float:
     - R_SMT: +1.0 if Z3 SAT, -1.0 if Z3 UNSAT
     - R_GBNF: +1.0 if valid grammar, -1.0 if syntax error
     - R_Entropy: +1.0 if H(X) <= 5.6, -1.0 if entropy leak
-    """
-    r_dag = 1.0 if trace.get("dag_valid", True) else -1.0
-    r_smt = 1.0 if trace.get("smt_sat", True) else -1.0
-    r_gbnf = 1.0 if trace.get("gbnf_valid", True) else -1.0
-    r_entropy = 1.0 if trace.get("entropy_safe", True) else -1.0
 
-    return r_dag + r_smt + r_gbnf + r_entropy
+    A flag that is missing or not exactly True counts as failed: an unverified trace
+    must never earn the positive reward.
+    """
+    return sum(1.0 if trace.get(flag) is True else -1.0 for flag in REWARD_FLAGS)
 
 
 def compile_dpo_preference_pairs(sample_count: int = 5000) -> List[Dict]:
-    """Compiles (prompt, chosen, rejected) DPO triples based on rule-based verifiers."""
+    """Compiles placeholder (prompt, chosen, rejected) DPO triples (see module LIMITATION)."""
     dpo_pairs = []
-    
+
     prompts_catalog = [
         "Review procurement specification for contradiction and missing evidence.",
         "Synthesize an execution plan for updating database schemas without locks.",
@@ -54,17 +60,17 @@ def compile_dpo_preference_pairs(sample_count: int = 5000) -> List[Dict]:
 
     for i in range(sample_count):
         prompt = prompts_catalog[i % len(prompts_catalog)]
-        
+
         # Valid execution trace (Chosen)
         chosen_trace = {
             "prompt": prompt,
-            "response": f"[VERIFIED EXECUTION PLAN #{i}]\n1. Inspect inputs\n2. Invoke Z3 solver\n3. Execute verified DAG.",
+            "response": f"{PLACEHOLDER_MARKER}{i}]\n1. Inspect inputs\n2. Invoke Z3 solver\n3. Execute verified DAG.",
             "dag_valid": True,
             "smt_sat": True,
             "gbnf_valid": True,
             "entropy_safe": True
         }
-        
+
         # Flawed execution trace (Rejected - containing cycle or hallucination)
         rejected_trace = {
             "prompt": prompt,
@@ -88,9 +94,10 @@ def compile_dpo_preference_pairs(sample_count: int = 5000) -> List[Dict]:
             ],
             "reward_chosen": evaluate_rule_based_reward(chosen_trace),
             "reward_rejected": evaluate_rule_based_reward(rejected_trace),
+            "placeholder": True,
             "timestamp": time.time()
         })
-        
+
     return dpo_pairs
 
 
@@ -107,7 +114,21 @@ def generate_rl_dataset(output_file: str, sample_count: int = 10000) -> int:
     return len(pairs)
 
 
+def main(argv: List[str] = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--out", default="/opt/deployment/moe-sovereign/moe-infra/data/corpora/moe_rule_based_rl_dpo.jsonl")
+    ap.add_argument("--samples", type=int, default=10000)
+    ap.add_argument("--allow-placeholder", action="store_true",
+                    help="write the templated placeholder pairs anyway (format tests only, never training)")
+    args = ap.parse_args(argv)
+    if not args.allow_placeholder:
+        logger.error("Refusing to write placeholder DPO pairs: they are not verifier-scored traces. "
+                     "Use --allow-placeholder for format tests only.")
+        return 2
+    total = generate_rl_dataset(args.out, sample_count=args.samples)
+    print(f"Wrote {total} PLACEHOLDER DPO pairs (not for training).")
+    return 0
+
+
 if __name__ == "__main__":
-    out_path = "/opt/deployment/moe-sovereign/moe-infra/data/corpora/moe_rule_based_rl_dpo.jsonl"
-    total = generate_rl_dataset(out_path, sample_count=10000)
-    print(f"Successfully compiled {total} Rule-Based RL/DPO preference pairs for LUMI-G training.")
+    sys.exit(main())

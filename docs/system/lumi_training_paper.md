@@ -74,9 +74,12 @@ on-device inference on `N04-RTX` (24 GiB VRAM):
 |------|--------------|
 | Teacher | Qwen3.5-35B-A3B (ZeRO-3, no-4bit, `max_seq_len=4096`) |
 | Student SFT | Qwen3.5-4B, ZeRO-2, lr=2×10⁻⁴, LoRA r=16/α=32, no-packing |
-| DPO Alignment | lr=1×10⁻⁵, base = SFT checkpoint, dataset `moe_rule_based_rl_dpo.jsonl` |
+| DPO Alignment | planned: lr=1×10⁻⁵, base = SFT checkpoint; **no usable preference dataset yet** |
 
-Remaining steps: LoRA merge, GGUF quantisation, on-device validation.
+Remaining steps: verifier-scored preference pairs, DPO, LoRA merge, GGUF quantisation, on-device validation.
+The earlier `moe_rule_based_rl_dpo.jsonl` (from `scripts/compile_rule_based_rl_dataset.py`) consists of
+templated placeholder pairs without any executed verifier and must not be used for training; no DPO
+checkpoint was produced from it.
 
 ---
 

@@ -88,6 +88,11 @@ if [ ! -f "$DATASET" ]; then
     echo "Run Job 2 (distillation) first, then generate the DPO dataset."
     exit 1
 fi
+# The legacy compile_rule_based_rl_dataset.py output is templated placeholder text, not verified traces
+if grep -q -m1 '\[VERIFIED EXECUTION PLAN #' "$DATASET"; then
+    echo "ERROR: $DATASET contains placeholder pairs from compile_rule_based_rl_dataset.py; refusing to train on them."
+    exit 1
+fi
 [ ! -f "$CONTAINER" ] && echo "ERROR: Singularity container not found: $CONTAINER" && exit 1
 
 if [ ! -d "$MODEL_ID" ]; then

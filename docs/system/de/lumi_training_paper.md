@@ -77,9 +77,12 @@ um On-Device-Inferenz auf `N04-RTX` (24 GiB VRAM) zu ermöglichen:
 |---------|--------------|
 | Teacher | Qwen3.5-35B-A3B (ZeRO-3, no-4bit, `max_seq_len=4096`) |
 | Student-SFT | Qwen3.5-4B, ZeRO-2, lr=2×10⁻⁴, LoRA r=16/α=32, no-packing |
-| DPO-Alignment | lr=1×10⁻⁵, Basis = SFT-Checkpoint, Dataset `moe_rule_based_rl_dpo.jsonl` |
+| DPO-Alignment | geplant: lr=1×10⁻⁵, Basis = SFT-Checkpoint; **noch kein brauchbarer Präferenzdatensatz** |
 
-Verbleibende Schritte: LoRA-Merge, GGUF-Quantisierung, On-Device-Validierung.
+Verbleibende Schritte: verifizierte Präferenzpaare, DPO, LoRA-Merge, GGUF-Quantisierung, On-Device-Validierung.
+Das frühere `moe_rule_based_rl_dpo.jsonl` (aus `scripts/compile_rule_based_rl_dataset.py`) besteht aus
+schablonenhaften Platzhalter-Paaren ohne ausgeführten Verifier und darf nicht für Training verwendet
+werden; daraus ist kein DPO-Checkpoint entstanden.
 
 ---
 
