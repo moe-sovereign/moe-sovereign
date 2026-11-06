@@ -100,8 +100,9 @@ NR=$SCRATCH/neo4jtest; JH=$(ls -d $NR/jdk-21*); cp -r "$NR/neo4j-community-5.26.
 sed -i 's/^#dbms.security.auth_enabled=false/dbms.security.auth_enabled=false/' "$SHM/neo4j/conf/neo4j.conf"
 printf 'server.memory.heap.max_size=8g\nserver.memory.pagecache.size=4g\nserver.bolt.listen_address=127.0.0.1:7687\nserver.http.listen_address=127.0.0.1:7474\n' >> "$SHM/neo4j/conf/neo4j.conf"
 JAVA_HOME="$JH" PATH="$JH/bin:$PATH" "$SHM/neo4j/bin/neo4j" start > "$RUN/logs/neo4j.log" 2>&1
-bg embed env OLLAMA_HOST=127.0.0.1:21434 OLLAMA_MODELS="$R/ollama-models/models" OLLAMA_NUM_GPU=0 HIP_VISIBLE_DEVICES= ROCR_VISIBLE_DEVICES= \
-    singularity exec --bind "$SCRATCH:$SCRATCH" "$R/sif/moe-embed_local.sif" ollama serve
+# --env, not a host env: the image sets OLLAMA_HOST itself, which beats inherited variables (smoke 23514795 listened on 11434)
+bg embed env HIP_VISIBLE_DEVICES= ROCR_VISIBLE_DEVICES= singularity exec --bind "$SCRATCH:$SCRATCH" \
+    --env "OLLAMA_HOST=127.0.0.1:21434,OLLAMA_MODELS=$R/ollama-models/models,OLLAMA_NUM_GPU=0" "$R/sif/moe-embed_local.sif" ollama serve
 
 # ---- vLLM servers (one per model) + Ollama shim -----------------------------------------------
 VS="$SCRATCH/lumi-multitorch-latest.sif"
