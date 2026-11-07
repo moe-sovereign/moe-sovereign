@@ -78,9 +78,11 @@ def test_answer_scoring_ignores_correction_note_and_prefers_result_marker():
     assert drv.final_number("Then add 19 % to the result. 668.8 * 1.19 = 795.87", "en") == 795.87
 
 
-def test_inline_prompts_do_not_trigger_file_skills():
-    # The orchestrator auto-attaches a file skill (/xlsx) when the text names a file like "shipments.csv".
+def test_file_skill_needs_a_real_attachment():
+    # LUMI smoke 23515108: a table labelled "shipments.csv" in the prompt text made the orchestrator
+    # prepend /xlsx and plan Excel work. Only the files parameter may select a file skill.
     from services.skills import _detect_file_skill
-    for t in gen.generate(300, 7):
-        for lang, prompt in t["prompts_inline"].items():
-            assert _detect_file_skill(None, prompt, None) is None, (t["id"], lang)
+    assert _detect_file_skill(None, "Table shipments.csv:\nid,depot\n1,North\nSum the weights.") is None
+    assert _detect_file_skill(None, "Fasse bericht.pdf und daten.xlsx zusammen") is None
+    assert _detect_file_skill([{"name": "shipments.csv", "type": "text/csv"}]) == "xlsx"
+    assert _detect_file_skill([{"name": "shipments.csv"}], allowed_skills=["pdf"]) is None

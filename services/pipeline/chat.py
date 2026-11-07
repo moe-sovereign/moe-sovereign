@@ -2166,7 +2166,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
             or "[ROUTING: Use reasoning or general expert" in _raw_user_input
         )
         _auto_skill = None if _routing_bypass else _detect_file_skill(
-            request.files, _raw_user_input, allowed_skills
+            request.files, allowed_skills
         )
         if _auto_skill:
             _auto_input = f"/{_auto_skill} {_raw_user_input}"

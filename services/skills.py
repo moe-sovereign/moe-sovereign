@@ -321,13 +321,14 @@ def _skill_for_file(name: str = "", mime: str = "") -> Optional[str]:
 
 def _detect_file_skill(
     files: Optional[List],
-    user_input: str,
     allowed_skills: Optional[list] = None,
 ) -> Optional[str]:
     """Detect file type attachments and return the matching skill name.
 
-    Checks the OpenWebUI files parameter first, then filename patterns in the
-    message text. Returns None if no matching skill found or not permitted.
+    Only real attachments (the OpenWebUI files parameter) count. A file name that is
+    merely mentioned in the prompt ("Table shipments.csv: ...") is not an attachment
+    and must not turn the request into document work. Returns None if no matching
+    skill is found or it is not permitted.
     """
     def _allowed(skill: str) -> bool:
         if allowed_skills is None:
@@ -346,14 +347,6 @@ def _detect_file_skill(
         skill = _skill_for_file(name=name, mime=mime)
         if skill and _allowed(skill):
             logger.debug("📎 File skill via files param: /%s (name=%r, mime=%r)", skill, name, mime)
-            return skill
-
-    _ext_pattern = re.compile(r'\b[\w.\-]+\.(pdf|docx?|xlsx?|csv|tsv|pptx?)\b', re.IGNORECASE)
-    for m in _ext_pattern.finditer(user_input):
-        ext = "." + m.group(1).lower()
-        skill = _FILE_SKILL_MAP.get(ext)
-        if skill and _allowed(skill):
-            logger.debug("📎 File skill via text pattern: /%s (found: %r)", skill, m.group(0))
             return skill
 
     return None

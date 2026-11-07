@@ -227,8 +227,8 @@ def inline_data(setup: dict, v: dict) -> str:
     if "sql" in setup:
         rows = _ROW.findall(setup["sql"])
         header = f"id,{v['group']},{v['value']},{v['day']}"
-        # no "<name>.csv" label: services/skills.py _detect_file_skill treats file names in the text as attachments
-        # and prepends the /xlsx skill (LUMI smoke 23515108)
+        # no "<name>.csv" label: before the fix after LUMI smoke 23515108, _detect_file_skill took file names in
+        # the text for attachments and prepended /xlsx; keeping the neutral label leaves the v2 suite unchanged
         parts.append(f"Table {v['table']} (CSV)\n```csv\n{header}\n" + "\n".join(",".join(r) for r in rows) + "\n```")
     if "cypher" in setup:
         edges = _EDGE.findall(setup["cypher"])
