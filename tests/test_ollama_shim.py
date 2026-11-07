@@ -63,3 +63,15 @@ def test_tags_ps_show_report_configured_models_and_context():
     with pytest.raises(shim.ShimError) as exc:
         shim.show(MODELS, "unknown")
     assert exc.value.status == 404
+
+
+def test_replicas_go_to_least_loaded_and_unknown_models_404():
+    r = shim.Replicas({"judge": {"urls": ["http://a/", "http://b"]}, **MODELS})
+    first, second = r.acquire("judge"), r.acquire("judge")
+    assert {first, second} == {"http://a", "http://b"}
+    r.release(second)
+    assert r.acquire("judge") == second
+    assert r.acquire("hf.co/x/planner:Q4_K_M") == "http://127.0.0.1:8101"
+    with pytest.raises(shim.ShimError) as e:
+        r.acquire("missing")
+    assert e.value.status == 404

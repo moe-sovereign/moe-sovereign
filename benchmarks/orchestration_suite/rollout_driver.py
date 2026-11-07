@@ -81,6 +81,11 @@ def correct(answer: str, ref: float, tol: float, lang: str) -> bool:
     return n is not None and abs(n - ref) <= max(tol, 1e-9) + 1e-9
 
 
+def _err(exc: BaseException) -> str:
+    # httpx timeouts stringify to "" (wave 2 logged 369 empty errors); keep the exception type
+    return f"{type(exc).__name__}: {exc}"
+
+
 class Client:
     def __init__(self, api: str, user_key: str, admin_key: str, timeout: float):
         self.api = api.rstrip("/")
@@ -156,12 +161,12 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                         point["forks"].append({"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang),
                                                "final_checkpoint_id": f["final_checkpoint_id"]})
                     except (httpx.HTTPError, KeyError) as exc:
-                        rec["errors"].append(f"fork {cp['checkpoint_id']}: {str(exc)[:200]}")
+                        rec["errors"].append(f"fork {cp['checkpoint_id']}: {_err(exc)[:200]}")
                 ok = [x["correct"] for x in point["forks"]]
                 point["value"] = sum(ok) / len(ok) if ok else None
                 rec["decision_points"].append(point)
         except (httpx.HTTPError, RuntimeError, KeyError) as exc:
-            rec["errors"].append(f"episode: {str(exc)[:300]}")
+            rec["errors"].append(f"episode: {_err(exc)[:300]}")
         rec["finished"] = time.time()
         out.write(json.dumps(rec, ensure_ascii=False) + "\n")
         out.flush()
@@ -199,7 +204,7 @@ if __name__ == "__main__":
     ap.add_argument("--forks", type=int, default=4)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--concurrency", type=int, default=16)
-    ap.add_argument("--timeout", type=float, default=900)
+    ap.add_argument("--timeout", type=float, default=1800)
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--families", default="")

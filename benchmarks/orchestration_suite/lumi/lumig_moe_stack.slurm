@@ -109,7 +109,7 @@ VS="$SCRATCH/lumi-multitorch-latest.sif"
 # .user_site = transformers 5.x overlay: the merged checkpoints were saved with it (rope_parameters format
 # unknown to the container's transformers 4.57); same overlay as the vLLM-GRPO pilot
 VENV="PYTHONPATH=$SCRATCH/.user_site,HF_HOME=$SCRATCH/cache/huggingface,XDG_CACHE_HOME=$SCRATCH/cache,TRITON_CACHE_DIR=$SCRATCH/cache/triton,TMPDIR=$SCRATCH/tmp,HF_HUB_OFFLINE=1"
-SHIM_CFG="$RUN/shim.json"; echo '{"models": {' > "$SHIM_CFG"; FIRST=1; declare -A VPID
+SHIM_CFG="$RUN/shim.json"; SHIM_ROWS="$RUN/shim_rows.tsv"; : > "$SHIM_ROWS"; declare -A VPID
 serve() {  # name gcds port path max_len mem_util tp family size
     local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9 ov=()
     # transformers 5 nests rope_parameters per layer type (OLMo-3); vLLM's olmo2.py expects the flat full-attention
@@ -132,25 +132,35 @@ PY
         python3 -m vllm.entrypoints.openai.api_server --model "$path" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
         --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16 "${ov[@]}"
     VPID[$port]=$LASTPID
-    [ $FIRST = 1 ] && FIRST=0 || echo ',' >> "$SHIM_CFG"
-    printf '"%s": {"url": "http://127.0.0.1:%s", "context_length": %s, "family": "%s", "parameter_size": "%s"}' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_CFG"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_ROWS"   # same name twice = replicas
 }
 E=hf.co/h3rb3rn
-serve "$E/sovereign-judge-olmo31-32b:Q4_K_M"       0,1 8101 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
+# Two judge replicas (GCD pairs 0,1 and 6,7 = one MI250X card each): wave 2 (23522672-75) was judge-bound, with ~14 of
+# 16 episodes always waiting on one judge (~9.5 tok/s each) while the experts averaged 0.17 running requests.
+# The experts therefore share three GCDs (3 + 3 + 2 servers).
+JUDGE="$E/sovereign-judge-olmo31-32b:Q4_K_M"
+serve "$JUDGE" 0,1 8101 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
+serve "$JUDGE" 6,7 8111 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
 serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M"   2   8102 "$CK/merged_olmo3_7b_planner" 65536 0.90 1 olmo3 7B
 wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
-i=0; for pair in "omni research" "security governance" "datainfra coder" "precision graphrag"; do
-    gcd=$((3 + i)); j=0
-    for role in $pair; do
-        port=$((8103 + 2 * i + j))
-        serve "$E/smollm3-expert-$role-3b:Q4_K_M" "$gcd" "$port" "$CK/merged_smollm3_expert_$role" 48128 0.44 1 smollm3 3B
-        wait_http "http://127.0.0.1:$port/v1/models" "expert $role" 600 "${VPID[$port]}"   # sequential start: the 2nd server on a GCD sizes against free memory
-        j=$((j + 1))
-    done
-    i=$((i + 1))
+port=8103; i=0
+for role in omni research security governance datainfra coder precision graphrag; do
+    gcd=$((3 + i / 3))
+    serve "$E/smollm3-expert-$role-3b:Q4_K_M" "$gcd" "$port" "$CK/merged_smollm3_expert_$role" 48128 0.29 1 smollm3 3B
+    wait_http "http://127.0.0.1:$port/v1/models" "expert $role" 600 "${VPID[$port]}"   # sequential start: later servers on a GCD size against free memory
+    port=$((port + 1)); i=$((i + 1))
 done
-echo '}, "embed_url": "http://127.0.0.1:21434"}' >> "$SHIM_CFG"
+python3 - "$SHIM_ROWS" > "$SHIM_CFG" <<'PY'
+import json, sys
+models = {}
+for line in open(sys.argv[1]):
+    name, port, ctx, fam, size = line.rstrip("\n").split("\t")
+    m = models.setdefault(name, {"urls": [], "context_length": int(ctx), "family": fam, "parameter_size": size})
+    m["urls"].append(f"http://127.0.0.1:{port}")
+print(json.dumps({"models": models, "embed_url": "http://127.0.0.1:21434"}, indent=1))
+PY
 wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
+wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
 OS="$R/sif/moe-sovereign-orchestrator_local.sif"
 bg shim SX "$OS" python3 "$R/app/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
 wait_http http://127.0.0.1:18100/api/tags shim 60

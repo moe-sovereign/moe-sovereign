@@ -11,6 +11,9 @@ Known deviations from real Ollama (documented, surfaced instead of silently igno
   - requests carrying "tools" are rejected with 501 (not used on the orchestration path)
   - /api/pull never downloads; unknown models return 404
 
+A model may list several replicas ("urls": [...] instead of "url"); each request goes to the
+replica with the fewest requests in flight (judge replicas, phase-1 wave 2 was judge-bound).
+
 Config (JSON file passed with --config):
   {"models": {"<ollama model name>": {"url": "http://127.0.0.1:8101", "context_length": 32768,
                                        "family": "olmo3", "parameter_size": "7B"}},
@@ -106,6 +109,24 @@ def show(models: dict, name: str) -> dict:
             "model_info": {"general.architecture": arch, f"{arch}.context_length": m.get("context_length", 0)}}
 
 
+class Replicas:
+    """Least-in-flight choice among the vLLM replicas of each model."""
+
+    def __init__(self, models: dict):
+        self.urls = {n: [u.rstrip("/") for u in (m.get("urls") or [m["url"]])] for n, m in models.items()}
+        self.inflight = {u: 0 for us in self.urls.values() for u in us}
+
+    def acquire(self, name: str) -> str:
+        if name not in self.urls:
+            raise ShimError(404, f"model '{name}' not found, try pulling it first")
+        url = min(self.urls[name], key=self.inflight.__getitem__)
+        self.inflight[url] += 1
+        return url
+
+    def release(self, url: str) -> None:
+        self.inflight[url] -= 1
+
+
 def build_app(cfg: dict):
     import httpx
     from fastapi import FastAPI, Request
@@ -115,10 +136,7 @@ def build_app(cfg: dict):
     client = httpx.AsyncClient(timeout=httpx.Timeout(None, connect=10))
     app = FastAPI(title="ollama-shim")
 
-    def backend(name: str) -> str:
-        if name not in models:
-            raise ShimError(404, f"model '{name}' not found, try pulling it first")
-        return models[name]["url"].rstrip("/")
+    replicas = Replicas(models)
 
     @app.exception_handler(ShimError)
     async def _shim_error(_req, exc: ShimError):
@@ -144,21 +162,34 @@ def build_app(cfg: dict):
     @app.post("/api/pull")
     async def api_pull(req: Request):
         body = await req.json()
-        backend(body.get("model") or body.get("name", ""))
+        name = body.get("model") or body.get("name", "")
+        if name not in models:
+            raise ShimError(404, f"model '{name}' not found, try pulling it first")
         return {"status": "success"}
 
     async def chat(body: dict):
-        url = backend(body["model"]) + "/v1/chat/completions"
         stream = body.get("stream", True)  # Ollama streams unless told otherwise
         started = time.monotonic()
         payload = openai_request(body, stream)
+        base = replicas.acquire(body["model"])
+        url = base + "/v1/chat/completions"
         if not stream:
-            r = await client.post(url, json=payload)
+            try:
+                r = await client.post(url, json=payload)
+            finally:
+                replicas.release(base)
             if r.status_code != 200:
                 raise ShimError(r.status_code, r.text[:500])
             return ollama_chat_response(body["model"], r.json(), started)
 
         async def gen():
+            try:
+                async for line in _stream(url, payload):
+                    yield line
+            finally:
+                replicas.release(base)
+
+        async def _stream(url, payload):
             usage, reason = {}, None
             async with client.stream("POST", url, json=payload) as r:
                 if r.status_code != 200:
@@ -212,14 +243,21 @@ def build_app(cfg: dict):
     @app.post("/v1/chat/completions")
     async def v1_chat(req: Request):
         body = await req.json()
-        url = backend(body.get("model", "")) + "/v1/chat/completions"
+        base = replicas.acquire(body.get("model", ""))
+        url = base + "/v1/chat/completions"
         if body.get("stream"):
             async def gen():
-                async with client.stream("POST", url, json=body) as r:
-                    async for chunk in r.aiter_raw():
-                        yield chunk
+                try:
+                    async with client.stream("POST", url, json=body) as r:
+                        async for chunk in r.aiter_raw():
+                            yield chunk
+                finally:
+                    replicas.release(base)
             return StreamingResponse(gen(), media_type="text/event-stream")
-        r = await client.post(url, json=body)
+        try:
+            r = await client.post(url, json=body)
+        finally:
+            replicas.release(base)
         return Response(content=r.content, status_code=r.status_code, media_type="application/json")
 
     return app

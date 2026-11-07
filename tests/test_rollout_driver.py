@@ -84,3 +84,10 @@ def test_pipeline_failures_are_wrong_outcomes():
     assert rec["errors"] == [] and rec["base"]["outcome"] == "failed:orchestration_failed"
     assert rec["decision_points"][0]["forks"][0]["outcome"] == "failed:PlannerContractError"
     assert rec["decision_points"][1]["value"] == 1.0
+
+
+def test_timeouts_are_logged_with_their_type():
+    def chat(t):
+        raise httpx.ReadTimeout("")
+    rec, _ = run(chat, [])
+    assert rec["errors"] == ["episode: ReadTimeout: "]
