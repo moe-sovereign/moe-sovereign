@@ -81,6 +81,24 @@ def correct(answer: str, ref: float, tol: float, lang: str) -> bool:
     return n is not None and abs(n - ref) <= max(tol, 1e-9) + 1e-9
 
 
+_WS = re.compile(r"\s+")
+
+
+def _norm(t: str) -> str:
+    t = re.sub(r"\b(a|an|the)\b", " ", (t or "").lower())
+    return _WS.sub(" ", re.sub(r"[^\w\s]", " ", t)).strip()
+
+
+def score(answer: str, final: dict, lang: str) -> bool:
+    """Task-level scoring: numeric (default) or text (normalised containment of the gold answer or an alias;
+    final['all'] requires every listed answer, for list answers)."""
+    if final.get("kind") != "text":
+        return correct(answer, final["ref"], final["tol"], lang)
+    hay = _norm(answer)
+    hit = [bool(a) and re.search(rf"(?<!\w){re.escape(_norm(a))}(?!\w)", hay) is not None for a in map(str, final["answers"])]
+    return all(hit) if final.get("all") else any(hit)
+
+
 def _err(exc: BaseException) -> str:
     # httpx timeouts stringify to "" (wave 2 logged 369 empty errors); keep the exception type
     return f"{type(exc).__name__}: {exc}"
@@ -145,13 +163,13 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
         inline = task["arm"] == "inline" if "arm" in task else a.inline
         prompt = (task.get("prompts_inline") or task["prompts"])[lang] if inline else task["prompts"][lang]
         thread = f"research-{task['id'][-12:]}-{uuid.uuid4().hex[:8]}"
-        ref, tol = task["final"]["ref"], task["final"]["tol"]
+        final = task["final"]
         rec = {"task_id": task["id"], "family": task["family"], "arm": task.get("arm"), "lang": lang, "thread": thread, "template": a.template,
                "started": time.time(), "base": None, "decision_points": [], "errors": []}
         try:
             t0 = time.monotonic()
             answer, outcome, usage = await cli.episode(a.template, prompt, thread, a.temperature)
-            rec["base"] = {"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang), "usage": usage,
+            rec["base"] = {"answer": answer, "outcome": outcome, "correct": score(answer, final, lang), "usage": usage,
                            "seconds": time.monotonic() - t0}
             extra = getattr(a, "capture", "")
             hist = await cli.history(thread, STATE_KEYS + ("," + extra if extra else ""))
@@ -163,7 +181,7 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                 for _ in range(a.forks):
                     try:
                         answer, outcome, f = await cli.fork(thread, cp["checkpoint_id"], a.temperature)
-                        point["forks"].append({"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang),
+                        point["forks"].append({"answer": answer, "outcome": outcome, "correct": score(answer, final, lang),
                                                "final_checkpoint_id": f["final_checkpoint_id"]})
                     except (httpx.HTTPError, KeyError) as exc:
                         rec["errors"].append(f"fork {cp['checkpoint_id']}: {_err(exc)[:200]}")

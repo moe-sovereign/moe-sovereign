@@ -5,7 +5,7 @@
 Arms `graph` and `noisy` get their facts; every run also gets a haystack of filler entities. Neo4j runs without
 auth inside the stack job.
 
-  load_graph_facts.py --tasks lookup_tasks.jsonl --uri bolt://127.0.0.1:7687 [--seed 11]
+  load_graph_facts.py --tasks lookup_tasks.jsonl [--facts ext_graph.json] --uri bolt://127.0.0.1:7687 [--seed 11]
 """
 import argparse
 import asyncio
@@ -23,8 +23,15 @@ _REL = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 async def run(a):
     from neo4j import AsyncGraphDatabase
-    tasks = [json.loads(l) for l in open(a.tasks, encoding="utf-8")]
-    ents, rels = {}, []
+    tasks = [json.loads(l) for l in open(a.tasks, encoding="utf-8")] if a.tasks else []
+    ents, rels, aliases = {}, [], {}
+    if a.facts:
+        extra = json.load(open(a.facts, encoding="utf-8"))
+        for e in extra["entities"]:
+            ents[e["name"]] = e["type"]
+            if e.get("aliases"):
+                aliases[e["name"]] = " | ".join(e["aliases"])
+        rels += extra["relations"]
     for t in tasks:
         if not t.get("graph"):
             continue
@@ -43,6 +50,9 @@ async def run(a):
         for i in range(0, len(rows), BATCH):
             await s.run("UNWIND $rows AS r MERGE (e:Entity {name: r.name}) ON CREATE SET e.type = r.type, e.source = 'fixture', e.domain = 'lookup'",
                         {"rows": rows[i:i + BATCH]})
+        al = [{"name": n, "al": v} for n, v in aliases.items()]
+        for i in range(0, len(al), BATCH):  # the product matches terms against name and aliases_str
+            await s.run("UNWIND $rows AS r MATCH (e:Entity {name: r.name}) SET e.aliases_str = r.al", {"rows": al[i:i + BATCH]})
         for rel in sorted({r["r"] for r in rels}):
             part = [r for r in rels if r["r"] == rel]
             for i in range(0, len(part), BATCH):
@@ -57,7 +67,8 @@ async def run(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tasks", required=True)
+    ap.add_argument("--tasks", default="", help="lookup tasks whose `graph` facts are loaded (graph and noisy arms)")
+    ap.add_argument("--facts", default="", help="extra JSON {entities, relations}, e.g. the CypherBench graph from external/adapters.py")
     ap.add_argument("--uri", default="bolt://127.0.0.1:7687")
     ap.add_argument("--user", default="neo4j")
     ap.add_argument("--password", default="")

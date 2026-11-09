@@ -183,8 +183,8 @@ wait_http http://127.0.0.1:8000/health orchestrator 600
 log "stack up"
 
 # ---- optional: facts for the GraphRAG ablation (LOAD_GRAPH=tasks/lookup_tasks.jsonl) ----------------
-if [ -n "${LOAD_GRAPH:-}" ]; then
-    SX "${APPB[@]}" "$OS" python3 benchmarks/orchestration_suite/graphrag/load_graph_facts.py --tasks "$R/$LOAD_GRAPH" --uri bolt://127.0.0.1:7687
+if [ -n "${LOAD_GRAPH:-}" ] || [ -n "${LOAD_FACTS:-}" ]; then   # LOAD_FACTS: extra {entities, relations} JSON, e.g. the CypherBench graph
+    SX "${APPB[@]}" "$OS" python3 benchmarks/orchestration_suite/graphrag/load_graph_facts.py ${LOAD_GRAPH:+--tasks "$R/$LOAD_GRAPH"} ${LOAD_FACTS:+--facts "$R/$LOAD_FACTS"} --uri bolt://127.0.0.1:7687
 fi
 
 # ---- rollout driver ----------------------------------------------------------------------------
