@@ -39,6 +39,10 @@ echo "job $SLURM_JOB_ID nodes=$SLURM_JOB_NUM_NODES master=$MASTER model=$MODEL d
 ENVS="PYTHONPATH=$S/.user_site,HF_HOME=$S/hf_cache,HF_HUB_OFFLINE=1,XDG_CACHE_HOME=$S/cache,TRITON_CACHE_DIR=$S/cache/triton,TORCH_EXTENSIONS_DIR=$S/cache/torch_ext,TMPDIR=$S/tmp"
 ENVS="$ENVS,NCCL_NET_GDR_LEVEL=PHB,NCCL_DEBUG=${NCCL_DEBUG:-WARN},PYTORCH_HIP_ALLOC_CONF=expandable_segments:True,OMP_NUM_THREADS=7"
 export SINGULARITYENV_NCCL_SOCKET_IFNAME=hsn0,hsn1,hsn2,hsn3   # SINGULARITYENV_ avoids the comma split of --env
+# Slingshot access from inside the container: same bindings as the LUMI module singularity-AI-bindings/24.03
+# (without them the 2-node smoke 23549096 loaded all weights and then hung until the time limit)
+export SINGULARITY_BIND="/var/spool/slurmd,/opt/cray,/usr/lib64/libcxi.so.1,/usr/lib64/libjansson.so.4,$S"
+ENVS="$ENVS,FI_CXI_DISABLE_HOST_REGISTER=1,FI_MR_CACHE_MONITOR=userfaultfd,FI_CXI_DEFAULT_CQ_SIZE=131072,FI_CXI_DEFAULT_TX_SIZE=2048,FI_CXI_RX_MATCH_MODE=software,NCCL_CROSS_NIC=1"
 mkdir -p "$S/cache/triton" "$S/cache/torch_ext" "$S/tmp"
 
 srun --ntasks-per-node=1 singularity exec --bind "$S:$S" --env "$ENVS" "$SIF" \
