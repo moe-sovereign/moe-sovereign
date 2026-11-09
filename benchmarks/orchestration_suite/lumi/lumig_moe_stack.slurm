@@ -60,6 +60,9 @@ SEMANTIC_MEMORY_EMBED_URL=http://127.0.0.1:21434
 SYSTEM_API_KEY=$SYS_KEY
 HF_HUB_OFFLINE=1
 EOF
+# FORCE_GRAPHRAG=1: the fuzzy router (threshold 0.35, cold-start bandit) otherwise switches GraphRAG off for plans without graph
+# categories (smoke 23567371: graph=0.30 in all 40 episodes). Threshold 0 and no bandit keep the retrieval node on.
+if [ "${FORCE_GRAPHRAG:-0}" = "1" ]; then printf 'FUZZY_GRAPH_THRESHOLD=0\nROUTING_BANDIT_ENABLED=false\n' >> "$RUN/stack.env"; fi
 umask 022
 
 # ---- PostgreSQL ------------------------------------------------------------------------------

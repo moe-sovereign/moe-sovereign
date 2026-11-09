@@ -173,6 +173,10 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                            "seconds": time.monotonic() - t0}
             extra = getattr(a, "capture", "")
             hist = await cli.history(thread, STATE_KEYS + ("," + extra if extra else ""))
+            if hist:  # the draft before the quality gate: a blocked episode still has a final_response in its end state
+                draft = hist[0]["values"].get("final_response") or ""
+                rec["base"]["draft"] = draft
+                rec["base"]["draft_correct"] = bool(draft) and score(draft, final, lang)
             if extra and hist:
                 rec["captured"] = {k: hist[0]["values"].get(k) for k in extra.split(",")}  # newest checkpoint = end state
             base_cps = [c for c in hist if set(c["next"]) & DECISION_NODES] if a.forks else []
