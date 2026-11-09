@@ -16,7 +16,7 @@ def _load(name):
     return mod
 
 
-metrics = _load("metrics")
+metrics = _load("prm_metrics")
 ds = _load("build_dataset")
 train = _load("train_prm")
 

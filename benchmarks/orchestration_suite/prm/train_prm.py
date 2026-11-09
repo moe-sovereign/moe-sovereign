@@ -12,7 +12,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from metrics import evaluate  # noqa: E402
+from prm_metrics import evaluate  # noqa: E402
 
 
 def read_rows(path, limit=0):

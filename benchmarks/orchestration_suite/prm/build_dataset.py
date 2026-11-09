@@ -23,7 +23,7 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from metrics import evaluate  # noqa: E402
+from prm_metrics import evaluate  # noqa: E402
 
 STR_LIMIT = 700       # characters kept per string value in the state
 STATE_LIMIT = 14000   # characters of state JSON per row (~4k tokens)
