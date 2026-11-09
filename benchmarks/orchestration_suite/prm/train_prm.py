@@ -103,7 +103,7 @@ def main():
     args = TrainingArguments(
         output_dir=a.output_dir, per_device_train_batch_size=a.micro_bs, per_device_eval_batch_size=1,
         gradient_accumulation_steps=a.grad_accum, num_train_epochs=a.epochs, max_steps=a.max_steps,
-        learning_rate=a.lr, lr_scheduler_type="cosine", warmup_ratio=0.03, bf16=True, gradient_checkpointing=True,
+        learning_rate=a.lr, lr_scheduler_type="cosine", warmup_steps=0.03, bf16=True, gradient_checkpointing=True,
         deepspeed=a.deepspeed, logging_steps=5, save_strategy="steps", save_steps=a.save_steps, save_total_limit=2,
         save_only_model=True, report_to=[], remove_unused_columns=False, dataloader_num_workers=2, seed=a.seed,
         prediction_loss_only=False)
