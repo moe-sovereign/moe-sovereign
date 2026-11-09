@@ -119,8 +119,8 @@ class Client:
             raise RuntimeError("research thread id not honoured: is RESEARCH_ROUTES_ENABLED set on the stack?")
         return data["choices"][0]["message"]["content"], "answer", data.get("usage", {})
 
-    async def history(self, thread: str):
-        r = await self.http.get(f"{self.api}/v1/admin/research/threads/{thread}/history", params={"keys": STATE_KEYS}, headers=self.admin_h)
+    async def history(self, thread: str, keys: str = STATE_KEYS):
+        r = await self.http.get(f"{self.api}/v1/admin/research/threads/{thread}/history", params={"keys": keys}, headers=self.admin_h)
         r.raise_for_status()
         return r.json()["checkpoints"]
 
@@ -141,18 +141,23 @@ class Client:
 async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
     async with sem:
         lang = task["lang"]
-        prompt = (task.get("prompts_inline") or task["prompts"])[lang] if a.inline else task["prompts"][lang]
+        # ablation tasks name their arm; for those the arm decides whether the data is in the prompt
+        inline = task["arm"] == "inline" if "arm" in task else a.inline
+        prompt = (task.get("prompts_inline") or task["prompts"])[lang] if inline else task["prompts"][lang]
         thread = f"research-{task['id'][-12:]}-{uuid.uuid4().hex[:8]}"
         ref, tol = task["final"]["ref"], task["final"]["tol"]
-        rec = {"task_id": task["id"], "family": task["family"], "lang": lang, "thread": thread, "template": a.template,
+        rec = {"task_id": task["id"], "family": task["family"], "arm": task.get("arm"), "lang": lang, "thread": thread, "template": a.template,
                "started": time.time(), "base": None, "decision_points": [], "errors": []}
         try:
             t0 = time.monotonic()
             answer, outcome, usage = await cli.episode(a.template, prompt, thread, a.temperature)
             rec["base"] = {"answer": answer, "outcome": outcome, "correct": correct(answer, ref, tol, lang), "usage": usage,
                            "seconds": time.monotonic() - t0}
-            hist = await cli.history(thread)
-            base_cps = [c for c in hist if set(c["next"]) & DECISION_NODES]
+            extra = getattr(a, "capture", "")
+            hist = await cli.history(thread, STATE_KEYS + ("," + extra if extra else ""))
+            if extra and hist:
+                rec["captured"] = {k: hist[0]["values"].get(k) for k in extra.split(",")}  # newest checkpoint = end state
+            base_cps = [c for c in hist if set(c["next"]) & DECISION_NODES] if a.forks else []
             for cp in reversed(base_cps):  # chronological order
                 point = {"checkpoint_id": cp["checkpoint_id"], "step": cp["step"], "next": cp["next"], "state": cp["values"], "forks": []}
                 for _ in range(a.forks):
@@ -178,6 +183,7 @@ async def main(a):
     if a.families:
         tasks = [t for t in tasks if t["family"] in a.families.split(",")]
     tasks = tasks[a.offset:a.offset + a.n] if a.n else tasks[a.offset:]
+    tasks = tasks * a.repeats
     cli = Client(a.api, open(a.key_file).read().strip(), os.environ["SYSTEM_API_KEY"], a.timeout)
     sem = asyncio.Semaphore(a.concurrency)
     t0 = time.monotonic()
@@ -208,5 +214,7 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=0)
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--families", default="")
+    ap.add_argument("--repeats", type=int, default=1, help="run every task this many times (own thread each)")
+    ap.add_argument("--capture", default="", help="extra state keys to keep from the end state, e.g. graph_context")
     ap.add_argument("--inline", action=argparse.BooleanOptionalAction, default=True)
     asyncio.run(main(ap.parse_args()))
