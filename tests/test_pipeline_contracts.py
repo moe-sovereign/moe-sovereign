@@ -896,3 +896,25 @@ def test_prune_artificial_dependencies_preserves_task_result_ref():
     pruned, repairs = prune_artificial_dependencies(tasks)
     assert pruned[1]["depends_on"] == "task-1"
     assert repairs == []
+
+
+CALC_SCHEMA = {"calculate": {"required": ["expression"], "args": {}}}
+
+
+def _calc(expression):
+    return validate_plan_tasks(
+        [{"task": "Compute", "category": "precision_tools", "mcp_tool": "calculate", "mcp_args": {"expression": expression}}],
+        CALC_SCHEMA,
+    )
+
+
+def test_calculate_rejects_planner_placeholders_and_unknown_names():
+    for bad in ("sum([depot_capacity_1, depot_capacity_2, ...]) * 1.07",   # smoke 23572488: unknown function, placeholders
+                "(Shorebfb910+Roof63a317+Field100824)*1.19",                # variables named after task entities
+                "((20+22+16+15)*1.19)}"):                                   # stray bracket
+        assert [i.code for i in _calc(bad)] == ["unevaluable_calculate_expression"], bad
+
+
+def test_calculate_accepts_what_the_tool_evaluates():
+    for good in ("47+53", "(739+583+257+321)*1.19", "15% of 239.99", "sqrt(2) * pi", "factorial(5)/e", "2^10", "100 * (1 + 19/100)"):
+        assert _calc(good) == [], good

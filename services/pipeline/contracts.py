@@ -120,6 +120,38 @@ def resolve_task_result_refs(
     return resolved
 
 
+# Names the MCP `calculate` tool evaluates (mcp_server/server.py _SAFE_FUNCS and _SAFE_CONSTS) plus the words of "15% of X".
+_CALCULATE_KNOWN_NAMES = frozenset({
+    "sqrt", "abs", "round", "sin", "cos", "tan", "asin", "acos", "atan", "log", "log10", "log2", "exp", "floor", "ceil",
+    "factorial", "pi", "e", "tau", "inf", "of", "von",
+})
+
+
+def calculate_expression_problem(expression: Any) -> str | None:
+    """Why a planner-written `calculate` expression cannot be evaluated, or None.
+
+    Small planners write placeholders (`depot_capacity_1`, `...`), unknown functions (`sum(...)`), variables named after
+    task entities or stray brackets. The tool then fails and the pipeline ends without an answer (GraphRAG ablation
+    smoke 23572488: every graph-arm episode blocked although the right facts were retrieved). Catching it at the plan
+    contract lets the planner retry with a concrete message instead of reaching the tool with an expression that cannot work.
+    """
+    if not isinstance(expression, str) or not expression.strip():
+        return "expression must be a non-empty string"
+    text = expression.strip()
+    if "..." in text or "\u2026" in text:
+        return "expression contains a placeholder ('...'); write the concrete numbers"
+    if any(ch in text for ch in "{}[]"):
+        return "expression contains brackets other than parentheses"
+    unknown = sorted({m for m in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text) if m.lower() not in _CALCULATE_KNOWN_NAMES})
+    if unknown:
+        return (
+            "expression uses names the calculator does not know: " + ", ".join(unknown[:4])
+            + "; use literal numbers from the task data (or another tool if the numbers are not in the request)"
+        )
+    return None
+
+
+
 def _find_task_result_ref_ids(args: Mapping[str, Any]) -> list[str]:
     """Collect every ``$task_result`` reference's task id inside ``args``."""
     ids: list[str] = []
@@ -1664,6 +1696,11 @@ def validate_plan_tasks(
                     "mcp_args",
                 )
             )
+
+        if tool == "calculate" and "expression" in args:
+            problem = calculate_expression_problem(args.get("expression"))
+            if problem:
+                issues.append(PlannerContractIssue(index, "unevaluable_calculate_expression", problem, "mcp_args"))
 
         for ref_task_id in _find_task_result_ref_ids(args):
             if ref_task_id == task.get("id"):
