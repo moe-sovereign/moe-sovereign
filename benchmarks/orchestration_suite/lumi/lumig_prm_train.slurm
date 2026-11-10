@@ -51,5 +51,5 @@ srun --ntasks-per-node=1 singularity exec --bind "$S:$S" --env "$ENVS" "$SIF" \
       $P/app/train_prm.py --base-model '$MODEL' --data-dir '$DATA' --output-dir '$OUT' \
       --deepspeed $P/app/ds_zero3_prm.json \
       --epochs ${EPOCHS:-2} --lr ${LR:-5e-6} --grad-accum ${GRAD_ACCUM:-4} --max-len ${MAX_LEN:-5120} \
-      --max-steps ${MAX_STEPS:--1} --max-train-rows ${MAX_TRAIN_ROWS:-0} --max-eval-rows ${MAX_EVAL_ROWS:-0} --save-steps ${SAVE_STEPS:-200}"
+      --max-steps ${MAX_STEPS:--1} --max-train-rows ${MAX_TRAIN_ROWS:-0} --max-eval-rows ${MAX_EVAL_ROWS:-0} --save-steps ${SAVE_STEPS:-100} --seed ${SEED:-1}"
 echo "done: $OUT"

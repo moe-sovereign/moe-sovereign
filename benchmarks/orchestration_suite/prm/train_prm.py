@@ -130,6 +130,11 @@ def main():
     if trainer.is_world_process_zero():
         json.dump(report, open(os.path.join(a.output_dir, "eval.json"), "w"), indent=1)
         print(json.dumps(report, indent=1))
+    # all outputs are on disk; leaving through the OFI teardown hung until the walltime (smoke 23562153, state TIMEOUT)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    torch.distributed.barrier()
+    os._exit(0)
 
 
 if __name__ == "__main__":

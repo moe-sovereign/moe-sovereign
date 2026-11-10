@@ -30,6 +30,14 @@ def retrieved(rec: dict, entities: list[str]) -> bool:
     return bool(ctx) and any(e in ctx for e in entities)
 
 
+def holds_answer(rec: dict, task: dict) -> bool:
+    """Arithmetic-free tasks only: the stored number itself is in the retrieved context (checks the channel, not the model)."""
+    if task["family"] not in ("lookup_val", "lookup_hop1"):
+        return False
+    ctx = (rec.get("captured") or {}).get("graph_context") or ""
+    return f"{int(task['final']['ref'])} " in ctx or f"{int(task['final']['ref'])}\n" in ctx or ctx.endswith(str(int(task["final"]["ref"])))
+
+
 def analyze(recs: list[dict], tasks: dict, boot: int = 2000, seed: int = 0) -> dict:
     by_arm = defaultdict(list)
     per_base = defaultdict(lambda: defaultdict(list))
@@ -38,14 +46,14 @@ def analyze(recs: list[dict], tasks: dict, boot: int = 2000, seed: int = 0) -> d
         if not t or not r.get("base"):
             continue
         ok = bool(r["base"]["correct"])
-        by_arm[t["arm"]].append((ok, r["base"]["outcome"].split(":")[0], retrieved(r, t["entities"]), bool(r["base"].get("draft_correct"))))
+        by_arm[t["arm"]].append((ok, r["base"]["outcome"].split(":")[0], retrieved(r, t["entities"]), bool(r["base"].get("draft_correct")), holds_answer(r, t)))
         per_base[t["base"]][t["arm"]].append(ok)
     out = {"arms": {}, "paired": {}}
     for arm, rows in sorted(by_arm.items()):
         n, k = len(rows), sum(x[0] for x in rows)
         got = [x for x in rows if x[2]]
         out["arms"][arm] = {"episodes": n, "correct": round(k / n, 3), "ci95": wilson(k, n), "outcomes": dict(Counter(x[1] for x in rows)), "draft_correct": round(sum(x[3] for x in rows) / n, 3),
-                            "retrieved_share": round(len(got) / n, 3),
+                            "retrieved_share": round(len(got) / n, 3), "answer_in_context": round(sum(x[4] for x in rows) / n, 3),
                             "correct_given_retrieved": round(sum(x[0] for x in got) / len(got), 3) if got else None,
                             "correct_given_not_retrieved": round(sum(x[0] for x in rows if not x[2]) / max(1, n - len(got)), 3)}
     rnd = random.Random(seed)

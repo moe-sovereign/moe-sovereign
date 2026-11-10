@@ -15,7 +15,8 @@ def _load(name):
 
 
 gen, ana = _load("generate_lookup"), _load("analyze")
-TASKS = gen.generate(30, seed=3)
+TASKS = gen.generate(30, seed=3, kinds=("sum", "hop"))
+SIMPLE = gen.generate(30, seed=3)
 
 
 def test_each_base_task_has_all_arms_with_the_same_answer():
@@ -72,3 +73,24 @@ def test_analysis_reports_retrieval_and_paired_difference():
     assert res["arms"]["graph"]["correct"] == 1.0 and res["arms"]["empty"]["correct"] == 0.0
     assert res["arms"]["graph"]["retrieved_share"] == 1.0 and res["arms"]["empty"]["retrieved_share"] == 0.0
     assert res["paired"]["graph-empty"]["mean_diff"] == 1.0
+
+
+def test_arithmetic_free_kinds_ask_for_one_stored_number():
+    kinds = {t["family"] for t in SIMPLE}
+    assert kinds <= {"lookup_val", "lookup_hop1"} and len(kinds) == 2
+    for t in SIMPLE:
+        prompt = t["prompts"]["en"]
+        assert "%" not in prompt and "increased" not in prompt
+        if t["arm"] == "graph":
+            vals = {r["s"]: float(r["o"].split()[0]) for r in t["graph"]["relations"] if r["r"].startswith("HAS_")}
+            target = t["entities"][1] if t["family"] == "lookup_hop1" else t["entities"][0]
+            assert vals[target] == t["final"]["ref"]
+        if t["arm"] == "noisy":  # the stale duplicate belongs to the entity that carries the answer
+            assert any("(legacy record)" in e["name"] for e in t["graph"]["entities"])
+
+
+def test_answer_in_context_checks_the_channel():
+    t = next(x for x in SIMPLE if x["arm"] == "graph")
+    ref = int(t["final"]["ref"])
+    assert ana.holds_answer({"captured": {"graph_context": f"• X (Plant): HAS_YIELD {ref} kWh"}}, t)
+    assert not ana.holds_answer({"captured": {"graph_context": ""}}, t)

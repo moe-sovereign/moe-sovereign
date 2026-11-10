@@ -8,7 +8,11 @@ emitted once per arm, with arm-specific entity names so the arms never share gra
   empty  nothing in the graph, nothing in the prompt: the answer cannot be derived (hallucination / gate control)
   inline facts in the prompt, graph untouched: the reference of the earlier waves
 
-  generate_lookup.py --n 250 --seed 11 --out lookup_tasks.jsonl
+  generate_lookup.py --n 250 --seed 11 [--kinds val,hop1] --out lookup_tasks.jsonl
+
+Kinds: `val` and `hop1` ask for one stored number (no arithmetic), `sum` and `hop` add a percentage on top. The planner
+sends every calculation to the MCP `calculate` tool with invented expressions (smoke 23572488: all graph-arm episodes
+blocked although the graph context held the right values), so only the arithmetic-free kinds measure retrieval.
 """
 import argparse
 import hashlib
@@ -42,9 +46,16 @@ def fmt(x: float, lang: str) -> str:
     return s.replace(".", ",") if lang == "de" else s
 
 
-def base_task(rnd: random.Random, k: int, seed: int) -> dict:
+def base_task(rnd: random.Random, k: int, seed: int, kinds=("val", "hop1")) -> dict:
     v = rnd.choice(VOCABS)
-    kind = rnd.choice(["sum", "hop"])
+    kind = rnd.choice(list(kinds))
+    if kind in ("val", "hop1"):
+        n = 1 if kind == "val" else 2
+        stems = rnd.sample(v["stems"], n)
+        vals = [rnd.randint(40, 990) for _ in stems]
+        chosen = [0] if kind == "val" else [1]  # the entity whose value is asked for
+        return {"base": f"g{seed}-{k:04d}", "vocab": v["type"], "kind": kind, "stems": stems, "vals": vals, "pct": 0, "hub": 0, "chosen": chosen,
+                "ref": float(vals[chosen[0]]), "attr": v["attr"], "unit": v["unit"], "noun": {"en": v["en"], "de": v["de"]}}
     # query_context() renders at most two 2-hop facts per entity, so a hub is only solvable with two neighbours
     n = 3 if kind == "hop" else rnd.randint(3, 5)
     stems = rnd.sample(v["stems"], n)
@@ -71,7 +82,12 @@ def names_for(b: dict, arm: str) -> list[str]:
 
 def prompt(b: dict, names: list[str], lang: str, with_data: bool) -> str:
     attr, plural = b["noun"][lang]
-    if b["kind"] == "sum":
+    if b["kind"] == "val":
+        q = {"en": f"What is the {attr} of {names[0]}? Give the number only.", "de": f"Nenne {attr} von {names[0]}. Nur die Zahl."}[lang]
+    elif b["kind"] == "hop1":
+        q = {"en": f"What is the {attr} of the one that {names[b['hub']]} is connected to? Give the number only.",
+             "de": f"Nenne {attr} dessen, mit dem {names[b['hub']]} verbunden ist. Nur die Zahl."}[lang]
+    elif b["kind"] == "sum":
         listed = ", ".join(names[:-1]) + (" und " if lang == "de" else " and ") + names[-1]
         q = {"en": f"What is the total {attr} of the {plural} {listed}, increased by {b['pct']} %? Result to two decimal places?",
              "de": f"Wie hoch ist die Summe von {attr} der {plural} {listed}, erhöht um {b['pct']} %? Ergebnis auf zwei Nachkommastellen?"}[lang]
@@ -81,7 +97,7 @@ def prompt(b: dict, names: list[str], lang: str, with_data: bool) -> str:
     if not with_data:
         return q + SUFFIX[lang]
     rows = [f"{n}: {b['vals'][i]} {b['unit']}" for i, n in enumerate(names)]
-    links = [f"{names[b['hub']]} -- {names[i]}" for i in b["chosen"]] if b["kind"] == "hop" else []
+    links = [f"{names[b['hub']]} -- {names[i]}" for i in b["chosen"]] if b["kind"] in ("hop", "hop1") else []
     head = {"en": "Data for this request:", "de": "Daten zu dieser Anfrage:"}[lang]
     body = "\n".join(rows + links)
     return f"{q}\n\n{head}\n```text\n{body}\n```" + SUFFIX[lang]
@@ -95,10 +111,12 @@ def facts(b: dict, names: list[str], noisy: bool, rnd: random.Random) -> dict:
         val = f"{b['vals'][i]} {b['unit']}"
         ents.append({"name": val, "type": "Value"})
         rels.append({"s": n, "r": b["attr"], "o": val, "conf": 0.9})
-    if b["kind"] == "hop":
+    if b["kind"] in ("hop", "hop1"):
         rels += [{"s": names[b["hub"]], "r": "CONNECTED_TO", "o": names[i], "conf": 0.9} for i in b["chosen"]]
     if noisy:
-        for i, n in enumerate(names[: 2 if b["kind"] == "sum" else 1]):  # stale duplicates that still contain the entity name
+        stale = b["chosen"][:1] if b["kind"] in ("val", "hop1") else list(range(2 if b["kind"] == "sum" else 1))
+        for i in stale:  # stale duplicates that still contain the entity name
+            n = names[i]
             old = f"{n} (legacy record)"
             wrong = f"{max(1, b['vals'][i] + rnd.choice([-1, 1]) * rnd.randint(20, 200))} {b['unit']}"
             ents += [{"name": old, "type": b["vocab"]}, {"name": wrong, "type": "Value"}]
@@ -106,12 +124,12 @@ def facts(b: dict, names: list[str], noisy: bool, rnd: random.Random) -> dict:
     return {"entities": ents, "relations": rels}
 
 
-def generate(n: int, seed: int, de_share: float = 0.3) -> list[dict]:
+def generate(n: int, seed: int, de_share: float = 0.3, kinds=("val", "hop1")) -> list[dict]:
     rnd = random.Random(f"lookup-{seed}")
     lang_rnd = random.Random(f"lookup-lang-{seed}")
     out = []
     for k in range(n):
-        b = base_task(rnd, k, seed)
+        b = base_task(rnd, k, seed, kinds)
         lang = "de" if lang_rnd.random() < de_share else "en"
         for arm in ARMS:
             names = names_for(b, arm)
@@ -138,9 +156,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--n", type=int, default=250)
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--kinds", default="val,hop1", help="comma list of val, hop1, sum, hop")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    tasks = generate(a.n, a.seed)
+    tasks = generate(a.n, a.seed, kinds=tuple(a.kinds.split(",")))
     with open(a.out, "w", encoding="utf-8") as f:
         for t in tasks:
             f.write(json.dumps(t, ensure_ascii=False) + "\n")
