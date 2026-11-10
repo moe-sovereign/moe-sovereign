@@ -54,9 +54,9 @@ Splitgrößen von `data_ood` / `data_all`, Ablageort der Dateien.
 ### 4.2 Orchestrierungs-Prozess-Belohnungsmodell
 | Punkt | Wert |
 |---|---|
-| Zu schlagende Referenz (Trainingsmittel je Familie und Knoten, `test_iid`) | AUROC 0,70, paarweise innerhalb der Aufgabe 0,49 |
+| Referenzen (`test_iid`) | Familie/Knoten-Mittel: AUROC 0,71, paarweise innerhalb der Aufgabe 0,51; **Textreferenz (TF-IDF + Ridge): AUROC 0,88, paarweise 0,58** (test_ood 0,60). Das PRM muss die Textreferenz schlagen |
 | 7B-Smoke (1 Knoten), 32B-Smoke (4 Knoten) | Trainer läuft durch; 32B ≈ 2,4 Beispiele/s auf 32 Rängen |
-| 32B-Läufe `prm32b_ood` (23603688), `prm32b_all` (23603689) | **zu ergänzen:** Endmetriken aus `eval.json` (AUROC, Brier, Spearman, paarweise innerhalb der Aufgabe auf `test_iid` und `test_ood`), Seeds, Laufzeit, Karten-h |
+| 7B-Seeds, danach 32B nur bei Signal (die beiden 32B-Jobs 23603688/89 wurden abgesagt, solange sie PENDING waren) | **zu ergänzen:** Endmetriken aus `eval.json` (AUROC, Brier, Spearman, paarweise innerhalb der Aufgabe auf `test_iid` und `test_ood`), Seeds, Laufzeit, Karten-h |
 | Urteil | **zu ergänzen:** Schlägt das PRM die Familien-/Knoten-Referenz innerhalb der Aufgabe und auf der zurückgehaltenen Domäne? Auch ein Nein wird so festgehalten |
 
 Übertrifft die paarweise Genauigkeit innerhalb der Aufgabe die Referenz nicht um mehr als die Streuung über Seeds, steht im

@@ -54,9 +54,9 @@ episodes, 52,769 decision points, 24.1 % with signal). **To complete:** final to
 ### 4.2 Orchestration process-reward model
 | Item | Value |
 |---|---|
-| Baseline to beat (train mean per family and node, `test_iid`) | AUROC 0.70, within-task pairwise 0.49 |
+| Baselines (`test_iid`) | family/node mean: AUROC 0.71, within-task pairwise 0.51; **text baseline (TF-IDF + ridge): AUROC 0.88, within-task pairwise 0.58** (test_ood 0.60). The PRM has to beat the text baseline |
 | 7B smoke (1 node), 32B smoke (4 nodes) | trainer works end to end; 32B ≈ 2.4 samples/s on 32 ranks |
-| 32B runs `prm32b_ood` (23603688), `prm32b_all` (23603689) | **to complete:** final metrics from `eval.json` (AUROC, Brier, Spearman, within-task pairwise on `test_iid` and `test_ood`), seeds, wall time, card-hours |
+| 7B seeds, then 32B only on signal (the two 32B jobs 23603688/89 were cancelled while pending) | **to complete:** final metrics from `eval.json` (AUROC, Brier, Spearman, within-task pairwise on `test_iid` and `test_ood`), seeds, wall time, card-hours |
 | Verdict | **to complete:** does the PRM beat the family/node baseline within-task and on the held-out domain? State the answer even if it is no |
 
 If the within-task pairwise accuracy does not exceed the baseline by more than the spread across seeds, the report says that
