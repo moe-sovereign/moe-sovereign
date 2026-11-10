@@ -139,6 +139,7 @@ nav:
     - Hardware: system/hardware.md
     - LUMI-G Training Paper: system/lumi_training_paper.md
     - LUMI-G Activity Log: system/lumi_activity_log.md
+    - LUMI-G Final Report (draft): system/lumi_final_report.md
     - Tool Stack:
       - system/toolstack/index.md
       - LangGraph: system/toolstack/langgraph.md
@@ -189,6 +190,7 @@ nav:
     - Import & Export: reference/de/import-export.md
     - LUMI-G Trainingsbericht: system/de/lumi_training_paper.md
     - LUMI-G-Aktivitätslogbuch: system/de/lumi_activity_log.md
+    - LUMI-G-Abschlussbericht (Entwurf): system/de/lumi_final_report.md
   - Publications: publications.md
   - Changelog: changelog.md
   - Legal:
