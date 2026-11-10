@@ -432,7 +432,7 @@ async def planner_node(state_: AgentState):
     # Include chat_history presence in key: same query needs different plan
     # in conversation context (memory_recall) vs. standalone (research).
     _has_history = "h" if len(state_.get("chat_history") or []) >= 2 else "n"
-    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'][:300].encode()).hexdigest()[:16]}"
+    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'].encode()).hexdigest()[:16]}"  # whole input: a 300-character prefix served one request's plan to another that differs only later (long prompts with data)
     if state.redis_client is not None and not _is_agentic_replan and not _no_cache_flag:
         try:
             _cached_plan_raw = await state.redis_client.get(_plan_cache_key)
