@@ -107,6 +107,8 @@ async def fork(graph, thread_id: str, checkpoint_id: str, overrides: dict, timeo
         "forked_from": checkpoint_id,
         "final_checkpoint_id": final.config["configurable"].get("checkpoint_id") if final else None,
         "final_response": (result or {}).get("final_response", ""),
+        # the plan this branch executed: the planner's choice is what a planner preference pair compares
+        "plan": _jsonable(getattr(final, "values", {}).get("plan")) if final else None,
         # quality-gate outcome: a HITL gate keeps the draft in the gate store (final_response stays empty)
         **{k: (result or {}).get(k) for k in OUTCOME_KEYS},
         "pipeline_error": pipeline_error,

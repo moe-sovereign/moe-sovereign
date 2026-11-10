@@ -91,3 +91,9 @@ def test_timeouts_are_logged_with_their_type():
         raise httpx.ReadTimeout("")
     rec, _ = run(chat, [])
     assert rec["errors"] == ["episode: ReadTimeout: "]
+
+
+def test_fork_records_keep_the_executed_plan():
+    rec, _ = run(lambda t: (200, {"moe_thread_id": t, "choices": [{"message": {"content": "= 42"}}]}),
+                 [fork("42", plan=[{"task": "a"}]), fork("41", plan=[{"task": "b"}])])
+    assert [f["plan"] for p in rec["decision_points"] for f in p["forks"]] == [[{"task": "a"}], [{"task": "b"}]]

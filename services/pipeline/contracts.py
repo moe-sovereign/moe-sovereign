@@ -1697,7 +1697,7 @@ def validate_plan_tasks(
                 )
             )
 
-        if tool == "calculate" and "expression" in args:
+        if tool == "calculate" and "expression" in args and os.getenv("PLANNER_CALC_EXPRESSION_CHECK", "1") != "0":
             problem = calculate_expression_problem(args.get("expression"))
             if problem:
                 issues.append(PlannerContractIssue(index, "unevaluable_calculate_expression", problem, "mcp_args"))

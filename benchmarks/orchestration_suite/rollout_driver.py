@@ -179,14 +179,15 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                 rec["base"]["draft_correct"] = bool(draft) and score(draft, final, lang)
             if extra and hist:
                 rec["captured"] = {k: hist[0]["values"].get(k) for k in extra.split(",")}  # newest checkpoint = end state
-            base_cps = [c for c in hist if set(c["next"]) & DECISION_NODES] if a.forks else []
+            nodes = set(a.fork_nodes.split(",")) if getattr(a, "fork_nodes", "") else DECISION_NODES  # a planner-only wave forks just the planning step
+            base_cps = [c for c in hist if set(c["next"]) & nodes] if a.forks else []
             for cp in reversed(base_cps):  # chronological order
                 point = {"checkpoint_id": cp["checkpoint_id"], "step": cp["step"], "next": cp["next"], "state": cp["values"], "forks": []}
                 for _ in range(a.forks):
                     try:
                         answer, outcome, f = await cli.fork(thread, cp["checkpoint_id"], a.temperature)
                         point["forks"].append({"answer": answer, "outcome": outcome, "correct": score(answer, final, lang),
-                                               "final_checkpoint_id": f["final_checkpoint_id"]})
+                                               "final_checkpoint_id": f["final_checkpoint_id"], "plan": f.get("plan")})
                     except (httpx.HTTPError, KeyError) as exc:
                         rec["errors"].append(f"fork {cp['checkpoint_id']}: {_err(exc)[:200]}")
                 ok = [x["correct"] for x in point["forks"]]
@@ -230,6 +231,7 @@ if __name__ == "__main__":
     ap.add_argument("--template", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--forks", type=int, default=4)
+    ap.add_argument("--fork-nodes", default="", help="comma list of nodes to fork at (default: all decision nodes), e.g. planner")
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--timeout", type=float, default=1800)

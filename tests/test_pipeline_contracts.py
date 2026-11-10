@@ -918,3 +918,8 @@ def test_calculate_rejects_planner_placeholders_and_unknown_names():
 def test_calculate_accepts_what_the_tool_evaluates():
     for good in ("47+53", "(739+583+257+321)*1.19", "15% of 239.99", "sqrt(2) * pi", "factorial(5)/e", "2^10", "100 * (1 + 19/100)"):
         assert _calc(good) == [], good
+
+
+def test_calculate_check_can_be_switched_off_for_policy_sampling(monkeypatch):
+    monkeypatch.setenv("PLANNER_CALC_EXPRESSION_CHECK", "0")  # preference-pair collection wants the planner's own mistakes
+    assert _calc("sum([a_1, ...]) * 1.07") == []

@@ -29,7 +29,7 @@ class FakeGraph:
     async def aget_state(self, config):
         cid = config["configurable"].get("checkpoint_id")
         if cid is None:
-            return SimpleNamespace(config={"configurable": {"checkpoint_id": "c3"}}, values={"final_response": "done"})
+            return SimpleNamespace(config={"configurable": {"checkpoint_id": "c3"}}, values={"final_response": "done", "plan": [{"task": "forked"}]})
         return next((s for s in self.snaps if s.config["configurable"]["checkpoint_id"] == cid), None)
 
     async def aupdate_state(self, config, values):
@@ -80,7 +80,7 @@ def test_fork_resumes_from_checkpoint_without_new_input():
     out = asyncio.run(R.fork(g, TID, "c1", {}, 5.0, True))
     assert g.invocations == [(None, {"configurable": {"thread_id": TID, "checkpoint_id": "c1"}})]
     assert out == {"thread_id": TID, "forked_from": "c1", "final_checkpoint_id": "c3", "final_response": "forked answer",
-                   **{k: None for k in R.OUTCOME_KEYS}, "pipeline_error": None}
+                   "plan": [{"task": "forked"}], **{k: None for k in R.OUTCOME_KEYS}, "pipeline_error": None}
 
 
 def test_fork_reports_quality_gate_outcome():
