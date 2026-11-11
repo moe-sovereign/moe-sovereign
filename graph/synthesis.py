@@ -14,6 +14,7 @@ import httpx
 
 import state
 from config import (
+    RESEARCH_ROUTES_ENABLED,
     MODES, _MODEL_ID_TO_MODE, EXPERTS, EXPERT_TIMEOUT, JUDGE_TIMEOUT,
     PLANNER_TIMEOUT, MAX_EXPERT_OUTPUT_CHARS, JUDGE_MODEL,
     HISTORY_MAX_TURNS, HISTORY_MAX_CHARS,
@@ -2633,6 +2634,8 @@ async def quality_gate_node(state_: AgentState):
             "quality_block_reason": decision.reason,
             "cynefin_domain": decision.cynefin_domain,
             "quality_gate_status": "blocked",
+            # the withheld draft never leaves the pipeline; research forks score it to separate answer quality from the gate verdict
+            **({"quality_blocked_draft": final_response} if RESEARCH_ROUTES_ENABLED else {}),
         }
 
     if decision.action == "pass":

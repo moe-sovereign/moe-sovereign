@@ -24,7 +24,7 @@ import uuid
 import httpx
 
 DECISION_NODES = {"planner", "workers", "merger", "self_critique", "critic", "resolve_conflicts", "thinking"}
-STATE_KEYS = "plan,expert_results,final_response"
+STATE_KEYS = "plan,expert_results,final_response,quality_blocked_draft,trust_score,trust_verdict"
 _NUM = re.compile(r"-?\d[\d.,']*\d|-?\d")
 
 
@@ -174,8 +174,10 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
             extra = getattr(a, "capture", "")
             hist = await cli.history(thread, STATE_KEYS + ("," + extra if extra else ""))
             if hist:  # the draft before the quality gate: a blocked episode still has a final_response in its end state
-                draft = hist[0]["values"].get("final_response") or ""
+                # a block clears final_response; with research routes on the withheld draft sits in quality_blocked_draft
+                draft = hist[0]["values"].get("final_response") or hist[0]["values"].get("quality_blocked_draft") or ""
                 rec["base"]["draft"] = draft
+                rec["base"]["trust"] = {"score": hist[0]["values"].get("trust_score"), "verdict": hist[0]["values"].get("trust_verdict")}
                 rec["base"]["draft_correct"] = bool(draft) and score(draft, final, lang)
             if extra and hist:
                 rec["captured"] = {k: hist[0]["values"].get(k) for k in extra.split(",")}  # newest checkpoint = end state
@@ -186,12 +188,16 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
                 for _ in range(a.forks):
                     try:
                         answer, outcome, f = await cli.fork(thread, cp["checkpoint_id"], a.temperature)
+                        draft = answer or f.get("quality_blocked_draft") or ""  # answer = what left the gate; the draft also exists for blocked forks
                         point["forks"].append({"answer": answer, "outcome": outcome, "correct": score(answer, final, lang),
+                                               "draft": draft, "draft_correct": bool(draft) and score(draft, final, lang),
                                                "final_checkpoint_id": f["final_checkpoint_id"], "plan": f.get("plan")})
                     except (httpx.HTTPError, KeyError) as exc:
                         rec["errors"].append(f"fork {cp['checkpoint_id']}: {_err(exc)[:200]}")
                 ok = [x["correct"] for x in point["forks"]]
                 point["value"] = sum(ok) / len(ok) if ok else None
+                dk = [x["draft_correct"] for x in point["forks"]]  # gate-free label: did the branch produce the right number
+                point["value_draft"] = sum(dk) / len(dk) if dk else None
                 rec["decision_points"].append(point)
         except (httpx.HTTPError, RuntimeError, KeyError) as exc:
             rec["errors"].append(f"episode: {_err(exc)[:300]}")

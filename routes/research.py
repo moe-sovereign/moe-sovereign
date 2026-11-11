@@ -26,7 +26,7 @@ router = APIRouter(prefix="/v1/admin/research", dependencies=[Depends(require_ad
 # State keys a fork may override before resuming. Kept narrow on purpose: forks should differ
 # by sampling, not by arbitrary state surgery.
 FORK_OVERRIDES = {"query_temperature"}
-OUTCOME_KEYS = ("quality_blocked", "quality_block_reason", "quality_gate_status", "hitl_gate_id", "hitl_gate_reason")
+OUTCOME_KEYS = ("quality_blocked_draft", "quality_blocked", "quality_block_reason", "quality_gate_status", "hitl_gate_id", "hitl_gate_reason")
 # Forks of one thread are serialized: the final checkpoint of a fork is read as the thread's
 # latest checkpoint, which is only unambiguous when no other branch of that thread is running.
 _thread_locks: dict[str, asyncio.Lock] = {}

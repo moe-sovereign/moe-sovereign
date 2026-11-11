@@ -213,6 +213,7 @@ class AgentState(TypedDict):
     quality_block_reason: str           # Stable reason for the HTTP/SSE control response
     candidate_status: str               # normal|degraded|unavailable
     candidate_reason: str               # Why a validated degraded candidate was selected
+    quality_blocked_draft: str          # research only (RESEARCH_ROUTES_ENABLED): the draft a block withheld, so label and gate verdict can be scored apart
     quality_gate_status: str            # passed|blocked|pending; sole commit router authority
     response_commit_context: dict       # Deferred synthesis/learning inputs, never written pre-gate
     response_commit_status: str         # complete|partial|reused|skipped|blocked

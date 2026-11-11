@@ -97,3 +97,14 @@ def test_fork_records_keep_the_executed_plan():
     rec, _ = run(lambda t: (200, {"moe_thread_id": t, "choices": [{"message": {"content": "= 42"}}]}),
                  [fork("42", plan=[{"task": "a"}]), fork("41", plan=[{"task": "b"}])])
     assert [f["plan"] for p in rec["decision_points"] for f in p["forks"]] == [[{"task": "a"}], [{"task": "b"}]]
+
+
+def test_blocked_forks_keep_the_withheld_draft_as_a_gate_free_label():
+    blocked = {"error": {"type": "quality_blocked", "code": "trust_score_block"}}
+    rec, _ = run(lambda t: (422, blocked),
+                 [fork(quality_blocked=True, quality_block_reason="trust_score_block", quality_blocked_draft="42"),
+                  fork(quality_blocked=True, quality_block_reason="trust_score_block", quality_blocked_draft="7")])
+    first, second = (p["forks"][0] for p in rec["decision_points"])
+    assert not first["correct"] and first["draft_correct"] and first["outcome"].startswith("blocked")
+    assert not second["draft_correct"]
+    assert [p["value"] for p in rec["decision_points"]] == [0.0, 0.0] and [p["value_draft"] for p in rec["decision_points"]] == [1.0, 0.0]
