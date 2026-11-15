@@ -35,7 +35,7 @@ jsonschema-specifications==2025.9.1
 lxml==6.1.1
 Markdown==3.10.2
 markdown-it-py==4.2.0
-mcp==1.28.1
+mcp==1.30.0
 mdurl==0.1.2
 minio==7.2.20
 mpmath==1.4.1
