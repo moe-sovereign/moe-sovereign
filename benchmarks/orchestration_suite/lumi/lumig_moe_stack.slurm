@@ -166,6 +166,14 @@ wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
         wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}" || log "WATCHDOG: restart $n failed"
     done
 ) &
+if [ "${DIRECT_ONLY:-0}" = "1" ]; then   # control run: both judge replicas answer the tasks alone (same weights as the workflow's judge)
+    wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
+    wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
+    SX --bind "$R/app:/app" --pwd /app "$R/sif/moe-sovereign-orchestrator_local.sif" python3 benchmarks/orchestration_suite/direct_baseline.py \
+        --tasks "$R/$TASKS" --urls http://127.0.0.1:8101,http://127.0.0.1:8111 --model "$JUDGE" --label "${LABEL:-judge32b}" \
+        --offset "${OFFSET:-0}" --n "${N:-0}" --repeats "${REPEATS:-1}" --concurrency "${CONC:-32}" --out "$RUN/rollouts.jsonl" | tee "$RUN/driver_summary.json"
+    exit 0
+fi
 port=8103; i=0
 for role in omni research security governance datainfra coder precision graphrag; do
     gcd=$((3 + i / 3))
