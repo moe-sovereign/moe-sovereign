@@ -65,6 +65,7 @@ EOF
 if [ -n "${EXTRA_STACK_ENV:-}" ]; then   # e.g. EXTRA_STACK_ENV="PLANNER_CALC_EXPRESSION_CHECK=0;FOO=1" (';' because sbatch --export splits on commas)
   printf '%s\n' ${EXTRA_STACK_ENV//;/ } >> "$RUN/stack.env"
 fi
+echo "PLANNER_RUNTIME_FALLBACK=${PLANNER_RUNTIME_FALLBACK:-0}" >> "$RUN/stack.env"   # research: a dead planner fails the episode instead of a one-task plan
 if [ "${FORCE_GRAPHRAG:-0}" = "1" ]; then printf 'FUZZY_GRAPH_THRESHOLD=0\nROUTING_BANDIT_ENABLED=false\n' >> "$RUN/stack.env"; fi
 umask 022
 
@@ -117,7 +118,7 @@ VS="$SCRATCH/lumi-multitorch-latest.sif"
 VENV="PYTHONPATH=$SCRATCH/.user_site,HF_HOME=$SCRATCH/cache/huggingface,XDG_CACHE_HOME=$SCRATCH/cache,TRITON_CACHE_DIR=$SCRATCH/cache/triton,TMPDIR=$SCRATCH/tmp,HF_HUB_OFFLINE=1"
 SHIM_CFG="$RUN/shim.json"; SHIM_ROWS="$RUN/shim_rows.tsv"; : > "$SHIM_ROWS"; declare -A VPID
 serve() {  # name gcds port path max_len mem_util tp family size
-    local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9 ov=()
+    local name=$1 gcds=$2 port=$3 path=$4 len=$5 util=$6 tp=$7 fam=$8 size=$9 ov=() xtra=(${VLLM_XTRA:-})
     # transformers 5 nests rope_parameters per layer type (OLMo-3); vLLM's olmo2.py expects the flat full-attention
     # dict and derives the sliding layers itself (default rope, same theta) -> pass that dict as override
     local flat; flat=$(python3 - "$path/config.json" <<'PY'
@@ -136,9 +137,9 @@ PY
     # ROCR only: HIP indices are renumbered after ROCR filtering, so HIP_VISIBLE_DEVICES=2 on top would hide the GCD
     bg "vllm_$port" env -u HIP_VISIBLE_DEVICES -u CUDA_VISIBLE_DEVICES ROCR_VISIBLE_DEVICES="$gcds" singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
         python3 -m vllm.entrypoints.openai.api_server --model "$path" --served-model-name "$name" --host 127.0.0.1 --port "$port" \
-        --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16 "${ov[@]}"
+        --max-model-len "$len" --gpu-memory-utilization "$util" --tensor-parallel-size "$tp" --dtype bfloat16 "${ov[@]}" "${xtra[@]}"
     VPID[$port]=$LASTPID
-    printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_ROWS"   # same name twice = replicas
+    [ -n "${SERVE_RESTART:-}" ] || printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$port" "$len" "$fam" "$size" >> "$SHIM_ROWS"   # same name twice = replicas; a restart keeps its row
 }
 E=hf.co/h3rb3rn
 # Two judge replicas (GCD pairs 0,1 and 6,7 = one MI250X card each): wave 2 (23522672-75) was judge-bound, with ~14 of
@@ -147,8 +148,24 @@ E=hf.co/h3rb3rn
 JUDGE="$E/sovereign-judge-olmo31-32b:Q4_K_M"
 serve "$JUDGE" 0,1 8101 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
 serve "$JUDGE" 6,7 8111 "$CK/merged_olmo31_32b_judge" 65536 0.90 2 olmo3 32B
-serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M"   2   8102 "$CK/merged_olmo3_7b_planner" 65536 0.90 1 olmo3 7B
+# The planner engine died in 8 of 11 jobs of waves 4/planner (vllm 0.20.1: "ValueError: Cannot get N free blocks from the pool" in the
+# hybrid KV cache manager of the sliding-window OLMo-3 layers, 1-2 h after start, then every request got a 500 and the
+# orchestrator fell back to a one-task plan). The hybrid manager is therefore off for the planner, concurrency is capped, and
+# a watchdog restarts the server if it ever exits.
+PLANNER_XTRA="${PLANNER_VLLM_XTRA---disable-hybrid-kv-cache-manager --max-num-seqs 16}"
+VLLM_XTRA="$PLANNER_XTRA" serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M"   2   8102 "$CK/merged_olmo3_7b_planner" 65536 0.90 1 olmo3 7B
 wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
+(
+    n=0
+    while sleep 30; do
+        curl -sf -m 10 http://127.0.0.1:8102/v1/models >/dev/null 2>&1 && continue
+        n=$((n + 1)); [ "$n" -gt 5 ] && { log "WATCHDOG: planner down for the 6th time, giving up"; break; }
+        log "WATCHDOG: planner server down, restart $n"
+        kill "${VPID[8102]}" 2>/dev/null; cp "$RUN/logs/vllm_8102.log" "$RUN/logs/vllm_8102.crash$n.log" 2>/dev/null
+        SERVE_RESTART=1 VLLM_XTRA="$PLANNER_XTRA" serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M" 2 8102 "$CK/merged_olmo3_7b_planner" 65536 0.90 1 olmo3 7B
+        wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}" || log "WATCHDOG: restart $n failed"
+    done
+) &
 port=8103; i=0
 for role in omni research security governance datainfra coder precision graphrag; do
     gcd=$((3 + i / 3))

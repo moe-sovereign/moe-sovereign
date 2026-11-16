@@ -1311,7 +1311,9 @@ JSON array:"""
                     "Planner structured failure cascade skipped: %s",
                     cascade_error,
                 )
-            if _is_contract_failure:
+            # PLANNER_RUNTIME_FALLBACK=0 (research stacks): an unreachable planner is an episode failure, not a one-task plan
+            # that looks like a successful answer and would be scored as the planner's own choice
+            if _is_contract_failure or os.getenv("PLANNER_RUNTIME_FALLBACK", "1") == "0":
                 # A malformed executable plan must not silently become a
                 # generic LLM task: that would make precision/research work
                 # disappear while returning an apparently successful answer.
