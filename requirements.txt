@@ -3,8 +3,8 @@ langchain>=1.3.9
 langchain-openai
 langchain-community
 langchain-chroma
-langgraph>=0.4.0
-langgraph-checkpoint-postgres>=3.1.1
+langgraph>=1.2.14
+langgraph-checkpoint-postgres>=3.1.3
 psycopg[binary,pool]>=3.2.0
 
 # --- API & Server ---
@@ -44,7 +44,7 @@ cryptography>=50.0.0
 
 # --- PDF generation & parsing ---
 weasyprint>=70.0
-pypdf>=6.19.0
+pypdf>=6.21.4
 
 # --- System Constitution enforcement ---
 pyyaml>=6.0
