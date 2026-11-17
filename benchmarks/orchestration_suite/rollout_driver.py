@@ -175,7 +175,8 @@ async def run_task(cli: Client, task: dict, a, sem: asyncio.Semaphore, out):
             hist = await cli.history(thread, STATE_KEYS + ("," + extra if extra else ""))
             if hist:  # the draft before the quality gate: a blocked episode still has a final_response in its end state
                 # a block clears final_response; with research routes on the withheld draft sits in quality_blocked_draft
-                draft = hist[0]["values"].get("final_response") or hist[0]["values"].get("quality_blocked_draft") or ""
+                # a HITL gate keeps its draft in the gate store (end state empty): the approved answer is the draft then
+                draft = hist[0]["values"].get("final_response") or hist[0]["values"].get("quality_blocked_draft") or answer or ""
                 rec["base"]["draft"] = draft
                 rec["base"]["trust"] = {"score": hist[0]["values"].get("trust_score"), "verdict": hist[0]["values"].get("trust_verdict")}
                 rec["base"]["draft_correct"] = bool(draft) and score(draft, final, lang)

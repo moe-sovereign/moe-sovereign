@@ -108,3 +108,8 @@ def test_blocked_forks_keep_the_withheld_draft_as_a_gate_free_label():
     assert not first["correct"] and first["draft_correct"] and first["outcome"].startswith("blocked")
     assert not second["draft_correct"]
     assert [p["value"] for p in rec["decision_points"]] == [0.0, 0.0] and [p["value_draft"] for p in rec["decision_points"]] == [1.0, 0.0]
+
+
+def test_base_draft_of_a_hitl_episode_is_the_approved_answer():
+    rec, _ = run(lambda t: (202, {"object": "moe.hitl_gate", "gate_id": "g0"}), [fork("42"), fork("42")])
+    assert rec["base"]["outcome"] == "hitl" and rec["base"]["draft"] == "The result is 42." and rec["base"]["draft_correct"]
