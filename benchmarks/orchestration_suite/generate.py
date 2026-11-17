@@ -57,10 +57,13 @@ def date(d, lang):
     return d.strftime("%d.%m.%Y") if lang == "de" else d.isoformat()
 
 
+ROW_SCALE = 1  # set by generate(row_scale=...): the table size at which a single model stops counting and summing reliably
+
+
 def make_sql(v, rnd):
     start = dt.date(2026, 1, 1) + dt.timedelta(days=rnd.randrange(0, 200))
     rows = [(i, rnd.choice(v["groups"]), rnd.randint(10, 990), (start + dt.timedelta(days=rnd.randrange(0, 60))).isoformat())
-            for i in range(1, rnd.randint(14, 24) + 1)]
+            for i in range(1, rnd.randint(14, 24) * ROW_SCALE + 1)]
     ddl = f"CREATE TABLE {v['table']}(id int PRIMARY KEY, {v['group']} text, {v['value']} int, {v['day']} date);"
     ins = f"INSERT INTO {v['table']} VALUES " + ",".join(f"({i},'{g}',{x},'{d}')" for i, g, x, d in rows) + ";"
     cols = f"{v['table']}(id, {v['group']}, {v['value']}, {v['day']})"
@@ -240,10 +243,12 @@ GEN = {"sql_calc": fam_sql_calc, "cypher_calc": fam_cypher_calc, "cypher_sql_cal
        "tool_chain": fam_tool_chain, "direct": fam_direct}
 
 
-def generate(n, seed, de_share=0.3):
+def generate(n, seed, de_share=0.3, row_scale=1, families=None):
+    global ROW_SCALE
+    ROW_SCALE = row_scale
     rnd = random.Random(f"orch-{seed}")
     lang_rnd = random.Random(f"orch-lang-{seed}")  # separate stream: changing the share does not change the tasks
-    fams = [f for f in FAMILIES for _ in range(WEIGHTS[f])]
+    fams = [f for f in (families or FAMILIES) for _ in range(WEIGHTS[f])]
     out, seen = [], set()
     while len(out) < n:
         fam, v = rnd.choice(fams), rnd.choice(VOCABS)
@@ -312,6 +317,8 @@ def main():
     b.add_argument("--n", type=int, default=2000)
     b.add_argument("--seed", type=int, default=1)
     b.add_argument("--de-share", type=float, default=0.3)
+    b.add_argument("--row-scale", type=int, default=1, help="multiplies the SQL table size (14-24 rows x scale); difficulty curve of single models")
+    b.add_argument("--families", default="", help="comma list, default all (sql_calc and cypher_sql_calc have tables)")
     b.add_argument("--out", required=True)
     s = sp.add_parser("selftest")
     s.add_argument("--n", type=int, default=60)
@@ -320,7 +327,7 @@ def main():
     s.add_argument("--neo-url", default=os.environ.get("ORCH_NEO_URL"))
     a = ap.parse_args()
     if a.cmd == "build":
-        tasks = generate(a.n, a.seed, a.de_share)
+        tasks = generate(a.n, a.seed, a.de_share, a.row_scale, [f for f in a.families.split(",") if f] or None)
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         with open(out, "w", encoding="utf-8") as f:

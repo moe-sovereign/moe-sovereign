@@ -86,3 +86,12 @@ def test_file_skill_needs_a_real_attachment():
     assert _detect_file_skill(None, "Fasse bericht.pdf und daten.xlsx zusammen") is None
     assert _detect_file_skill([{"name": "shipments.csv", "type": "text/csv"}]) == "xlsx"
     assert _detect_file_skill([{"name": "shipments.csv"}], allowed_skills=["pdf"]) is None
+
+
+def test_row_scale_multiplies_the_table_and_default_is_unchanged():
+    base = gen.generate(6, 3, families=["sql_calc"])
+    big = gen.generate(6, 3, row_scale=10, families=["sql_calc"])
+    gen.generate(1, 3)  # resets the module scale to the default
+    rows = lambda t: len(t["setup"]["sql"].split("VALUES ")[1].split("),(")) if "sql" in t["setup"] else 0
+    assert all(14 <= rows(t) <= 24 for t in base) and all(140 <= rows(t) <= 240 for t in big)
+    assert all(t["family"] == "sql_calc" for t in big) and len(big[0]["prompts_inline"]["en"]) > 5 * len(base[0]["prompts_inline"]["en"])
