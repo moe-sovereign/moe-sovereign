@@ -158,7 +158,9 @@ wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
 (
     n=0
     while sleep 30; do
-        curl -sf -m 10 http://127.0.0.1:8102/v1/models >/dev/null 2>&1 && continue
+        # restart only if the server process is gone: a /v1/models timeout under load is not a crash (23814341/23814831 killed a
+        # healthy, busy planner this way and every episode in the restart window failed)
+        kill -0 "${VPID[8102]}" 2>/dev/null && continue
         n=$((n + 1)); [ "$n" -gt 5 ] && { log "WATCHDOG: planner down for the 6th time, giving up"; break; }
         log "WATCHDOG: planner server down, restart $n"
         kill "${VPID[8102]}" 2>/dev/null; cp "$RUN/logs/vllm_8102.log" "$RUN/logs/vllm_8102.crash$n.log" 2>/dev/null
