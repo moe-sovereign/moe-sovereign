@@ -1339,8 +1339,9 @@ JSON array:"""
         if not validate_dag_kahn(dag_dict):
             logger.warning("planner_node: Generated plan contains cycles according to Kahn's algorithm")
 
-    # Cache plan in Valkey for reuse (fail-safe)
-    if state.redis_client is not None and plan:
+    # Cache plan in Valkey for reuse (fail-safe). Only a first-pass plan: a replan plan was built for a gap context, and a
+    # no_cache request must leave no trace (the read side already skips both).
+    if state.redis_client is not None and plan and not _is_agentic_replan and not _no_cache_flag:
         asyncio.create_task(state.redis_client.setex(_plan_cache_key, 1800, json.dumps(plan)))
     if _extracted_filters:
         logger.info(f"📋 Planner metadata_filters: {_extracted_filters}")
