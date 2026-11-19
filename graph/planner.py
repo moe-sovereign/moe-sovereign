@@ -398,6 +398,15 @@ async def planner_node(state_: AgentState):
     # Include a short config fingerprint so the plan cache auto-invalidates when
     # the MCP tool set or planner prompt changes between deployments.
     _tool_contract_fp = _canonical_tool_catalog_hash(_handoff_tool_schemas)
+    # Infrastructure knowledge the knowledge broker found (graph/knowledge_broker.py). Reaches the planner only behind its own
+    # switch: the planner was trained without such a block, so it is tried and measured separately from experts and merger.
+    _knowledge_for_planner = (state_.get("knowledge_block") or "") if os.getenv("KNOWLEDGE_TO_PLANNER", "0") == "1" else ""
+    _planner_knowledge_text = (
+        "\n=== KNOWLEDGE ALREADY AVAILABLE (from the infrastructure) ===\n"
+        f"{_knowledge_for_planner}\n"
+        "These facts are already known: do NOT create lookup or research tasks for them. Plan only for the OPEN GAPS above "
+        "and for reasoning or calculation.\n=== END KNOWLEDGE ===\n\n"
+    ) if _knowledge_for_planner else ""
     _cfg_fp = _hashlib.sha256(
         json.dumps(
             {
@@ -405,6 +414,7 @@ async def planner_node(state_: AgentState):
                 "tools": _tool_contract_fp,
                 "planner_prompt": state_.get("planner_prompt") or "",
                 "role_limit": os.getenv("PLANNER_ROLE_MAX_CHARS", "8000"),
+                **({"knowledge": _hashlib.sha256(_knowledge_for_planner.encode()).hexdigest()[:12]} if _knowledge_for_planner else {}),
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -413,7 +423,9 @@ async def planner_node(state_: AgentState):
     # Include chat_history presence in key: same query needs different plan
     # in conversation context (memory_recall) vs. standalone (research).
     _has_history = "h" if len(state_.get("chat_history") or []) >= 2 else "n"
-    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'].encode()).hexdigest()[:16]}"  # whole input: a 300-character prefix served one request's plan to another that differs only later (long prompts with data)
+    # a plan that was shaped by tenant facts must not be served to another tenant
+    _tenant_part = (":t" + _hashlib.sha256(",".join(sorted(state_.get("tenant_ids") or [])).encode()).hexdigest()[:8]) if _knowledge_for_planner else ""
+    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'].encode()).hexdigest()[:16]}{_tenant_part}"  # whole input: a 300-character prefix served one request's plan to another that differs only later (long prompts with data)
     if state.redis_client is not None and not _is_agentic_replan and not _no_cache_flag:
         try:
             _cached_plan_raw = await state.redis_client.get(_plan_cache_key)
@@ -876,6 +888,7 @@ async def planner_node(state_: AgentState):
             f"Request: \"What is Docker?\"\n"
             f"Correct: [{{\"task\": \"Explain what Docker is and what it is used for\", "
             f"\"category\": \"{_example_cat}\"}}]\n\n"
+            f"{_planner_knowledge_text}"
             f"Request: {state_['input']}\n\n"
             f"JSON array:"
         )
@@ -998,7 +1011,7 @@ Request: "What is Docker?"
 Correct: [{{"task": "Explain what Docker is and what it is used for", "category": "{_example_cat}"}}]
 WRONG:   ["Docker", "Container", "Virtualization"]
 
-Request: {state_['input']}
+{_planner_knowledge_text}Request: {state_['input']}
 
 JSON array:"""
     await _report(f"📋 Planner prompt ({len(prompt)} chars):\n{prompt}")
