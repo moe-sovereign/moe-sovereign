@@ -15,7 +15,7 @@ from langchain_openai import ChatOpenAI
 import state
 from config import (
     URL_MAP, TOKEN_MAP, API_TYPE_MAP, INFERENCE_SERVERS_LIST,
-    EXPERT_MIN_DATAPOINTS,
+    EXPERT_MIN_DATAPOINTS, EXPERTS,
     JUDGE_TIMEOUT, PLANNER_TIMEOUT, EXPERT_TIMEOUT,
     JUDGE_MODEL, JUDGE_URL, JUDGE_TOKEN,
     _FALLBACK_NODE, _FALLBACK_MODEL, _FALLBACK_MODEL_SECOND,
@@ -1268,6 +1268,8 @@ async def _invoke_planner_with_retry(
     if unavailable.
     """
     from types import SimpleNamespace as _NS
+    # imported here: the services.pipeline package imports chat, which imports this module
+    from services.pipeline.planner_schema import planner_schema_for_state
     from config import (
         PLANNER_MODEL, PLANNER_URL, PLANNER_TOKEN,
         PLANNER_MODE, PLANNER_LOCAL_GGUF_PATH
@@ -1405,17 +1407,7 @@ async def _invoke_planner_with_retry(
             _opts["num_ctx"] = _ctx
         if temperature is not None:
             _opts["temperature"] = temperature
-        _planner_schema = {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "task": {"type": "string"},
-                    "category": {"type": "string"},
-                },
-                "required": ["task", "category"],
-            },
-        }
+        _planner_schema = planner_schema_for_state(state, EXPERTS.keys(), wrap_object=False)
         _payload: dict = {
             "model":      _pm,
             "messages":   [{"role": "user", "content": prompt}],
@@ -1530,18 +1522,9 @@ async def _invoke_planner_with_retry(
         if _fb_ctx > 0:
             _planner_extra_body["options"] = {"num_ctx": _fb_ctx}
         llm = llm.bind(extra_body=_planner_extra_body)
-    _planner_schema = {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "task": {"type": "string"},
-                "category": {"type": "string"},
-            },
-            "required": ["task", "category"],
-        },
-    }
-    _response_format = openai_response_format(_pm, _planner_schema)
+    # an object at the top level: OpenAI json_schema (also vLLM guided decoding) wants one; parse_plan accepts {"tasks": [...]}
+    _planner_schema = planner_schema_for_state(state, EXPERTS.keys(), wrap_object=True)
+    _response_format = openai_response_format(_pm, _planner_schema, strict=False)
     if _response_format:
         llm = llm.bind(response_format=_response_format)
     if temperature is not None:

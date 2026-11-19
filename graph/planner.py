@@ -401,7 +401,7 @@ async def planner_node(state_: AgentState):
     _cfg_fp = _hashlib.sha256(
         json.dumps(
             {
-                "contract_version": 5,
+                "contract_version": 6,
                 "tools": _tool_contract_fp,
                 "planner_prompt": state_.get("planner_prompt") or "",
                 "role_limit": os.getenv("PLANNER_ROLE_MAX_CHARS", "8000"),
@@ -1031,13 +1031,11 @@ JSON array:"""
     _contract_repair_used = False
     _contract_repair_hint = ""
     for attempt in range(_structured_attempts):
-        _attempt_state = state_
+        # the catalog of this request constrains the output schema (services/pipeline/planner_schema.py)
+        _attempt_state = {**dict(state_), "planner_tool_names": sorted(_handoff_tool_schemas)}
         _using_structured_fallback = bool(_retry_model_override)
         if _retry_model_override:
-            _attempt_state = {
-                **dict(state_),
-                "planner_model_override": _retry_model_override,
-            }
+            _attempt_state["planner_model_override"] = _retry_model_override
         res = None
         try:
             # On retry, non-trivial requests switch to the compact prompt too: reusing

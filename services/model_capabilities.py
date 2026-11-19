@@ -102,14 +102,17 @@ def apply_ollama_structured_capability(
     return result
 
 
-def openai_response_format(model: str, schema: dict | None = None) -> dict | None:
-    """Return a provider-neutral OpenAI response_format or ``None``."""
+def openai_response_format(model: str, schema: dict | None = None, *, strict: bool = True) -> dict | None:
+    """Return a provider-neutral OpenAI response_format or ``None``.
+
+    ``strict=False`` for schemas with open objects (the planner's ``mcp_args``): OpenAI's strict mode rejects them, vLLM and
+    Ollama do not care."""
     if schema and model_supports_json_schema(model):
         return {
             "type": "json_schema",
             "json_schema": {
                 "name": "moe_structured_output",
-                "strict": True,
+                "strict": strict,
                 "schema": schema,
             },
         }
