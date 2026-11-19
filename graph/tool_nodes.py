@@ -809,17 +809,24 @@ async def graph_rag_node(state_: AgentState):
     # Appended to graph_context so the judge can use past strategies as signal.
     _ep_task_type = categories[0] if categories else "general"
     if state.graph_manager is not None:
-        _ep_hint = await wait_for_budget(
-            get_episode_hint(
-                state.graph_manager.driver,
-                state_["input"],
-                _ep_task_type,
-                state_.get("user_id", ""),
-            ),
-            state_,
-            5.0,
-            stage="episode_hint",
-        )
+        try:
+            _ep_hint = await wait_for_budget(
+                get_episode_hint(
+                    state.graph_manager.driver,
+                    state_["input"],
+                    _ep_task_type,
+                    state_.get("user_id", ""),
+                ),
+                state_,
+                5.0,
+                stage="episode_hint",
+            )
+        except RequestDeadlineExceeded:
+            # The 5 s stage cap also raises RequestDeadlineExceeded. A slow episode query must not end the request:
+            # only a spent request budget does, and remaining_timeout() raises exactly in that case.
+            remaining_timeout(state_, 0.1, stage="episode_hint")
+            logger.warning("Episode hint timed out, continuing without it")
+            _ep_hint = ""
     else:
         _ep_hint = ""
 
