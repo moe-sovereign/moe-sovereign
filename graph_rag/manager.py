@@ -229,6 +229,46 @@ _STOPWORDS = {
 }
 
 
+# Relation sources whose facts are authoritative on their own; "community_import" is third-party data, everything else
+# (the LLM-extracted default) sits in between.
+_AUTHORITATIVE_SOURCES = frozenset({"ontology", "ontology_gap_healer", "fixture", "curated"})
+
+
+def fact_authority(edge: Dict[str, Any]) -> int:
+    """4 = verified or curated, 2 = extracted and unverified, 1 = community import. Higher wins a conflict.
+
+    valid_from is the time a fact was last ingested or confirmed, not when it became true, so recency only breaks ties
+    inside one authority class (services/knowledge_reconcile.py)."""
+    if edge.get("verified") or edge.get("source") in _AUTHORITATIVE_SOURCES:
+        return 4
+    if edge.get("source") == "community_import":
+        return 1
+    return 2
+
+
+def make_fact(subject: str, edge: Dict[str, Any]) -> Dict[str, Any]:
+    """One direct relation of an entity as a JSON-safe KnowledgeFact (plain types only: it ends up in checkpoints)."""
+    rel, obj = str(edge.get("rel") or ""), str(edge.get("target") or "")
+    conf, trust = edge.get("confidence"), edge.get("trust_score")
+    return {
+        "id": "g:" + hashlib.sha1(f"{subject}|{rel}|{obj}".encode()).hexdigest()[:12],
+        "source": "graph",
+        "subject": subject,
+        "relation": rel,
+        "object": obj,
+        "text": f"{subject} {rel} {obj}",
+        "valid_from_ms": int(edge["valid_from"]) if edge.get("valid_from") is not None else None,
+        "created_ms": int(edge["created"]) if edge.get("created") is not None else None,
+        "verified": bool(edge.get("verified")),
+        "origin": str(edge.get("source") or "?"),
+        "source_model": str(edge.get("source_model") or ""),
+        "confidence": float(conf) if conf is not None else None,
+        "trust_score": float(trust) if trust is not None else None,
+        "version": int(edge["version"]) if edge.get("version") is not None else None,
+        "authority": fact_authority(edge),
+    }
+
+
 class GraphRAGManager:
 
     def __init__(self, uri: str, user: str, password: str):
@@ -416,7 +456,13 @@ class GraphRAGManager:
                             ttype:        n1.type,
                             source_model: r1.source_model,
                             confidence:   r1.confidence,
-                            version:      r1.version
+                            version:      r1.version,
+                            valid_from:   r1.valid_from,
+                            created:      r1.created,
+                            verified:     r1.verified,
+                            trust_score:  r1.trust_score,
+                            source:       r1.source,
+                            valid_to:     r1.valid_to
                         }})[..25] AS direct,
                         collect(DISTINCT {{
                             via:    n1.name,
@@ -433,12 +479,17 @@ class GraphRAGManager:
                 )
                 async for record in result:
                     root = record["root"]
-                    if not root or root in found:
+                    if not root:
+                        continue
+                    if root in found:
+                        if term not in found[root]["terms"]:
+                            found[root]["terms"].append(term)
                         continue
                     found[root] = {
                         "type":     record["root_type"],
                         "direct":   [r for r in record["direct"]   if r["target"]],
                         "indirect": [r for r in record["indirect"]  if r["target"]],
+                        "terms":    [term],  # which request terms led to this entity (the broker's entity hits)
                     }
         return found
 
@@ -553,6 +604,14 @@ class GraphRAGManager:
         if not found:
             return await self._text_to_cypher(query_text, allowed_types)
 
+        found = self._gate_and_cap(terms, found)
+        if not found:
+            return ""
+
+        return await self._render_found(found, terms)
+
+    def _gate_and_cap(self, terms: List[str], found: Dict[str, Any]) -> Dict[str, Any]:
+        """Corrective-RAG relevance gate and the entity cap, shared by query_context() and query_facts()."""
         # ── Corrective RAG Gate (Yan et al., 2024 — arXiv:2401.15884) ─────────
         # Evaluate retrieved entities for relevance before injection.
         # Entities scoring below the threshold are discarded to prevent context
@@ -573,7 +632,7 @@ class GraphRAGManager:
                 )
             if not found:
                 logger.debug("GraphRAG corrective gate: all results below threshold — returning empty")
-                return ""
+                return {}
 
         # Cap the number of entities actually rendered, ranked by the same
         # relevance score the gate just used -- widening the per-term match
@@ -592,6 +651,10 @@ class GraphRAGManager:
                 )[:_max_entities]
             )
 
+        return found
+
+    async def _render_found(self, found: Dict[str, Any], terms: List[str]) -> str:
+        """The prompt text of the matched entities (output format unchanged since before query_facts())."""
         lines = ["[Knowledge Graph]"]
         for entity, data in found.items():
             etype = data["type"]
@@ -644,6 +707,52 @@ class GraphRAGManager:
                 lines.extend(proc_lines)
 
         return "\n".join(lines)
+
+    async def query_facts(
+        self,
+        text: str,
+        categories: Optional[List[str]] = None,
+        tenant_ids: Optional[List[str]] = None,
+        max_facts: int = 40,
+    ) -> Dict[str, Any]:
+        """Structured counterpart of query_context(): the matched facts with their provenance instead of prose.
+
+        Same terms, domain filter, tenant filter, corrective gate and entity cap as query_context(), but none of its LLM steps
+        (no reformulation, no text-to-Cypher): the knowledge broker calls this before planning and must stay cheap.
+
+        Returns a JSON-safe dict:
+          terms, searched_terms  - the request terms and the ones that were looked up (the first 6)
+          found                  - entity -> {type, direct, indirect, terms}
+          entity_hits            - entity -> type
+          term_hits              - term -> [entities it led to]; a searched term without a key here is a gap
+          facts                  - list of KnowledgeFact dicts, most relevant first, at most max_facts
+          rendered               - exactly what query_context() would have returned for these entities
+        """
+        terms = self._extract_terms(text)
+        result: Dict[str, Any] = {"terms": terms, "searched_terms": terms[:6], "found": {}, "entity_hits": {},
+                                  "term_hits": {}, "facts": [], "rendered": ""}
+        if not terms:
+            return result
+        allowed_types = self._resolve_allowed_types(categories or [])
+        found = await self._match_terms_to_entities(terms, allowed_types, tenant_ids)
+        found = self._gate_and_cap(terms, found) if found else {}
+        if not found:
+            return result
+        scored = []
+        for entity, data in found.items():
+            for edge in data["direct"]:
+                if edge.get("valid_to"):  # superseded (nothing writes this yet; honoured once something does)
+                    continue
+                scored.append((self._score_relation_relevance(terms, edge), entity, edge))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        result["found"] = found
+        result["entity_hits"] = {entity: data["type"] for entity, data in found.items()}
+        for entity, data in found.items():
+            for term in data.get("terms", []):
+                result["term_hits"].setdefault(term, []).append(entity)
+        result["facts"] = [make_fact(entity, edge) for _, entity, edge in scored[:max_facts]]
+        result["rendered"] = await self._render_found(found, terms)
+        return result
 
     async def _query_procedural_requirements(self, action_names: List[str]) -> List[str]:
         """
