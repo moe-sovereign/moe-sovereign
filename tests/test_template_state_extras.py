@@ -78,3 +78,33 @@ async def test_a_second_router_pass_does_not_read_its_own_off_as_the_template(ro
     # state of a replan: the first pass wrote enable_graphrag=False, but the template allows the graph
     out = await router(_router_state(graphrag_template_allowed=True, enable_graphrag=False))
     assert out["enable_graphrag"] is True
+
+
+# --- entity hits from the knowledge broker -------------------------------------------------------------------------------
+def _lookup_state(**extra):
+    return {"plan": [{"task": "t", "category": "general"}], "complexity_level": "moderate", "input": "q", **extra}
+
+
+@pytest.mark.asyncio
+async def test_a_plain_lookup_plan_is_not_routed_to_the_graph_without_entity_hits():
+    out = await router_nodes.fuzzy_router_node(_lookup_state())
+    assert out["enable_graphrag"] is False and out["fuzzy_routing_scores"]["graph_confidence"] == 0.3
+
+
+@pytest.mark.asyncio
+async def test_entity_hits_turn_the_graph_on_and_say_why():
+    out = await router_nodes.fuzzy_router_node(_lookup_state(knowledge_entity_hits=["Elm12"]))
+    assert out["enable_graphrag"] is True and out["fuzzy_routing_scores"]["graph_source"] == "entity_hit"
+
+
+@pytest.mark.asyncio
+async def test_entity_hits_never_override_a_template_that_forbids_the_graph():
+    out = await router_nodes.fuzzy_router_node(_lookup_state(knowledge_entity_hits=["Elm12"], graphrag_template_allowed=False))
+    assert out["enable_graphrag"] is False
+
+
+@pytest.mark.asyncio
+async def test_the_entity_hit_rule_can_be_switched_off(monkeypatch):
+    monkeypatch.setenv("KNOWLEDGE_FORCE_GRAPH_ON_HIT", "0")
+    out = await router_nodes.fuzzy_router_node(_lookup_state(knowledge_entity_hits=["Elm12"]))
+    assert out["enable_graphrag"] is False

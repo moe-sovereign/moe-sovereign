@@ -522,6 +522,11 @@ async def fuzzy_router_node(state_: AgentState):
     _do_research,  _src_r = await _rb_decide("research", _research_ctx, _heur_do_research, query_embedding=_query_embedding)
     _enable_graph, _src_g = await _rb_decide("graphrag", _graph_ctx,    _heur_enable_graph, query_embedding=_query_embedding)
 
+    # Entities of the request exist in the graph (knowledge broker): stronger evidence than the plan's category mix. A plain
+    # lookup plan scores graph confidence 0.30 against the threshold 0.35, so the graph was never queried for it.
+    if state_.get("knowledge_entity_hits") and not _enable_graph and os.getenv("KNOWLEDGE_FORCE_GRAPH_ON_HIT", "1") != "0":
+        _enable_graph, _src_g = True, "entity_hit"
+
     new_skip_research   = not _do_research
     new_enable_graphrag = _enable_graph and bool(enable_graphrag)  # a template that forbids the graph stays off
 
