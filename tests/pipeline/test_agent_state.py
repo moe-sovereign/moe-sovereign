@@ -38,6 +38,9 @@ REQUIRED_FIELDS = {
     "agentic_iteration", "agentic_history",
     # Working memory
     "working_memory", "tool_calls_log",
+    # Knowledge broker and template permission for the graph
+    "knowledge_bundle", "knowledge_block", "knowledge_entity_hits", "knowledge_gaps", "knowledge_llm_context",
+    "knowledge_broker_mode", "graphrag_template_allowed", "cached_facts_meta",
 }
 
 

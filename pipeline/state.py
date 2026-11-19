@@ -122,6 +122,13 @@ class AgentState(TypedDict):
     graphrag_template_allowed: bool     # The template's permission for the graph; never overwritten by the router
     enable_web_research: bool           # Allow SearXNG web search
     search_fallback_ddg: bool           # Fall back to DuckDuckGo when SearXNG returns no results
+    # Knowledge broker (graph/knowledge_broker.py), runs before the planner; all JSON-safe, the bundle is capped (checkpoints)
+    knowledge_broker_mode: str          # template switch: "", "on" or "off"
+    knowledge_bundle: dict              # facts with provenance, conflicts, corrections, gaps, per-source status
+    knowledge_block: str                # rendered text of the bundle for experts/merger (and the planner behind its own flag)
+    knowledge_entity_hits: list         # entities of the request found in the graph
+    knowledge_gaps: list                # request terms without any infrastructure knowledge
+    knowledge_llm_context: str          # answers of the knowledge model, kept apart from graph_context on purpose
     cached_facts_meta: dict             # Metadata of the semantic-cache entry behind cached_facts: ts, confidence, distance
     graphrag_max_chars: int             # Hard char budget for graph_context (0 = derive from judge model context window)
     no_cache: bool                      # If True, bypass both L0 (Redis) and L1 (ChromaDB) entirely

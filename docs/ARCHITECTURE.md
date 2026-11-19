@@ -54,6 +54,7 @@ moe-infra/
 │
 └── graph/                                 LangGraph node implementations
     ├── router_nodes.py       cache_lookup, semantic_router, fuzzy_router, _route_cache
+    ├── knowledge_broker.py   knowledge_broker (infrastructure knowledge before the planner; off by default)
     ├── tool_nodes.py         mcp_node, graph_rag_node, math_node_wrapper
     ├── planner.py            planner_node + plan sanitization + topological levels
     ├── expert.py             expert_worker (parallel expert execution)
@@ -77,7 +78,10 @@ flowchart TD
 
     CACHE{cache_lookup\nChromaDB semantic\nhit < 0.15}
     CACHE -->|HIT ⚡| MERGE
-    CACHE -->|MISS| PLAN
+    CACHE -->|MISS| KB
+
+    KB[knowledge_broker\noff by default\ngraph facts, corrections,\nepisodes, cache meta]
+    KB --> PLAN
 
     PLAN[planner\nphi4:14b\nValkey plan cache\nTTL 30 min]
     PLAN --> PAR
@@ -125,6 +129,7 @@ flowchart TD
 |---|---|---|
 | `guard` | Optional safety pre-filter | Runs before cache access, records an AI-I/O audit entry and short-circuits unsafe input to a fixed refusal; provider failures are visible in the audit and fail open |
 | `cache_lookup` | ChromaDB semantic similarity | distance < 0.15 → hard hit; 0.15–0.50 → soft/few-shot examples |
+| `knowledge_broker` | Infrastructure knowledge before planning (off by default) | Queries graph facts (with provenance), corrections, episode hints and cache metadata concurrently under per-source caps; reconciles conflicting values (authority first, recency inside a class); returns `knowledge_bundle` and a rendered `knowledge_block`. Enabled by `KNOWLEDGE_BROKER_ENABLED=1` or a template's `knowledge_broker_mode` |
 | `planner` | Task decomposition (phi4:14b) | Produces `[{task, category, search_query?, mcp_tool?}]`; Valkey plan cache TTL=30 min |
 | `workers` | Parallel expert execution | Two-tier routing; T1 (≤20B) first, T2 (>20B) only if T1 confidence < threshold |
 | `research` | SearXNG web search | Single or multi-query deep search; always runs if `research` category in plan |

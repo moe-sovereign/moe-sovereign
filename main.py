@@ -698,7 +698,7 @@ from prompts import _ROUTE_PROTOTYPES
 from graph import (
     _seed_task_type_prototypes,
     guard_node, _route_guard,
-    precision_preflight_node, cache_lookup_node, semantic_router_node,
+    precision_preflight_node, cache_lookup_node, semantic_router_node, knowledge_broker_node,
     _validate_tool_result, mcp_node,
     graph_rag_node, math_node_wrapper,
     _sanitize_plan, _detect_query_temperature,
@@ -1107,6 +1107,7 @@ builder.add_node("precision_slots",    precision_slot_prepare_node)
 builder.add_node("precision_bind",     precision_bind_node)
 builder.add_node("cache",              cache_lookup_node)
 builder.add_node("semantic_router",    semantic_router_node)
+builder.add_node("knowledge_broker",   knowledge_broker_node)
 builder.add_node("planner",            planner_node)
 builder.add_node("fuzzy_router",       fuzzy_router_node)
 builder.add_node("workers",            expert_worker)
@@ -1140,7 +1141,8 @@ builder.add_conditional_edges(
     "cache", _route_cache,
     {"semantic_router": "semantic_router", "merger": "merger"},
 )
-builder.add_edge("semantic_router", "planner")
+builder.add_edge("semantic_router", "knowledge_broker")  # off by default: the node returns {} unless KNOWLEDGE_BROKER_ENABLED/template
+builder.add_edge("knowledge_broker", "planner")
 builder.add_edge("planner", "fuzzy_router")
 builder.add_edge("fuzzy_router", "workers")
 builder.add_edge("fuzzy_router", "research")

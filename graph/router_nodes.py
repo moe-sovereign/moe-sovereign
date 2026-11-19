@@ -335,6 +335,7 @@ async def cache_lookup_node(state_: AgentState):
     # L1: Semantic similarity cache (ChromaDB)
     res = await asyncio.to_thread(state.cache_collection.query, query_texts=[_cache_query], n_results=3)
     cached = ""
+    cached_meta: dict = {}  # provenance of `cached` (ts, confidence, distance) for the knowledge broker
     hit = False
     # Telemetry: record the nearest-neighbour distance for every lookup (hit or
     # miss) so the static thresholds can be calibrated from the real distribution.
@@ -352,6 +353,8 @@ async def cache_lookup_node(state_: AgentState):
             if meta.get("flagged"):
                 continue  # skip negatively-rated entry
             cached = doc
+            cached_meta = {"ts": str(meta.get("ts") or ""), "distance": float(dist),
+                           "confidence": float(meta.get("confidence") or 0.0)}
             if dist < CACHE_HIT_THRESHOLD:
                 hit = True
                 PROM_CACHE_HITS.inc()
@@ -404,7 +407,7 @@ async def cache_lookup_node(state_: AgentState):
     soft_ctx = "\n\n---\n\n".join(soft_examples) if soft_examples else ""
     if soft_ctx:
         await _report(f"💡 {len(soft_examples)} similar previous answer(s) loaded as context")
-    return {"cached_facts": cached, "cache_hit": hit, "soft_cache_examples": soft_ctx}
+    return {"cached_facts": cached, "cache_hit": hit, "soft_cache_examples": soft_ctx, "cached_facts_meta": cached_meta}
 
 
 async def semantic_router_node(state_: AgentState):
