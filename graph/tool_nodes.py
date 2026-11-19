@@ -778,7 +778,9 @@ async def graph_rag_node(state_: AgentState):
 
     # GraphRAG-Cache (Valkey, TTL=3600s)
     import hashlib as _hashlib
-    _graph_cache_key = f"moe:graph:{_hashlib.sha256((state_['input'][:200] + ''.join(sorted(categories))).encode()).hexdigest()[:16]}"
+    # tenant part only when present, so keys of tenant-less requests stay as they were
+    _tenant_key = "|t:" + ",".join(sorted(state_.get("tenant_ids") or [])) if state_.get("tenant_ids") else ""
+    _graph_cache_key = f"moe:graph:{_hashlib.sha256((state_['input'][:200] + ''.join(sorted(categories)) + _tenant_key).encode()).hexdigest()[:16]}"
     if state.redis_client is not None:
         try:
             _cached_ctx = await state.redis_client.get(_graph_cache_key)

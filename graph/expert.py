@@ -386,7 +386,7 @@ async def expert_worker(state_: AgentState):
                 try:
                     from graph_rag.corrections import query_corrections as _query_corrections, format_correction_context as _format_correction_context
                     _driver = state.graph_manager.driver if hasattr(state.graph_manager, 'driver') else None
-                    _corr = await _query_corrections(_driver, state_.get("input", ""), cat)
+                    _corr = await _query_corrections(_driver, state_.get("input", ""), cat, tenant_ids=state_.get("tenant_ids") or None)
                     _corr_ctx = _format_correction_context(_corr)
                     if _corr_ctx:
                         PROM_CORRECTIONS_INJECTED.labels(category=cat).inc(len(_corr))
