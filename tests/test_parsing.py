@@ -10,6 +10,7 @@ import pytest
 from unittest.mock import MagicMock
 
 from parsing import (
+    _compute_routing_confidence,
     _extract_usage,
     _extract_json,
     _parse_expert_confidence,
@@ -421,3 +422,12 @@ class TestAnthropicToolsToOpenai:
         tools = [{"name": "ping", "description": "Check connectivity"}]
         result = _anthropic_tools_to_openai(tools)
         assert result[0]["function"]["parameters"] == {"type": "object", "properties": {}}
+
+
+def test_graph_router_extra_categories_raise_graph_confidence_only_when_configured(monkeypatch):
+    plan = [{"task": "Retrieve the bed count of Elm12", "category": "compounding_knowledge"}]
+    monkeypatch.delenv("GRAPH_ROUTER_EXTRA_CATEGORIES", raising=False)
+    _, off = _compute_routing_confidence(plan, "moderate", True)
+    monkeypatch.setenv("GRAPH_ROUTER_EXTRA_CATEGORIES", "compounding_knowledge, graph_query")
+    _, on = _compute_routing_confidence(plan, "moderate", True)
+    assert off == 0.3 and on == 0.7  # 0.3 is below the default FUZZY_GRAPH_THRESHOLD of 0.35, 0.7 above

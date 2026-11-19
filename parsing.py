@@ -24,6 +24,7 @@ Public API:
 from __future__ import annotations
 
 import json
+import os
 import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional
@@ -177,6 +178,10 @@ def _compute_routing_confidence(
         Tuple (vector_confidence, graph_confidence), each in [0.0, 1.0].
     """
     _GRAPH_HEAVY_CATS = {"legal_advisor", "medical_consult", "science", "reasoning"}
+    # GRAPH_ROUTER_EXTRA_CATEGORIES="compounding_knowledge+graph_query" (also comma): planner categories that mean "look it up in the graph".
+    # Off by default. With the defaults a plain lookup plan scores graph confidence 0.30, just below FUZZY_GRAPH_THRESHOLD
+    # (0.35), so the product router never queried the graph in the ablation (retrieved share 0.00 in 480 lookup episodes).
+    _GRAPH_HEAVY_CATS |= {c.strip() for c in os.getenv("GRAPH_ROUTER_EXTRA_CATEGORIES", "").replace("+", ",").split(",") if c.strip()}
     _RESEARCH_CATS    = {"general", "research", "technical_support", "translation"}
 
     # Base scores from complexity level
