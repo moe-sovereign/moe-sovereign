@@ -1908,7 +1908,8 @@ async def stream_response(user_input: str, chat_id: str, mode: str = "default",
                           no_cache: bool = False,
                           client_max_output_tokens: int = 0,
                           local_only: bool = False,
-                          query_embedding: Optional[List[float]] = None):
+                          query_embedding: Optional[List[float]] = None,
+                          template_state: Optional[dict] = None):
     from services.helpers import current_chat_id
     current_chat_id.set(chat_id)
     _deregistered = False
@@ -2026,7 +2027,9 @@ async def stream_response(user_input: str, chat_id: str, mode: str = "default",
                  "response_commit_errors": [],
                  "strategy_feedback": "",
                  "verification_oracle": [],
-                 "verification_result": {}},
+                 "verification_result": {},
+                 # template toggles and tenant namespaces, see services.routing.template_state_extras
+                 **(template_state or {})},
                 config,
                 ),
                 timeout=max(

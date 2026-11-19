@@ -79,7 +79,7 @@ from metrics import (
 from services.auth import _validate_api_key, _extract_api_key, _extract_session_id
 from services.kafka import _kafka_publish
 from services.routing import (
-    _resolve_user_experts, _resolve_template_prompts,
+    _resolve_user_experts, _resolve_template_prompts, template_state_extras, request_tenant_ids,
     _server_info, _is_endpoint_error,
 )
 from services.tracking import (
@@ -2896,7 +2896,9 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                             no_cache=request.no_cache,
                             client_max_output_tokens=_client_max_output_tokens,
                             local_only=local_only,
-                            query_embedding=_query_embedding)
+                            query_embedding=_query_embedding,
+                            template_state={**template_state_extras(_tmpl_prompts),
+                                            "tenant_ids": request_tenant_ids(user_id, user_perms)})
 
         async def _lineage_wrapped_stream():
             """Wrap the upstream generator so COMPLETE/FAIL fires when streaming ends."""
@@ -2942,21 +2944,16 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
          "local_only_routing": local_only,
          # Prepend personal namespace so user-created knowledge is private by default.
          # graph_tenant permissions add team/tenant namespaces on top.
-         "tenant_ids": ([f"user:{user_id}"] if user_id and user_id != "anon" else [])
-                       + [t for t in user_perms.get("graph_tenant", [])
-                          if t != f"user:{user_id}"],
+         "tenant_ids": request_tenant_ids(user_id, user_perms),
          "provenance_sources": [],
          "retrieved_graph_chunks": [],
          "output_skill_body": "",
-         "enable_cache": _tmpl_prompts.get("enable_cache", True),
-         "enable_graphrag": _tmpl_prompts.get("enable_graphrag", True),
-         "enable_web_research": _tmpl_prompts.get("enable_web_research", True),
+         **template_state_extras(_tmpl_prompts),
          "complexity_level": _tmpl_prompts.get("complexity_level", ""),
          "deliberation_policy": _tmpl_prompts.get("deliberation_policy", {}),
          "deliberation_capacity": {},
          "deliberation_events": [],
          "search_fallback_ddg": _tmpl_prompts.get("search_fallback_ddg", _WEB_SEARCH_FALLBACK_DDG),
-         "graphrag_max_chars": _tmpl_prompts.get("graphrag_max_chars", 0),
          "history_max_turns": _tmpl_prompts.get("history_max_turns", 0),
          "history_max_chars": _tmpl_prompts.get("history_max_chars", 0),
          "planner_prompt": _tmpl_prompts["planner_prompt"],

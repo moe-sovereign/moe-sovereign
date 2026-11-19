@@ -118,9 +118,11 @@ class AgentState(TypedDict):
 
     # ── 6. Template feature toggles ───────────────────────────────────────────
     enable_cache: bool                  # Allow L1 ChromaDB cache reads/writes
-    enable_graphrag: bool               # Allow Neo4j knowledge graph queries
+    enable_graphrag: bool               # Allow Neo4j knowledge graph queries (the fuzzy router may overwrite this per pass)
+    graphrag_template_allowed: bool     # The template's permission for the graph; never overwritten by the router
     enable_web_research: bool           # Allow SearXNG web search
     search_fallback_ddg: bool           # Fall back to DuckDuckGo when SearXNG returns no results
+    cached_facts_meta: dict             # Metadata of the semantic-cache entry behind cached_facts: ts, confidence, distance
     graphrag_max_chars: int             # Hard char budget for graph_context (0 = derive from judge model context window)
     no_cache: bool                      # If True, bypass both L0 (Redis) and L1 (ChromaDB) entirely
 

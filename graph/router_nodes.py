@@ -480,7 +480,9 @@ async def fuzzy_router_node(state_: AgentState):
 
     plan             = state_.get("plan") or []
     complexity_level = state_.get("complexity_level") or "moderate"
-    enable_graphrag  = state_.get("enable_graphrag", True)
+    # The template's permission, not the router's own previous decision: enable_graphrag is overwritten below, so a second pass
+    # (agentic replan) would otherwise read its own "off" as the template's.
+    enable_graphrag  = state_.get("graphrag_template_allowed", state_.get("enable_graphrag", True))
     skip_research    = state_.get("skip_research", False)
 
     vector_conf, graph_conf = _compute_routing_confidence(
@@ -518,7 +520,7 @@ async def fuzzy_router_node(state_: AgentState):
     _enable_graph, _src_g = await _rb_decide("graphrag", _graph_ctx,    _heur_enable_graph, query_embedding=_query_embedding)
 
     new_skip_research   = not _do_research
-    new_enable_graphrag = _enable_graph
+    new_enable_graphrag = _enable_graph and bool(enable_graphrag)  # a template that forbids the graph stays off
 
     PROM_ROUTING_BANDIT.labels(gate="research", action="fetch" if _do_research  else "skip", source=_src_r).inc()
     PROM_ROUTING_BANDIT.labels(gate="graphrag", action="on"    if _enable_graph else "off",  source=_src_g).inc()
