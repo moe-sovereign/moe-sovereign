@@ -18,6 +18,11 @@ from graph.router_nodes import (
     _route_precision_preflight,
 )
 
+# Knowledge broker (before the planner)
+from graph.knowledge_broker import (
+    knowledge_broker_node,
+)
+
 # Deterministic tool nodes
 from graph.tool_nodes import (
     _validate_tool_result,

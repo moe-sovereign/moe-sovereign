@@ -59,7 +59,7 @@ from metrics import (
 from services.auth import _validate_api_key, _extract_api_key, _extract_session_id
 from services.kafka import _kafka_publish
 from services.routing import (
-    _resolve_template_selection, _resolve_user_experts, _resolve_template_prompts,
+    _resolve_template_selection, _resolve_user_experts, _resolve_template_prompts, template_state_extras, request_tenant_ids,
     _server_info, _is_endpoint_error,
 )
 from services.deliberation.contracts import DeliberationPolicyError
@@ -310,6 +310,7 @@ async def _invoke_pipeline_for_responses(
             client_max_output_tokens=max(0, int(request.max_output_tokens or 0)),
             no_cache=request.no_cache,
             local_only=local_only,
+            template_state={**template_state_extras(_tp), "tenant_ids": request_tenant_ids(user_id, user_perms)},
         ):
             if not isinstance(sse_line, str) or not sse_line.startswith("data:"):
                 continue

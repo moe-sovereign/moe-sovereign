@@ -20,7 +20,7 @@ import main
 _END = main.END
 
 _EXPECTED_CORE_NODES = {
-    "cache", "semantic_router", "planner", "fuzzy_router", "workers",
+    "cache", "semantic_router", "knowledge_broker", "planner", "fuzzy_router", "workers",
     "research", "math", "mcp", "graph_rag", "research_fallback",
     "thinking", "merger", "resolve_conflicts", "critic",
     "precision_preflight", "precision_mcp", "precision_renderer",
@@ -73,3 +73,10 @@ def test_conditional_edge_targets_are_nodes():
         for target in mapping.values():
             assert target in nodes or target is _END, \
                 f"conditional routing target {target!r} (from {src!r}) is not a node/END"
+
+
+def test_knowledge_broker_sits_between_semantic_router_and_planner():
+    edges = {(src, c.args[1]) for c in main.builder.add_edge.call_args_list if len(c.args) >= 2
+             for src in (c.args[0] if isinstance(c.args[0], list) else [c.args[0]])}
+    assert ("semantic_router", "knowledge_broker") in edges and ("knowledge_broker", "planner") in edges
+    assert ("semantic_router", "planner") not in edges  # the old direct edge is gone

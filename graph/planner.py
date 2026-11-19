@@ -54,6 +54,7 @@ from services.routing import (
 )
 from services.kafka import _kafka_publish
 from services.tracking import _increment_user_budget, _record_stage
+from services.pipeline.plan_categories import allowed_plan_categories, fallback_category, prompt_categories
 from services.llm_instances import judge_llm, planner_llm, ingest_llm, search
 from services.helpers import (
     _log_tool_eval,
@@ -135,20 +136,17 @@ def _sanitize_plan(raw: list, fallback_input: str,
     Strings, empty dicts or dicts without 'task' key are discarded.
     Returns at least one fallback task.
 
-    user_expert_cats: categories defined in the active user template.
+    user_expert_cats: categories defined in the active user template (a list keeps template order; a set is sorted).
     When non-empty, routing is restricted to those categories so global
     expert fallbacks (with different models) cannot be triggered.
     """
-    NON_EXPERT_CATEGORIES = {"precision_tools", "research"}
-    _special = {"agentic_coder", "memory_recall"}
-    if user_expert_cats:
-        # Template active: only allow template categories + non-expert types.
-        # Global EXPERTS categories are excluded to prevent silent model substitution.
-        # "dynamic" hands the task to expert_builder, which floats to any model on any endpoint; a template
-        # that pins its roster must not be left through it (unless the template itself defines "dynamic").
-        valid_cats = user_expert_cats | NON_EXPERT_CATEGORIES | _special
-    else:
-        valid_cats = set(EXPERTS.keys()) | NON_EXPERT_CATEGORIES | _special | {"dynamic"}
+    # Template active: only its categories + non-expert types (global EXPERTS are excluded to prevent silent model
+    # substitution; "dynamic" only if the template defines it). See services/pipeline/plan_categories.py.
+    if isinstance(user_expert_cats, (set, frozenset)):  # a set has no order: keep the fallback deterministic
+        user_expert_cats = sorted(user_expert_cats)
+    allowed = allowed_plan_categories(dict.fromkeys(user_expert_cats) if user_expert_cats else None, EXPERTS.keys())
+    valid_cats = set(allowed)
+    fallback_cat = fallback_category(allowed)
     result = []
     for item in raw:
         if not isinstance(item, dict):
@@ -160,13 +158,13 @@ def _sanitize_plan(raw: list, fallback_input: str,
         item["task"] = task_text
         cat = item.get("category") or item.get("task_type") or item.get("type") or "general"
         if cat not in valid_cats:
-            logger.warning(f"⚠️ Planner: unknown category '{cat}' → 'general'")
-            cat = "general"
+            logger.warning(f"⚠️ Planner: unknown category '{cat}' → '{fallback_cat}'")
+            cat = fallback_cat
         item["category"] = cat
         result.append(item)
     if not result:
         logger.warning("⚠️ Planner: no valid task after sanitization — fallback")
-        return [{"task": fallback_input, "category": "general"}]
+        return [{"task": fallback_input, "category": fallback_cat}]
     return result
 
 
@@ -417,13 +415,23 @@ async def planner_node(state_: AgentState):
     # Include a short config fingerprint so the plan cache auto-invalidates when
     # the MCP tool set or planner prompt changes between deployments.
     _tool_contract_fp = _canonical_tool_catalog_hash(_handoff_tool_schemas)
+    # Infrastructure knowledge the knowledge broker found (graph/knowledge_broker.py). Reaches the planner only behind its own
+    # switch: the planner was trained without such a block, so it is tried and measured separately from experts and merger.
+    _knowledge_for_planner = (state_.get("knowledge_block") or "") if os.getenv("KNOWLEDGE_TO_PLANNER", "0") == "1" else ""
+    _planner_knowledge_text = (
+        "\n=== KNOWLEDGE ALREADY AVAILABLE (from the infrastructure) ===\n"
+        f"{_knowledge_for_planner}\n"
+        "These facts are already known: do NOT create lookup or research tasks for them. Plan only for the OPEN GAPS above "
+        "and for reasoning or calculation.\n=== END KNOWLEDGE ===\n\n"
+    ) if _knowledge_for_planner else ""
     _cfg_fp = _hashlib.sha256(
         json.dumps(
             {
-                "contract_version": 5,
+                "contract_version": 6,
                 "tools": _tool_contract_fp,
                 "planner_prompt": state_.get("planner_prompt") or "",
                 "role_limit": os.getenv("PLANNER_ROLE_MAX_CHARS", "8000"),
+                **({"knowledge": _hashlib.sha256(_knowledge_for_planner.encode()).hexdigest()[:12]} if _knowledge_for_planner else {}),
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -432,7 +440,9 @@ async def planner_node(state_: AgentState):
     # Include chat_history presence in key: same query needs different plan
     # in conversation context (memory_recall) vs. standalone (research).
     _has_history = "h" if len(state_.get("chat_history") or []) >= 2 else "n"
-    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'].encode()).hexdigest()[:16]}"  # whole input: a 300-character prefix served one request's plan to another that differs only later (long prompts with data)
+    # a plan that was shaped by tenant facts must not be served to another tenant
+    _tenant_part = (":t" + _hashlib.sha256(",".join(sorted(state_.get("tenant_ids") or [])).encode()).hexdigest()[:8]) if _knowledge_for_planner else ""
+    _plan_cache_key = f"moe:plan:{_cfg_fp}:{_has_history}:{_hashlib.sha256(state_['input'].encode()).hexdigest()[:16]}{_tenant_part}"  # whole input: a 300-character prefix served one request's plan to another that differs only later (long prompts with data)
     if state.redis_client is not None and not _is_agentic_replan and not _no_cache_flag:
         try:
             _cached_plan_raw = await state.redis_client.get(_plan_cache_key)
@@ -641,33 +651,9 @@ async def planner_node(state_: AgentState):
     # When a template defines its own expert set, restrict routing to those categories so
     # the planner cannot accidentally route to a global expert not wired in the template.
     # Fall back to the global EXPERTS list when no template experts are active.
-    _NON_EXPERT = {"precision_tools", "research"}
+    # One source for the offered categories, the accepted ones and the output schema: services/pipeline/plan_categories.py
     _user_experts_for_cats = state_.get("user_experts") or {}
-    if _user_experts_for_cats:
-        expert_categories = [c for c in _user_experts_for_cats.keys()
-                             if c not in _NON_EXPERT]
-    else:
-        expert_categories = list(EXPERTS.keys())
-    if "agentic_coder" not in expert_categories and (
-        state_.get("mode") in ("agent_orchestrated", "code")
-        or "agentic_coder" in _user_experts_for_cats
-    ):
-        expert_categories = expert_categories + ["agentic_coder"]
-    import os as _os
-    # "dynamic" hands the task to expert_builder's ad-hoc model discovery
-    # (graph/expert.py, services/expert_builder.py), which floats to whatever
-    # endpoint currently reports the requested capability -- bypassing every
-    # fixed model@endpoint pin the template author set. Offering it
-    # unconditionally defeats a template that already pins a complete expert
-    # roster: observed live, the planner picked "dynamic" for GraphRAG/topology
-    # tasks even though "compounding_knowledge" was pinned and available,
-    # silently answering with qwen3.6:35b/gemma4-31b on N04-RTX instead of the
-    # template's own SmolLM3 experts. Only offer the escape hatch when the
-    # template itself has no pinned roster (global-EXPERTS fallback path,
-    # mirroring the expert_categories source distinction directly above).
-    if _os.getenv("EXPERT_BUILDER_ENABLED", "true").lower() in ("true", "1", "yes"):
-        if not _user_experts_for_cats and "dynamic" not in expert_categories:
-            expert_categories = expert_categories + ["dynamic"]
+    expert_categories = prompt_categories(_user_experts_for_cats, EXPERTS.keys(), mode=state_.get("mode") or "")
 
     # Annotate images in planner input so routing triggers 'vision'
     # The marker must be exactly "[BILD-EINGABE vorhanden]" — as specified in the planner rule
@@ -919,6 +905,7 @@ async def planner_node(state_: AgentState):
             f"Request: \"What is Docker?\"\n"
             f"Correct: [{{\"task\": \"Explain what Docker is and what it is used for\", "
             f"\"category\": \"{_example_cat}\"}}]\n\n"
+            f"{_planner_knowledge_text}"
             f"Request: {state_['input']}\n\n"
             f"JSON array:"
         )
@@ -1063,7 +1050,7 @@ Request: "What is Docker?"
 Correct: [{{"task": "Explain what Docker is and what it is used for", "category": "{_example_cat}"}}]
 WRONG:   ["Docker", "Container", "Virtualization"]
 
-Request: {state_['input']}
+{_planner_knowledge_text}Request: {state_['input']}
 
 JSON array:"""
     await _report(f"📋 Planner prompt ({len(prompt)} chars):\n{prompt}")
@@ -1096,13 +1083,11 @@ JSON array:"""
     _contract_repair_used = False
     _contract_repair_hint = ""
     for attempt in range(_structured_attempts):
-        _attempt_state = state_
+        # the catalog of this request constrains the output schema (services/pipeline/planner_schema.py)
+        _attempt_state = {**dict(state_), "planner_tool_names": sorted(_handoff_tool_schemas)}
         _using_structured_fallback = bool(_retry_model_override)
         if _retry_model_override:
-            _attempt_state = {
-                **dict(state_),
-                "planner_model_override": _retry_model_override,
-            }
+            _attempt_state["planner_model_override"] = _retry_model_override
         res = None
         try:
             # On retry, non-trivial requests switch to the compact prompt too: reusing
@@ -1185,7 +1170,7 @@ JSON array:"""
                         _output_skill = _skill_body
                         logger.info(f"🎯 Planner suggested skill: /{_skill_name}")
                     break
-            _user_expert_cats = set((state_.get("user_experts") or {}).keys())
+            _user_expert_cats = list((state_.get("user_experts") or {}).keys())  # template order: the first expert is the fallback
             from services.advice_store import enforce_advice_rules
             plan = _sanitize_plan(raw, state_["input"], _user_expert_cats)
             plan = enforce_advice_rules(
@@ -1380,8 +1365,9 @@ JSON array:"""
         if not validate_dag_kahn(dag_dict):
             logger.warning("planner_node: Generated plan contains cycles according to Kahn's algorithm")
 
-    # Cache plan in Valkey for reuse (fail-safe)
-    if state.redis_client is not None and plan:
+    # Cache plan in Valkey for reuse (fail-safe). Only a first-pass plan: a replan plan was built for a gap context, and a
+    # no_cache request must leave no trace (the read side already skips both).
+    if state.redis_client is not None and plan and not _is_agentic_replan and not _no_cache_flag:
         asyncio.create_task(state.redis_client.setex(_plan_cache_key, 1800, json.dumps(plan)))
     if _extracted_filters:
         logger.info(f"📋 Planner metadata_filters: {_extracted_filters}")

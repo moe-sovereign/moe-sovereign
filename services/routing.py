@@ -285,6 +285,30 @@ def _get_template_expert_catalog(template_id: str) -> dict:
         return _flatten(_GLOBAL_EXPERTS)
 
 
+def template_state_extras(tp: Optional[dict]) -> dict:
+    """Initial-state keys that come from the resolved template, shared by every pipeline entry point.
+
+    The streaming path used to omit them, so a template that switched GraphRAG, the cache or web research off was ignored
+    there. `graphrag_template_allowed` is the template's permission for the graph; unlike `enable_graphrag` it is never
+    overwritten by the fuzzy router, so a later router pass cannot mistake its own "off" for the template's.
+    """
+    tp = tp or {}
+    return {
+        "enable_cache": tp.get("enable_cache", True),
+        "enable_graphrag": tp.get("enable_graphrag", True),
+        "graphrag_template_allowed": bool(tp.get("enable_graphrag", True)),
+        "enable_web_research": tp.get("enable_web_research", True),
+        "graphrag_max_chars": tp.get("graphrag_max_chars", 0),
+    }
+
+
+def request_tenant_ids(user_id: str, user_perms: Optional[dict]) -> list:
+    """Graph tenant namespaces of a request: the user's private one first, then the ones granted by permissions."""
+    perms = user_perms or {}
+    private = f"user:{user_id}"
+    return ([private] if user_id and user_id != "anon" else []) + [t for t in perms.get("graph_tenant", []) if t != private]
+
+
 def _resolve_template_prompts(
     permissions_json: str,
     override_tmpl_id: Optional[str] = None,
