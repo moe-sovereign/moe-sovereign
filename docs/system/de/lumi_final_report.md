@@ -75,6 +75,34 @@ gestartet dokumentiert.
 ### 4.4 Policy-Pilot (Phase 3)
 **Zu ergänzen:** Lauf (CSO-DPO gegen SFT v4) mit Metriken, oder „nicht gestartet“ mit Grund und dem ungenutzten Budget.
 
+### 4.5 Bewertung aller Läufe (Stand 19.11.2026)
+
+Die Kosten sind aus Laufzeit × 4 Karten je Knoten geschätzt und gerundet. Wertung: erreicht / teilweise / verfehlt / ungültig / offen.
+
+| # | Projekt | Jobs | Beabsichtigt | Tatsächlich | Wertung | Schlussfolgerung |
+|---|---|---|---|---|---|---|
+| 1 | Stack-Aufbau und Smokes | z. B. 23515523 ff. | Der volle MoE-Sovereign-Stack läuft in einem Slurm-Job. | Läuft (Start ≈ 13 min); viele Portierungsfallen dokumentiert. | Erreicht | Voraussetzung erfüllt. Etwa 20 % der Jobstarts scheitern auf einzelnen Knoten (vLLM-Segfault, 8 Fälle, Kosten: Minuten). |
+| 2 | Welle 2 und 3 (Gegenversuchs-Datensatz) | 23522672–75, 23535809–14 | Gate-freie Orchestrierungs-Labels für ein PRM. | 217.000 Episoden, 52.000 Entscheidungspunkte. Das Label `q` ist durch das Gate verfälscht: 50 % der Forks blockiert, Textbaseline 0,60 innerhalb einer Aufgabe, nur 0,50–0,53 auf gate-bestandenen Forks. Zwei Jobs im Timeout. ≈ 950 Karten-h. | Teilweise | Als PRM-Trainingsdatensatz unbrauchbar. Der negative Befund („das Gate dominiert das Label“) war der wichtigste Gewinn dieser Phase. |
+| 3 | PRM-Frühtests | 23549095/96, 23550288, 23556411, 23562153 | Trainingsstack für 7B und 32B auf mehreren Knoten prüfen. | Slingshot-Bindings, `transformers` 5 und Shutdown-Hang behoben; 32B ≈ 2,4 Samples/s; ein Fehlstart, zwei Timeouts. | Erreicht | Infrastruktur trägt, Kosten je Lauf bekannt. Wenige Karten-h. |
+| 4 | 32B-PRM-Läufe | 23603688/89 | Volles 32B-PRM (je ≈ 90 Karten-h). | Vor dem Start abgebrochen, 0 verbraucht. Die Einreichung war voreilig, der Textbaseline-Check hätte vorher kommen müssen. | Richtig gestoppt | Ohne Signal im Label wäre es verschwendete Rechenzeit gewesen. |
+| 5 | GraphRAG-Smokes 1–4 | 23567371, 23569439✗/23572488, 23603690, 23642846 | GraphRAG-Effekt messen. | Smoke 1: Graph leer und Router aus. Smoke 2: 0 richtig, der Planner schickt Rechnungen an `calculate`. Smoke 3: alles vom Gate blockiert. Smoke 4: erster Effekt (+0,53). | Teilweise | Jeder Smoke deckte einen realen Mess- oder Produktfehler auf, erst der vierte maß etwas. ≈ 20 Karten-h. |
+| 6 | GraphRAG-Ablation | 23795184, 23814342, 23795183✗ | Nutzt der Produkt-Router den Graph? Kosten veraltete Fakten Genauigkeit? | Produkt-Router: Abruf 0,00. Erzwungen: graph − empty +0,60, graph − inline −0,14 (KI −0,23 … −0,04), noisy ≈ graph. | Erreicht | Der Effekt existiert, das Produkt erreicht ihn aber nicht; Retrieval ist schlechter als Daten im Prompt. Grenze: synthetische Einzelwert-Abfragen. |
+| 7 | Planner-Paar-Smoke | 23618242 | Machbarkeit von Planner-Paaren prüfen. | Sechs verschiedene Pläne je Punkt, Korrektheit unabhängig vom Gate. ≈ 5 Karten-h. | Erreicht | Zeigte, dass das gate-freie Label funktioniert. |
+| 8 | Welle 4 und Planner-Welle | 23662477–87, 23667179 | PRM-v2-Labels und ≈ 7.700 Planner-Paare. | Der Planner-Server stürzte in 8 von 11 Jobs ab (vLLM-KV-Cache-Fehler), danach nur noch Fallback-Pläne. 49 % der Aufgabensätze unbrauchbar, ≈ 350 Karten-h verloren. | Teilweise | Mein Versäumnis: Planner-Logs nach dem Smoke nicht geprüft, keine Gesundheitsprüfung. Entdeckt über „1 statt 6 verschiedene Pläne“. |
+| 9 | Wiederholungen | 23791554–61, 23814340, 23814343✗/23843018 | Unbrauchbare Teile ersetzen. | Planner-Fix hält: 0 Abstürze, 0 von 1.201 Punkten mit nur einem Plan. Welle 5: 2.757 Aufgaben, Planner-Paare 1.211 (808 läuft). ≈ 300 Karten-h. | Erreicht | Saubere Daten liegen vor. Die Kosten waren eine Folge von Zeile 8. |
+| 10 | PRM v2 (7B) | 23791608, 23814361–64 | Schlägt ein gelerntes Wertmodell die Baselines? | AUROC 0,873 (sd 0,003), innerhalb einer Aufgabe 0,564 (sd 0,007) gegen 0,537 (Knoten-Mittel) und 0,525 (Text). Lernkurve ≈ +0,01 AUROC je Datenverdopplung. Ein früherer „Planner-Wert 0,611“ war ein Artefakt, korrigiert. ≈ 36 Karten-h. | Teilweise | Das Signal ist real, aber klein; ein Nutzen für Schrittwahl oder Plan-Auswahl ist nicht gezeigt. 32B nur als saubere Skalierungsfrage. |
+| 11 | Direkt gegen Workflow auf der Testmenge | 23795177–82, 23814341✗, 23814831✗ | Zeigen, dass der Workflow ein Einzelmodell schlägt, plus Stufen-Ablation. | Direkt 0,485, Workflow 0,352 (−0,13, KI −0,17 … −0,09). Die Varianten unterscheiden sich vom Workflow nicht über das Rauschen. 22 % der Workflow-Episoden scheitern am Planner-Contract (153 davon an der von mir ergänzten `calculate`-Prüfung). Gleich bei `cypher_calc` (0,72 gegen 0,71). Zwei Läufe durch meinen Watchdog ungültig. | Teilweise | Ein belastbares, **negatives** Ergebnis: Auf dieser Suite zeigt der Workflow keinen Vorteil. Gegenteilige Aussagen auf Website und im Whitepaper sind nicht gedeckt. |
+| 12 | Externe Daten und Größenkurve | 23842891, 23842892, 23843014/16 | Externe Gültigkeit, Schwierigkeit nach Größe. | Direktlauf fertig: Mathe 0,94, Tabellen 0,67, Text-QA 0,59. Workflow und Größenkurve laufen. | Offen | Erstmals echte Daten; zeigt, wo das Einzelmodell Lücken hat. |
+| 13 | Antwort-Verifier | 23842900 | Lernbarer Prüfer gegen den Trust-Score (AUROC 0,60). | Läuft. Offline: Mehrheitsvotum hebt `cypher_calc` von 0,73 auf 0,92. | Offen | Es gibt Spielraum, das Training entscheidet. |
+| 14 | Kontrolläufe | 23843015/17/18 | Saubere Wiederholung der ungültigen Läufe. | Laufen. | Offen | Zeigen, wie stark die `calculate`-Prüfung die Genauigkeit drückt. |
+
+Gesamtbild:
+
+- **Verbraucht:** 4.998 von 18.000 Karten-h (27,8 %) am 19.11.2026. Etwa 350 gingen in Daten, die verworfen werden mussten, ≈ 15 in ungültige Läufe. Voraussichtlich bleiben rund 11.000–12.000 Karten-h ungenutzt; das ist wissenschaftlich richtig, wenn die Gründe stimmen.
+- **Belastbare Befunde:** Das Trust-Gate verdeckt Effekte (Korrelation mit Korrektheit 0,10, AUROC 0,60); der Produkt-Router nutzt den Graph nicht; ein Einzelmodell schlägt den Workflow auf dieser Suite; das PRM-Signal ist klein; Mehrheitsentscheid über Stichproben wirkt stark.
+- **Meine Fehler:** zwei 32B-Läufe voreilig eingereicht; Smokes ohne Prüfung der Planner-Logs; der Watchdog beendete gesunde Server; die `calculate`-Prüfung scheitert nach drei Wiederholungen hart; der Treiber übernahm den Entwurf freigegebener Episoden nicht; der PRM-Planner-Wert war ein Artefakt.
+- **Für ein Ergebnis noch offen:** Workflow gegen Direkt auf externen Daten, die sauberen Kontrolläufe zur `calculate`-Prüfung und das Verifier-Training. DPO, ein 32B-PRM und weitere Wellen bleiben zurückgestellt.
+
 ## 5. Negative Ergebnisse und Sackgassen
 
 Aus dem Logbuch gesammelt, damit sie als Befunde gelesen werden und nicht verschwinden: ZeRO-3 + PEFT auf multimodalen

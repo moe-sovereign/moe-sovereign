@@ -75,6 +75,34 @@ the PRM did not demonstrate decision-level value, and phase 3 is documented as n
 **To complete:** run (CSO-DPO against SFT v4) with metrics, or "not started" with the reason and the budget that stayed
 unused.
 
+### 4.5 Run-by-run assessment (status 2026-11-19)
+
+Costs are estimated from elapsed time × 4 cards per node and rounded. Ratings: achieved / partly / missed / invalid / open.
+
+| # | Project | Jobs | Intended | Actual | Rating | Conclusion |
+|---|---|---|---|---|---|---|
+| 1 | Stack build and smokes | e.g. 23515523 ff. | The full MoE Sovereign stack runs in one Slurm job. | Runs (start ≈ 13 min); many porting pitfalls documented. | Achieved | Prerequisite met. About 20 % of job starts fail on single nodes (vLLM segfault, 8 cases, cost: minutes). |
+| 2 | Waves 2 and 3 (counterfactual dataset) | 23522672–75, 23535809–14 | Gate-free orchestration labels for a PRM. | 217,000 episodes, 52,000 decision points. The label `q` is confounded by the gate: 50 % of forks blocked, text baseline 0.60 within a task, only 0.50–0.53 on gate-passed forks. Two jobs timed out. ≈ 950 card-h. | Partly | Unusable as PRM training data. The negative finding ("the gate dominates the label") was the main gain of this phase. |
+| 3 | PRM early tests | 23549095/96, 23550288, 23556411, 23562153 | Check the training stack for 7B and 32B on several nodes. | Slingshot bindings, `transformers` 5 and shutdown hang fixed; 32B ≈ 2.4 samples/s; one failed start, two timeouts. | Achieved | Infrastructure works, cost per run known. A few card-h. |
+| 4 | 32B PRM runs | 23603688/89 | Full 32B PRM (≈ 90 card-h each). | Cancelled before start, 0 consumed. The submission was premature; the text-baseline check should have come first. | Rightly stopped | Without signal in the label it would have been wasted compute. |
+| 5 | GraphRAG smokes 1–4 | 23567371, 23569439✗/23572488, 23603690, 23642846 | Measure the GraphRAG effect. | Smoke 1: graph empty and router off. Smoke 2: 0 correct, the planner sends arithmetic to `calculate`. Smoke 3: everything blocked by the gate. Smoke 4: first effect (+0.53). | Partly | Each smoke exposed a real measurement or product defect; only the fourth measured something. ≈ 20 card-h. |
+| 6 | GraphRAG ablation | 23795184, 23814342, 23795183✗ | Does the product router use the graph? Do stale facts cost accuracy? | Product router: retrieval 0.00. Forced: graph − empty +0.60, graph − inline −0.14 (CI −0.23 … −0.04), noisy ≈ graph. | Achieved | The effect exists but the product does not reach it; retrieval is worse than data in the prompt. Limit: synthetic single-value lookups. |
+| 7 | Planner pair smoke | 23618242 | Check feasibility of planner pairs. | Six distinct plans per point, correctness independent of the gate. ≈ 5 card-h. | Achieved | Showed that the gate-free label works. |
+| 8 | Wave 4 and planner wave | 23662477–87, 23667179 | PRM v2 labels and ≈ 7,700 planner pairs. | The planner server crashed in 8 of 11 jobs (vLLM KV-cache error), then only fallback plans. 49 % of the task records unusable, ≈ 350 card-h lost. | Partly | My failure: planner logs not checked after the smoke, no health check. Found via "1 instead of 6 distinct plans". |
+| 9 | Reruns | 23791554–61, 23814340, 23814343✗/23843018 | Replace the unusable parts. | Planner fix holds: 0 crashes, 0 of 1,201 points with a single plan. Wave 5: 2,757 tasks, planner pairs 1,211 (808 running). ≈ 300 card-h. | Achieved | Clean data exists. The cost was a consequence of row 8. |
+| 10 | PRM v2 (7B) | 23791608, 23814361–64 | Does a learned value model beat the baselines? | AUROC 0.873 (sd 0.003), within a task 0.564 (sd 0.007) against 0.537 (node mean) and 0.525 (text). Learning curve ≈ +0.01 AUROC per doubling of the data. An earlier "planner 0.611" was an artefact, corrected. ≈ 36 card-h. | Partly | The signal is real but small; a benefit for step choice or plan selection is not shown. 32B only as a clean scaling question. |
+| 11 | Direct vs. workflow on the held-out tasks | 23795177–82, 23814341✗, 23814831✗ | Show that the workflow beats a single model, plus a stage ablation. | Direct 0.485, workflow 0.352 (−0.13, CI −0.17 … −0.09). The variants do not differ from the workflow beyond noise. 22 % of workflow episodes fail at the planner contract (153 of them at the `calculate` check I added). Equal on `cypher_calc` (0.72 vs. 0.71). Two runs invalid because of my watchdog. | Partly | A solid, **negative** result: on this suite the workflow shows no advantage. Claims to the contrary on the website and in the whitepaper are not covered. |
+| 12 | External data and size curve | 23842891, 23842892, 23843014/16 | External validity, difficulty by size. | Direct run done: math 0.94, tables 0.67, text QA 0.59. Workflow and size curve running. | Open | First real data; shows where the single model has gaps. |
+| 13 | Answer verifier | 23842900 | A learnable checker against the trust score (AUROC 0.60). | Running. Offline: plurality vote lifts `cypher_calc` from 0.73 to 0.92. | Open | There is room; training decides. |
+| 14 | Control runs | 23843015/17/18 | Clean repeats of the invalid runs. | Running. | Open | Will show how much the `calculate` check lowers accuracy. |
+
+Overall picture:
+
+- **Used:** 4,998 of 18,000 card-h (27.8 %) as of 2026-11-19. About 350 went into data that had to be discarded and ≈ 15 into invalid runs. Roughly 11,000–12,000 card-h will probably stay unused; that is scientifically right if the reasons hold.
+- **Solid findings:** the trust gate hides effects (correlation with correctness 0.10, AUROC 0.60); the product router does not use the graph; a single model beats the workflow on this suite; the PRM signal is small; plurality voting over samples is strong.
+- **My mistakes:** two 32B runs submitted prematurely; smokes without checking the planner logs; the watchdog killed healthy servers; the `calculate` check fails hard after three retries; the driver dropped the draft of approved episodes; the PRM planner figure was an artefact.
+- **Still missing for a result:** workflow vs. direct on external data, the clean control runs on the `calculate` check, and the verifier training. DPO, a 32B PRM and further waves stay deferred.
+
 ## 5. Negative results and dead ends
 
 Collected from the log so that they are read as findings, not hidden: ZeRO-3 + PEFT on multimodal checkpoints; rule-based DPO;
