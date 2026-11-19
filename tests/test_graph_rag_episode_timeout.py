@@ -1,5 +1,4 @@
 """A slow episodic-memory query must not end the request; a spent request deadline still must."""
-import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -23,7 +22,8 @@ def _setup(monkeypatch):
     monkeypatch.setattr(tool_nodes, "GRAPH_VIA_MCP", False)
 
 
-def test_episode_hint_stage_timeout_is_not_fatal(monkeypatch):
+@pytest.mark.asyncio
+async def test_episode_hint_stage_timeout_is_not_fatal(monkeypatch):
     _setup(monkeypatch)
 
     async def wait(aw, state_, cap, *, stage):
@@ -33,12 +33,13 @@ def test_episode_hint_stage_timeout_is_not_fatal(monkeypatch):
         return await real_wait_for_budget(aw, state_, cap, stage=stage)
 
     monkeypatch.setattr(tool_nodes, "wait_for_budget", wait)
-    out = asyncio.run(tool_nodes.graph_rag_node(dict(STATE)))
+    out = await tool_nodes.graph_rag_node(dict(STATE))
     assert "Elm12" in out["graph_context"]
 
 
-def test_spent_request_deadline_still_raises(monkeypatch):
+@pytest.mark.asyncio
+async def test_spent_request_deadline_still_raises(monkeypatch):
     _setup(monkeypatch)
     expired = dict(STATE, request_deadline_monotonic=time.monotonic() - 1.0)
     with pytest.raises(RequestDeadlineExceeded):
-        asyncio.run(tool_nodes.graph_rag_node(expired))
+        await tool_nodes.graph_rag_node(expired)

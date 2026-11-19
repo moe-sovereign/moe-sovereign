@@ -1,7 +1,8 @@
 """Tenant scoping of correction memory and of the GraphRAG context cache."""
-import asyncio
 import hashlib
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 import graph.tool_nodes as tool_nodes
 from graph_rag import corrections
@@ -38,9 +39,10 @@ def _driver(calls, fail_first=False):
     return drv
 
 
-def test_corrections_query_is_tenant_scoped_for_both_variants():
+@pytest.mark.asyncio
+async def test_corrections_query_is_tenant_scoped_for_both_variants():
     calls = []
-    out = asyncio.run(corrections.query_corrections(_driver(calls, fail_first=True), "q", "general", tenant_ids=["acme"]))
+    out = await corrections.query_corrections(_driver(calls, fail_first=True), "q", "general", tenant_ids=["acme"])
     assert out and len(calls) == 2
     assert "sorensenDice" in calls[0][0] and calls[0][1]["query"] == "q"  # the similarity query really ran first
     for query, params in calls:
@@ -48,13 +50,14 @@ def test_corrections_query_is_tenant_scoped_for_both_variants():
         assert "c.tenant_id IN $tenant_ids" in query
 
 
-def test_corrections_without_tenants_pass_an_empty_list_meaning_unscoped():
+@pytest.mark.asyncio
+async def test_corrections_without_tenants_pass_an_empty_list_meaning_unscoped():
     calls = []
-    asyncio.run(corrections.query_corrections(_driver(calls), "q", "general"))
+    await corrections.query_corrections(_driver(calls), "q", "general")
     assert calls[0][1]["tenant_ids"] == []
 
 
-def _graph_key(monkeypatch, tenant_ids):
+async def _graph_key(monkeypatch, tenant_ids):
     seen = []
 
     class _Redis:
@@ -71,19 +74,21 @@ def _graph_key(monkeypatch, tenant_ids):
               "plan": [{"task": "x", "category": "general"}]}
     if tenant_ids is not None:
         state_["tenant_ids"] = tenant_ids
-    asyncio.run(tool_nodes.graph_rag_node(state_))
+    await tool_nodes.graph_rag_node(state_)
     return seen[0]
 
 
-def test_graph_cache_key_differs_per_tenant_and_is_unchanged_without_tenants(monkeypatch):
-    a, b, none = (_graph_key(monkeypatch, t) for t in (["a"], ["b"], None))
+@pytest.mark.asyncio
+async def test_graph_cache_key_differs_per_tenant_and_is_unchanged_without_tenants(monkeypatch):
+    a, b, none = [await _graph_key(monkeypatch, t) for t in (["a"], ["b"], None)]
     assert a != b and a != none
     legacy = "moe:graph:" + hashlib.sha256(("What is the capacity of Elm12 depot?" + "general").encode()).hexdigest()[:16]
     assert none == legacy
 
 
-def test_similarity_query_runs_with_the_real_neo4j_run_signature():
+@pytest.mark.asyncio
+async def test_similarity_query_runs_with_the_real_neo4j_run_signature():
     calls = []
-    out = asyncio.run(corrections.query_corrections(_driver(calls), "how to size a pool", "general"))
+    out = await corrections.query_corrections(_driver(calls), "how to size a pool", "general")
     assert out and len(calls) == 1 and "sorensenDice" in calls[0][0]
     assert calls[0][1]["query"] == "how to size a pool" and calls[0][1]["min_similarity"] == 0.25
