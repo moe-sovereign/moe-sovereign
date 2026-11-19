@@ -21,6 +21,13 @@ BATCH = 500
 _REL = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
+def relation_rows(rels: list[dict]) -> list[dict]:
+    """Rows for the relation MERGE. A relation may carry its own provenance (`source`, `verified`, `valid_from`, `created`, in
+    epoch milliseconds, as Neo4j's timestamp() writes them); without it the fixture defaults apply (verified, ingested now)."""
+    return [{"s": r["s"], "o": r["o"], "conf": r["conf"], "src": r.get("source", "fixture"), "ver": bool(r.get("verified", True)),
+             "vf": r.get("valid_from"), "cr": r.get("created")} for r in rels]
+
+
 async def run(a):
     from neo4j import AsyncGraphDatabase
     tasks = [json.loads(l) for l in open(a.tasks, encoding="utf-8")] if a.tasks else []
@@ -54,12 +61,13 @@ async def run(a):
         for i in range(0, len(al), BATCH):  # the product matches terms against name and aliases_str
             await s.run("UNWIND $rows AS r MATCH (e:Entity {name: r.name}) SET e.aliases_str = r.al", {"rows": al[i:i + BATCH]})
         for rel in sorted({r["r"] for r in rels}):
-            part = [r for r in rels if r["r"] == rel]
+            part = relation_rows([r for r in rels if r["r"] == rel])
             for i in range(0, len(part), BATCH):
                 await s.run(f"""UNWIND $rows AS r MATCH (a:Entity {{name: r.s}}), (b:Entity {{name: r.o}})
-                                MERGE (a)-[x:{rel} {{source: 'fixture'}}]->(b)
-                                ON CREATE SET x.confidence = r.conf, x.source_model = 'fixture', x.version = 1, x.verified = true,
-                                              x.created = timestamp(), x.valid_from = timestamp()""", {"rows": part[i:i + BATCH]})
+                                MERGE (a)-[x:{rel} {{source: r.src}}]->(b)
+                                ON CREATE SET x.confidence = r.conf, x.source_model = 'fixture', x.version = 1, x.verified = r.ver,
+                                              x.created = coalesce(r.cr, timestamp()), x.valid_from = coalesce(r.vf, timestamp())""",
+                            {"rows": part[i:i + BATCH]})
         count = await (await s.run("MATCH (e:Entity) RETURN count(e) AS n")).single()
     await driver.close()
     print(json.dumps({"entities": count["n"], "relations": len(rels), "filler": a.filler}))

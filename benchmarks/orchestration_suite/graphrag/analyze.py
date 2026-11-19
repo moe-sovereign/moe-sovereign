@@ -25,6 +25,18 @@ def wilson(k: int, n: int, z: float = 1.96):
     return (round(c - h, 3), round(c + h, 3))
 
 
+def effective_correct(base: dict) -> bool:
+    """Correctness without the trust gate: the answer if one left the pipeline (answer / approved draft), else the withheld draft."""
+    if base["outcome"].split(":")[0] in ("answer", "hitl"):
+        return bool(base["correct"])
+    return bool(base.get("draft_correct"))
+
+
+def pctl(xs: list, q: float):
+    xs = sorted(xs)
+    return round(xs[min(len(xs) - 1, int(q * len(xs)))], 1) if xs else None
+
+
 def retrieved(rec: dict, entities: list[str]) -> bool:
     ctx = (rec.get("captured") or {}).get("graph_context") or ""
     return bool(ctx) and any(e in ctx for e in entities)
@@ -32,7 +44,7 @@ def retrieved(rec: dict, entities: list[str]) -> bool:
 
 def holds_answer(rec: dict, task: dict) -> bool:
     """Arithmetic-free tasks only: the stored number itself is in the retrieved context (checks the channel, not the model)."""
-    if task["family"] not in ("lookup_val", "lookup_hop1"):
+    if task["family"] not in ("lookup_val", "lookup_hop1") or "ref" not in task["final"]:
         return False
     ctx = (rec.get("captured") or {}).get("graph_context") or ""
     return f"{int(task['final']['ref'])} " in ctx or f"{int(task['final']['ref'])}\n" in ctx or ctx.endswith(str(int(task["final"]["ref"])))
@@ -40,6 +52,7 @@ def holds_answer(rec: dict, task: dict) -> bool:
 
 def analyze(recs: list[dict], tasks: dict, boot: int = 2000, seed: int = 0) -> dict:
     by_arm = defaultdict(list)
+    extra = defaultdict(lambda: {"eff": [], "conflicts": [], "rules": Counter(), "sec": [], "bundle": 0})
     per_base = defaultdict(lambda: defaultdict(list))
     for r in recs:
         t = tasks.get(r["task_id"])
@@ -48,6 +61,14 @@ def analyze(recs: list[dict], tasks: dict, boot: int = 2000, seed: int = 0) -> d
         ok = bool(r["base"]["correct"])
         by_arm[t["arm"]].append((ok, r["base"]["outcome"].split(":")[0], retrieved(r, t["entities"]), bool(r["base"].get("draft_correct")), holds_answer(r, t)))
         per_base[t["base"]][t["arm"]].append(ok)
+        e = extra[t["arm"]]
+        e["eff"].append(effective_correct(r["base"]))
+        e["sec"].append(float(r["base"].get("seconds") or 0.0))
+        bundle = (r.get("captured") or {}).get("knowledge_bundle") or {}
+        if bundle:
+            e["bundle"] += 1
+        e["conflicts"].append(len(bundle.get("conflicts") or []))
+        e["rules"].update(c.get("rule", "?") for c in bundle.get("conflicts") or [])
     out = {"arms": {}, "paired": {}}
     for arm, rows in sorted(by_arm.items()):
         n, k = len(rows), sum(x[0] for x in rows)
@@ -56,6 +77,12 @@ def analyze(recs: list[dict], tasks: dict, boot: int = 2000, seed: int = 0) -> d
                             "retrieved_share": round(len(got) / n, 3), "answer_in_context": round(sum(x[4] for x in rows) / n, 3),
                             "correct_given_retrieved": round(sum(x[0] for x in got) / len(got), 3) if got else None,
                             "correct_given_not_retrieved": round(sum(x[0] for x in rows if not x[2]) / max(1, n - len(got)), 3)}
+        e = extra[arm]
+        out["arms"][arm].update({
+            "effective_correct": round(sum(e["eff"]) / n, 3),  # gate-free: the number that counts for the knowledge experiments
+            "broker_bundle_share": round(e["bundle"] / n, 3),
+            "conflicts_per_episode": round(sum(e["conflicts"]) / n, 3), "conflict_rules": dict(e["rules"]),
+            "seconds_p50": pctl(e["sec"], 0.5), "seconds_p95": pctl(e["sec"], 0.95)})
     rnd = random.Random(seed)
     bases = list(per_base)
     for a, b in (("graph", "empty"), ("graph", "inline"), ("noisy", "graph"), ("noisy", "empty")):

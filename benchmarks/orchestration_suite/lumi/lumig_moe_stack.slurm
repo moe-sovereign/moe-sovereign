@@ -5,7 +5,7 @@
 #
 # Layout under $R (= $SCRATCH/moe-stack):
 #   sif/      container images (orchestrator, mcp, embed, postgres, valkey, chroma, kafka)
-#   app/      orchestrator source (git snapshot, bind-mounted over /app)
+#   app/      orchestrator source (git snapshot, bind-mounted over /app); APP_SUBDIR=app_kb selects another tree
 #   config/   moe_userdb_schema.sql, moe_userdb_config_data.sql, lumi.env (no secrets)
 #   data/     routing/advice runtime data (bind-mounted to /app/data)
 #   runs/<jobid>/  logs, results, runtime secrets (0700)
@@ -25,6 +25,7 @@ set -euo pipefail
 SCRATCH=/scratch/project_465003058/hornphil
 R=$SCRATCH/moe-stack
 RUN=$R/runs/$SLURM_JOB_ID
+APP=${APP_SUBDIR:-app}   # source tree under $R; a second tree (app_kb) lets code variants run side by side without touching queued jobs
 SHM=/dev/shm/moe_$SLURM_JOB_ID
 CK=$SCRATCH/checkpoints
 mkdir -p "$RUN/logs" "$SHM" && chmod 700 "$RUN" "$SHM"
@@ -178,7 +179,7 @@ wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
 if [ "${DIRECT_ONLY:-0}" = "1" ]; then   # control run: both judge replicas answer the tasks alone (same weights as the workflow's judge)
     wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
     wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
-    SX --bind "$R/app:/app" --pwd /app "$R/sif/moe-sovereign-orchestrator_local.sif" python3 benchmarks/orchestration_suite/direct_baseline.py \
+    SX --bind "$R/$APP:/app" --pwd /app "$R/sif/moe-sovereign-orchestrator_local.sif" python3 benchmarks/orchestration_suite/direct_baseline.py \
         --tasks "$R/$TASKS" --urls http://127.0.0.1:8101,http://127.0.0.1:8111 --model "$JUDGE" --label "${LABEL:-judge32b}" \
         --offset "${OFFSET:-0}" --n "${N:-0}" --repeats "${REPEATS:-1}" --concurrency "${CONC:-32}" --out "$RUN/rollouts.jsonl" | tee "$RUN/driver_summary.json"
     exit 0
@@ -202,7 +203,7 @@ PY
 wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
 wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
 OS="$R/sif/moe-sovereign-orchestrator_local.sif"
-bg shim SX "$OS" python3 "$R/app/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
+bg shim SX "$OS" python3 "$R/$APP/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
 wait_http http://127.0.0.1:18100/api/tags shim 60
 
 # ---- MCP precision + orchestrator --------------------------------------------------------------
@@ -210,7 +211,7 @@ mkdir -p "$RUN/mcp_generated"   # /app is read-only in the SIF (smoke 23515108: 
 bg mcp SX --env-file "$RUN/stack.env" --env "MOE_GENERATED_DIR=$RUN/mcp_generated" --pwd /app "$R/sif/moe-mcp-precision_lumi.sif" python server.py
 MCP_PID=$LASTPID
 mkdir -p "$RUN/applogs"
-APPB=(--bind "$R/app:/app" --bind "$R/data:/app/data" --bind "$RUN/applogs:/app/logs" --bind "$RUN/stack.env:/app/.env" --env-file "$RUN/stack.env" --pwd /app)
+APPB=(--bind "$R/$APP:/app" --bind "$R/data:/app/data" --bind "$RUN/applogs:/app/logs" --bind "$RUN/stack.env:/app/.env" --env-file "$RUN/stack.env" --pwd /app)
 wait_http http://127.0.0.1:18001/api/v2/heartbeat chroma 120
 wait_http http://127.0.0.1:7474/ neo4j 120
 wait_http http://127.0.0.1:21434/api/tags embed 120

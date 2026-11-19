@@ -9,6 +9,7 @@ emitted once per arm, with arm-specific entity names so the arms never share gra
   inline facts in the prompt, graph untouched: the reference of the earlier waves
 
   generate_lookup.py --n 250 --seed 11 [--kinds val,hop1] --out lookup_tasks.jsonl
+  generate_lookup.py --conflicts --n 60 --seed 31 --out lookup_conflicts.jsonl   # stale/fresh, verified-old, tie, model-only
 
 Kinds: `val` and `hop1` ask for one stored number (no arithmetic), `sum` and `hop` add a percentage on top. The planner
 sends every calculation to the MCP `calculate` tool with invented expressions (smoke 23572488: all graph-arm episodes
@@ -141,6 +142,82 @@ def generate(n: int, seed: int, de_share: float = 0.3, kinds=("val", "hop1")) ->
     return out
 
 
+# ---- knowledge-conflict arms (knowledge broker, docs: C16) -------------------------------------------------------------------
+# One entity, one attribute, and what the graph holds about it differs per arm. `expected_rule` names what the broker's
+# reconciliation should do (services/knowledge_reconcile.py: authority first, recency only inside one authority class).
+CONFLICT_ARMS = ("stale_fresh", "verified_old", "conflict_tie", "llm_only")
+OLD_MS, NEW_MS = 1_700_000_000_000, 1_780_000_000_000  # 2023-11-14 and 2026-05-28 (ingestion/confirmation time of an edge)
+PUBLIC_FACTS = [  # (question en, question de, accepted answers): things any large model knows, nothing in the graph
+    ("What is the capital of Australia?", "Was ist die Hauptstadt von Australien?", ["Canberra"]),
+    ("What is the capital of Canada?", "Was ist die Hauptstadt von Kanada?", ["Ottawa"]),
+    ("What is the capital of Brazil?", "Was ist die Hauptstadt von Brasilien?", ["Brasília", "Brasilia"]),
+    ("What is the capital of Turkey?", "Was ist die Hauptstadt der Türkei?", ["Ankara"]),
+    ("What is the capital of Switzerland?", "Was ist die Hauptstadt der Schweiz?", ["Bern"]),
+    ("What is the chemical symbol of gold?", "Wie lautet das chemische Symbol von Gold?", ["Au"]),
+    ("What is the chemical symbol of sodium?", "Wie lautet das chemische Symbol von Natrium?", ["Na"]),
+    ("Who wrote the novel 'Faust'?", "Wer schrieb das Drama 'Faust'?", ["Goethe"]),
+    ("Who painted the Mona Lisa?", "Wer malte die Mona Lisa?", ["Leonardo", "da Vinci"]),
+    ("Which planet is closest to the sun?", "Welcher Planet ist der Sonne am nächsten?", ["Mercury", "Merkur"]),
+    ("What is the longest river in Germany?", "Welcher ist der längste Fluss Deutschlands?", ["Rhine", "Rhein"]),
+    ("In which year did the Berlin Wall fall?", "In welchem Jahr fiel die Berliner Mauer?", ["1989"]),
+    ("What is the largest ocean on Earth?", "Welcher ist der größte Ozean der Erde?", ["Pacific", "Pazifik"]),
+    ("Who developed the theory of general relativity?", "Wer entwickelte die allgemeine Relativitätstheorie?", ["Einstein"]),
+    ("What is the square root of 144?", "Was ist die Quadratwurzel aus 144?", ["12"]),
+]
+
+
+def conflict_base(rnd: random.Random, k: int, seed: int) -> dict:
+    v = rnd.choice(VOCABS)
+    old = rnd.randint(40, 990)
+    new = max(1, old + rnd.choice([-1, 1]) * rnd.randint(30, 300))
+    if new == old:
+        new = old + 31
+    return {"base": f"c{seed}-{k:04d}", "vocab": v["type"], "kind": "val", "stems": [rnd.choice(v["stems"])], "attr": v["attr"],
+            "unit": v["unit"], "noun": {"en": v["en"], "de": v["de"]}, "old": old, "new": new, "k": k}
+
+
+def conflict_facts(b: dict, name: str, arm: str) -> dict:
+    """Two values for the same (entity, attribute); the arm decides provenance and age (the fields the reconciliation reads)."""
+    spec = {  # arm -> [(value, source, verified, ms)]
+        "stale_fresh":  [(b["old"], "extracted", False, OLD_MS), (b["new"], "extracted", False, NEW_MS)],
+        "verified_old": [(b["old"], "fixture", True, OLD_MS), (b["new"], "extracted", False, NEW_MS)],
+        "conflict_tie": [(b["old"], "extracted", False, NEW_MS), (b["new"], "extracted", False, NEW_MS)],
+    }[arm]
+    ents, rels = [{"name": name, "type": b["vocab"]}], []
+    for val, source, verified, ms in spec:
+        label = f"{val} {b['unit']}"
+        ents.append({"name": label, "type": "Value"})
+        rels.append({"s": name, "r": b["attr"], "o": label, "conf": 0.9, "source": source, "verified": verified,
+                     "valid_from": ms, "created": ms})
+    return {"entities": ents, "relations": rels}
+
+
+def generate_conflicts(n: int, seed: int, de_share: float = 0.3) -> list[dict]:
+    rnd = random.Random(f"conflicts-{seed}")
+    lang_rnd = random.Random(f"conflicts-lang-{seed}")
+    out = []
+    for k in range(n):
+        b = conflict_base(rnd, k, seed)
+        lang = "de" if lang_rnd.random() < de_share else "en"
+        for arm in CONFLICT_ARMS:
+            if arm == "llm_only":
+                q_en, q_de, answers = PUBLIC_FACTS[k % len(PUBLIC_FACTS)]
+                out.append({"id": f"lookup_val-{b['base']}-{arm}", "family": "lookup_val", "arm": arm, "base": b["base"], "vocab": "public",
+                            "lang": lang, "prompts": {"en": q_en, "de": q_de}, "graph": None, "expected_rule": "llm",
+                            "final": {"kind": "text", "answers": answers, "all": False}, "entities": []})
+                continue
+            name = names_for(b, arm)[0]
+            final = ({"ref": float(b["new"]), "tol": 0.005} if arm == "stale_fresh" else
+                     {"ref": float(b["old"]), "tol": 0.005} if arm == "verified_old" else
+                     {"kind": "text", "answers": [str(b["old"]), str(b["new"])], "all": True})  # a tie must show both values
+            out.append({"id": f"lookup_val-{b['base']}-{arm}", "family": "lookup_val", "arm": arm, "base": b["base"], "vocab": b["vocab"],
+                        "lang": lang, "prompts": {la: prompt(b, [name], la, False) for la in ("en", "de")},
+                        "graph": conflict_facts(b, name, arm),
+                        "expected_rule": {"stale_fresh": "recency", "verified_old": "authority", "conflict_tie": "unresolved"}[arm],
+                        "final": final, "entities": [name]})
+    return out
+
+
 def filler_entities(seed: int, n: int = FILLER) -> list[dict]:
     """Haystack: unrelated entities in the same schema, shared by the whole run."""
     rnd = random.Random(f"filler-{seed}")
@@ -157,10 +234,11 @@ if __name__ == "__main__":
     ap.add_argument("--n", type=int, default=250)
     ap.add_argument("--seed", type=int, default=11)
     ap.add_argument("--kinds", default="val,hop1", help="comma list of val, hop1, sum, hop")
+    ap.add_argument("--conflicts", action="store_true", help="knowledge-conflict arms (stale_fresh, verified_old, conflict_tie, llm_only)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
-    tasks = generate(a.n, a.seed, kinds=tuple(a.kinds.split(",")))
+    tasks = generate_conflicts(a.n, a.seed) if a.conflicts else generate(a.n, a.seed, kinds=tuple(a.kinds.split(",")))
     with open(a.out, "w", encoding="utf-8") as f:
         for t in tasks:
             f.write(json.dumps(t, ensure_ascii=False) + "\n")
-    print(json.dumps({"written": len(tasks), "base_tasks": a.n, "arms": ARMS}))
+    print(json.dumps({"written": len(tasks), "base_tasks": a.n, "arms": CONFLICT_ARMS if a.conflicts else ARMS}))
