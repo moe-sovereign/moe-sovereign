@@ -54,6 +54,7 @@ from services.routing import (
 )
 from services.kafka import _kafka_publish
 from services.tracking import _increment_user_budget, _record_stage
+from services.pipeline.plan_categories import allowed_plan_categories, fallback_category, prompt_categories
 from services.llm_instances import judge_llm, planner_llm, ingest_llm, search
 from services.helpers import (
     _log_tool_eval,
@@ -135,20 +136,17 @@ def _sanitize_plan(raw: list, fallback_input: str,
     Strings, empty dicts or dicts without 'task' key are discarded.
     Returns at least one fallback task.
 
-    user_expert_cats: categories defined in the active user template.
+    user_expert_cats: categories defined in the active user template (a list keeps template order; a set is sorted).
     When non-empty, routing is restricted to those categories so global
     expert fallbacks (with different models) cannot be triggered.
     """
-    NON_EXPERT_CATEGORIES = {"precision_tools", "research"}
-    _special = {"agentic_coder", "memory_recall"}
-    if user_expert_cats:
-        # Template active: only allow template categories + non-expert types.
-        # Global EXPERTS categories are excluded to prevent silent model substitution.
-        # "dynamic" hands the task to expert_builder, which floats to any model on any endpoint; a template
-        # that pins its roster must not be left through it (unless the template itself defines "dynamic").
-        valid_cats = user_expert_cats | NON_EXPERT_CATEGORIES | _special
-    else:
-        valid_cats = set(EXPERTS.keys()) | NON_EXPERT_CATEGORIES | _special | {"dynamic"}
+    # Template active: only its categories + non-expert types (global EXPERTS are excluded to prevent silent model
+    # substitution; "dynamic" only if the template defines it). See services/pipeline/plan_categories.py.
+    if isinstance(user_expert_cats, (set, frozenset)):  # a set has no order: keep the fallback deterministic
+        user_expert_cats = sorted(user_expert_cats)
+    allowed = allowed_plan_categories(dict.fromkeys(user_expert_cats) if user_expert_cats else None, EXPERTS.keys())
+    valid_cats = set(allowed)
+    fallback_cat = fallback_category(allowed)
     result = []
     for item in raw:
         if not isinstance(item, dict):
@@ -160,13 +158,13 @@ def _sanitize_plan(raw: list, fallback_input: str,
         item["task"] = task_text
         cat = item.get("category") or item.get("task_type") or item.get("type") or "general"
         if cat not in valid_cats:
-            logger.warning(f"⚠️ Planner: unknown category '{cat}' → 'general'")
-            cat = "general"
+            logger.warning(f"⚠️ Planner: unknown category '{cat}' → '{fallback_cat}'")
+            cat = fallback_cat
         item["category"] = cat
         result.append(item)
     if not result:
         logger.warning("⚠️ Planner: no valid task after sanitization — fallback")
-        return [{"task": fallback_input, "category": "general"}]
+        return [{"task": fallback_input, "category": fallback_cat}]
     return result
 
 
@@ -624,33 +622,9 @@ async def planner_node(state_: AgentState):
     # When a template defines its own expert set, restrict routing to those categories so
     # the planner cannot accidentally route to a global expert not wired in the template.
     # Fall back to the global EXPERTS list when no template experts are active.
-    _NON_EXPERT = {"precision_tools", "research"}
+    # One source for the offered categories, the accepted ones and the output schema: services/pipeline/plan_categories.py
     _user_experts_for_cats = state_.get("user_experts") or {}
-    if _user_experts_for_cats:
-        expert_categories = [c for c in _user_experts_for_cats.keys()
-                             if c not in _NON_EXPERT]
-    else:
-        expert_categories = list(EXPERTS.keys())
-    if "agentic_coder" not in expert_categories and (
-        state_.get("mode") in ("agent_orchestrated", "code")
-        or "agentic_coder" in _user_experts_for_cats
-    ):
-        expert_categories = expert_categories + ["agentic_coder"]
-    import os as _os
-    # "dynamic" hands the task to expert_builder's ad-hoc model discovery
-    # (graph/expert.py, services/expert_builder.py), which floats to whatever
-    # endpoint currently reports the requested capability -- bypassing every
-    # fixed model@endpoint pin the template author set. Offering it
-    # unconditionally defeats a template that already pins a complete expert
-    # roster: observed live, the planner picked "dynamic" for GraphRAG/topology
-    # tasks even though "compounding_knowledge" was pinned and available,
-    # silently answering with qwen3.6:35b/gemma4-31b on N04-RTX instead of the
-    # template's own SmolLM3 experts. Only offer the escape hatch when the
-    # template itself has no pinned roster (global-EXPERTS fallback path,
-    # mirroring the expert_categories source distinction directly above).
-    if _os.getenv("EXPERT_BUILDER_ENABLED", "true").lower() in ("true", "1", "yes"):
-        if not _user_experts_for_cats and "dynamic" not in expert_categories:
-            expert_categories = expert_categories + ["dynamic"]
+    expert_categories = prompt_categories(_user_experts_for_cats, EXPERTS.keys(), mode=state_.get("mode") or "")
 
     # Annotate images in planner input so routing triggers 'vision'
     # The marker must be exactly "[BILD-EINGABE vorhanden]" — as specified in the planner rule
@@ -1146,7 +1120,7 @@ JSON array:"""
                         _output_skill = _skill_body
                         logger.info(f"🎯 Planner suggested skill: /{_skill_name}")
                     break
-            _user_expert_cats = set((state_.get("user_experts") or {}).keys())
+            _user_expert_cats = list((state_.get("user_experts") or {}).keys())  # template order: the first expert is the fallback
             from services.advice_store import enforce_advice_rules
             plan = _sanitize_plan(raw, state_["input"], _user_expert_cats)
             plan = enforce_advice_rules(
