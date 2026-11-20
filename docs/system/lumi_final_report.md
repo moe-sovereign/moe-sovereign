@@ -18,7 +18,7 @@ model, and a 7B model trained on gate-free labels beats the baselines only sligh
 the graph for lookups, although forcing it gives +0.60 accuracy; (3) the orchestrated workflow does **not** beat the single 32B model it
 contains (−0.13 on held-out, −0.09 to −0.32 on external data), the largest single cost being a contract check and a crashing planner
 server that were found and fixed; (4) a 7B **answer verifier** selects correct answers far better than the trust gate or a majority vote
-(AUROC 0.95; best-of-N 0.64 against 0.44 for a single answer, transfer to external data pending). Open: the base-vs-fine-tuned runs,
+(AUROC 0.95; best-of-N 0.64 against 0.44 for a single answer; transfer to numeric external data works, to free text it does not); (5) fine-tuning of planner and judge shows **no effect** at pipeline level (+0.001, CI −0.028 … +0.029), the workflow's deficit sits in one family (`sql_calc`), and extra router categories lift graph retrieval only partway (0 → 21 %). Open:
 the knowledge-broker gate and the verifier pipeline. About 350 card-hours went into data that had to be discarded after a server fault,
 which this report states as a mistake; the unused remainder is reported in section 2. Artefacts: section 7.
 
@@ -67,7 +67,7 @@ episodes, 52,769 decision points, 24.1 % with signal). **To complete:** final to
 | **7B PRM, three seeds** (23791608, 23814361–62), clean wave-4 rows | AUROC 0.873 (sd 0.003), Brier 0.078, within-task pairwise **0.564 (sd 0.007)**; learning curve +0.01 AUROC per doubling (25 % / 50 % / 100 % of the data: 0.848 / 0.862 / 0.874) |
 | Verdict PRM | Better than both baselines by several seed spreads, but the step-level gain over the node mean is small (+0.027); no demonstrated decision-level value. A per-node figure for the planner is not defined (one planner point per task); the "planner 0.611" of 2026-11-17 was an artefact and is withdrawn. A 32B run was not justified |
 | **7B answer verifier** (23842900): task + draft → correct, 112,057 rows, one epoch | test (4,247 answers of the direct judge and four workflow variants to the 491 held-out tasks): AUROC **0.952**, within-task pairwise 0.884, Brier 0.093; trust score AUROC 0.60. Best-of-N accuracy: direct N ≈ 3 single 0.531 / vote 0.567 / **verifier 0.606** / oracle 0.687; workflow N ≈ 6 0.411 / 0.511 / **0.577** / 0.684; pooled N ≈ 8.6 0.440 / 0.589 / **0.635** / 0.776 |
-| Verdict verifier | The largest effect of the grant. Open: transfer to external data (23874318) and to unseen task families; the pipeline integration |
+| Verdict verifier | The largest effect of the grant. Transfer to external data measured (23874318, 23874919: numeric yes, free text no). Open: unseen task families; the pipeline integration |
 
 ### 4.3 GraphRAG ablation
 | Finding | Status |
@@ -107,7 +107,10 @@ Costs are estimated from elapsed time × 4 cards per node and rounded. Ratings: 
 | 13 | Answer verifier | 23842900 | A learnable checker against the trust score (AUROC 0.60). | AUROC 0.952 on answers to held-out tasks; best-of-N 0.635 against 0.440 for a single answer (pooled N ≈ 8.6), 0.606 against 0.531 for the direct judge at N ≈ 3. ≈ 20 card-h. | Achieved | The largest effect of the grant; transfer to external data pending (23874318), then the pipeline. |
 | 14 | Control runs | 23843015/17/18 | Clean repeats of the invalid runs. | Deliberation 0.323 (−0.03 vs workflow); check off 0.410 vs 0.352 on held-out (+0.055), opposite sign on external data; planner pairs 808 collected. | Achieved | The check should degrade, not fail; deliberation has no benefit. |
 | 15 | Knowledge broker (product code) | branch `feat/knowledge-broker` | Infrastructure knowledge before the planner, reconciliation, expert injection, entity-hit routing. | 23 commits, 1,452 tests, all new behaviour off by default; found and fixed correction-memory, streaming and tenant defects on the way. | Achieved (code) | Effect unmeasured until gate P0 (23874159–64). |
-| 16 | Open at writing | 23857467–73, 23858647–54, 23874159–64, 23874318 | Sampling yield, router threshold, base vs fine-tuned, gate P0, verifier transfer. | Queued. | Open | See findings, section 6. |
+| 16 | Base vs. fine-tuned, factorial | 23858647–54, 23857467–70 | Do fine-tuned planner and judge change pipeline accuracy? | Held-out: both fine-tuned − both base **+0.001** (CI −0.028 … +0.029), planner −0.004, judge −0.020 (−0.045 … +0.007); single model 0.498 vs 0.489. External: +0.011 (−0.029 … +0.050). Experts fine-tuned in all runs. | Achieved (null result) | No effect above ≈ ±0.03 for planner and judge; experts unmeasured. See findings F12. |
+| 17 | Sampling yield, workflow by family, router switches | 23857467–73, 23875180 | Does sampling close the workflow gap? Do extra router categories reach the graph? | pass@k direct 0.489 → 0.709 (k = 8), workflow 0.338 → 0.639 (k = 6); the workflow loses in `sql_calc` (−0.479) only and wins in `cypher_sql_calc` (+0.051). Extra categories: lookup 0.152 → 0.273 (forced 0.494), graph context 0 → 20.6 %. Held-out router runs are confounded by a loaded graph. | Achieved; router held-out part not interpretable | Sampling does not close the gap; the loss is one path. Control for the router held-out part is in gate P0. See F14–F16. |
+| 18 | Verifier v2 | 23874919, 23874318 | Does external data in training widen the verifier? | In-domain unchanged (AUROC 0.963 / 0.952); `test_ext` AUROC 0.820. Transfer without external data: math 0.815–0.925, tables 0.72–0.80, text 0.59–0.61. | Achieved | No evidence that external answers close the free-text gap. See F10. |
+| 19 | Open at writing | 23900909–14, 23900915 | Gate P0 (resubmitted after a judge-start fault), planner-interview traces. | Queued. | Open | See findings, section 6. |
 
 Overall picture:
 
@@ -122,7 +125,7 @@ Collected so that they are read as findings: ZeRO-3 + PEFT on multimodal checkpo
 `sequence_mask` importance sampling; the 2-node hang without Slingshot bindings; GraphRAG against an empty schema; arithmetic tasks that
 measure the planner. From phase J: a label confounded by the quality gate (waves 2/3 unusable as PRM data); the planner preference-pair route
 (noise as large as the effect); **the orchestrated workflow does not beat the single model on this suite or on the external sets**;
-deliberation brings nothing; fine-tuning has no demonstrated pipeline-level effect (September benchmark, base-vs-fine-tuned runs pending);
+deliberation brings nothing; fine-tuning of planner and judge has no measurable pipeline-level effect (September benchmark and the factorial runs; the experts were not varied);
 a PRM with a small step-level gain. Own mistakes that cost compute are listed in [findings, section 3](lumi_findings_2026-11.md): the server
 fault that discarded ≈ 350 card-hours, a watchdog that killed a healthy server, a contract check that fails hard, a driver defect, a withdrawn figure.
 
