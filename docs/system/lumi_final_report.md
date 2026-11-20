@@ -1,4 +1,4 @@
-# LUMI-G Final Report (draft, prepared 2026-11-10)
+# LUMI-G Final Report (draft, updated 2026-11-20)
 
 **Status:** draft. Sections marked **to complete** are filled in after the allocation expires on **2026-12-05**; everything
 else is taken from the [activity log](lumi_activity_log.md) and carries its status labels. Nothing in a *to complete* section
@@ -9,10 +9,18 @@ excerpts of sections 3–5).
 
 ---
 
-## 1. Summary (to complete)
+## 1. Summary (draft 2026-11-20, to be finalised after 2026-12-05)
 
-Write last, five sentences at most: what the 18,000 card-hours produced, which results are measured, which are negative,
-what remains open, where the artefacts are. No claim without a section below that carries its evidence.
+Of 18,000 card-hours, 5,108 were booked by 2026-11-20. What they produced, all measured on a synthetic task suite with exact-number
+scoring and a held-out set of 491 tasks plus 770 external tasks ([findings](lumi_findings_2026-11.md)): (1) the quality gate hides
+most signal (correlation with correctness 0.10, AUROC 0.60), so the counterfactual dataset of waves 2/3 is not usable for a process-reward
+model, and a 7B model trained on gate-free labels beats the baselines only slightly at the step level; (2) the product router never queried
+the graph for lookups, although forcing it gives +0.60 accuracy; (3) the orchestrated workflow does **not** beat the single 32B model it
+contains (−0.13 on held-out, −0.09 to −0.32 on external data), the largest single cost being a contract check and a crashing planner
+server that were found and fixed; (4) a 7B **answer verifier** selects correct answers far better than the trust gate or a majority vote
+(AUROC 0.95; best-of-N 0.64 against 0.44 for a single answer, transfer to external data pending). Open: the base-vs-fine-tuned runs,
+the knowledge-broker gate and the verifier pipeline. About 350 card-hours went into data that had to be discarded after a server fault,
+which this report states as a mistake; the unused remainder is reported in section 2. Artefacts: section 7.
 
 ## 2. Allocation and use
 
@@ -51,29 +59,32 @@ Waves 2 and 3: counts of tasks, episodes, decision points and the signal share a
 episodes, 52,769 decision points, 24.1 % with signal). **To complete:** final totals over both waves, the split sizes of
 `data_ood` / `data_all`, and where the files are archived.
 
-### 4.2 Orchestration process-reward model
+### 4.2 Orchestration process-reward model and answer verifier
 | Item | Value |
 |---|---|
-| Baselines (`test_iid`) | family/node mean: AUROC 0.71, within-task pairwise 0.51; **text baseline (TF-IDF + ridge): AUROC 0.88, within-task pairwise 0.58** (test_ood 0.60). The PRM has to beat the text baseline |
-| 7B smoke (1 node), 32B smoke (4 nodes) | trainer works end to end; 32B ≈ 2.4 samples/s on 32 ranks |
-| 7B seeds, then 32B only on signal (the two 32B jobs 23603688/89 were cancelled while pending) | **to complete:** final metrics from `eval.json` (AUROC, Brier, Spearman, within-task pairwise on `test_iid` and `test_ood`), seeds, wall time, card-hours |
-| Verdict | **to complete:** does the PRM beat the family/node baseline within-task and on the held-out domain? State the answer even if it is no |
-
-If the within-task pairwise accuracy does not exceed the baseline by more than the spread across seeds, the report says that
-the PRM did not demonstrate decision-level value, and phase 3 is documented as not started for that reason.
+| Baselines on the gate-free label (`test_ood`, within-task pairwise) | node mean 0.537, text (TF-IDF + ridge) 0.525; on the confounded label of waves 2/3 the text baseline reached 0.60 (gate signal) and 0.50–0.53 on gate-passed forks only |
+| 7B smoke, 32B smoke (4 nodes) | trainer works end to end; 32B ≈ 2.4 samples/s on 32 ranks; the two 32B runs (23603688/89) were cancelled while pending |
+| **7B PRM, three seeds** (23791608, 23814361–62), clean wave-4 rows | AUROC 0.873 (sd 0.003), Brier 0.078, within-task pairwise **0.564 (sd 0.007)**; learning curve +0.01 AUROC per doubling (25 % / 50 % / 100 % of the data: 0.848 / 0.862 / 0.874) |
+| Verdict PRM | Better than both baselines by several seed spreads, but the step-level gain over the node mean is small (+0.027); no demonstrated decision-level value. A per-node figure for the planner is not defined (one planner point per task); the "planner 0.611" of 2026-11-17 was an artefact and is withdrawn. A 32B run was not justified |
+| **7B answer verifier** (23842900): task + draft → correct, 112,057 rows, one epoch | test (4,247 answers of the direct judge and four workflow variants to the 491 held-out tasks): AUROC **0.952**, within-task pairwise 0.884, Brier 0.093; trust score AUROC 0.60. Best-of-N accuracy: direct N ≈ 3 single 0.531 / vote 0.567 / **verifier 0.606** / oracle 0.687; workflow N ≈ 6 0.411 / 0.511 / **0.577** / 0.684; pooled N ≈ 8.6 0.440 / 0.589 / **0.635** / 0.776 |
+| Verdict verifier | The largest effect of the grant. Open: transfer to external data (23874318) and to unseen task families; the pipeline integration |
 
 ### 4.3 GraphRAG ablation
 | Finding | Status |
 |---|---|
 | Waves 2/3: GraphRAG on in ~90 % of episodes but against an empty `:Entity` graph (task graphs used other labels) | verified |
-| Fuzzy router switched GraphRAG off for lookup plans (0.30 < 0.35); log line "template toggle" misleading | verified |
-| With forced GraphRAG the context holds the right values (10/10), yet nothing is answered: the planner sends arithmetic to MCP `calculate` with invented expressions, the trust gate blocks, the merger returns empty text | validated (negative) |
-| Arithmetic-free tasks (smoke 3, 23603690) | **to complete:** `answer_in_context`, retrieved share, correct and draft-correct per arm |
-| Mini wave, external datasets (TAT-QA, FinQA, GSM8K, MuSiQue, HotpotQA, CypherBench) | **to complete:** run or state "not run" with the reason |
+| Fuzzy router switched GraphRAG off for lookup plans (graph confidence 0.30 < 0.35; the planner category `compounding_knowledge` is not graph-heavy) | verified |
+| With forced GraphRAG the context holds the right values (10/10), but arithmetic went to MCP `calculate` with invented expressions and the trust gate blocked everything; arithmetic-free tasks and gate-free drafts fixed that | validated |
+| Forced router, 480 tasks (23814342): graph 0.61, noisy 0.61, inline 0.75, empty 0.00; graph − empty +0.60 (CI +0.50 … +0.68), graph − inline −0.14 (−0.23 … −0.04); stale duplicates cost nothing measurable | validated |
+| **Product router, 480 tasks (23795184): retrieved share 0.00 in every arm** | validated |
+| External datasets: a functional check ran as the external-data comparison of workflow and direct model (770 tasks, [findings F5](lumi_findings_2026-11.md)); the graph arm of 20 graph questions was not meaningful without the graph | partly |
+| Consequence in code: entity hits route to the graph, the knowledge broker supplies graph facts before the planner (branch `feat/knowledge-broker`); gate P0 (23874159–64) | pending |
 
 ### 4.4 Policy pilot (phase 3)
-**To complete:** run (CSO-DPO against SFT v4) with metrics, or "not started" with the reason and the budget that stayed
-unused.
+**Not started, with reasons.** A planner preference-pair set was collected and analysed (23618242, 23791558–61, 23843018): outcome noise after the
+planner is as large as the planner effect, 69 % of the `calculate` plans are not evaluable and the experts answer from the inline data, and
+a perfect planner would reach about 0.45 against 0.49 for the single model ([F7](lumi_findings_2026-11.md)). The budget that this phase
+would have used stays unused; it is reported as such in section 2, not spent on a run without a question.
 
 ### 4.5 Run-by-run assessment (status 2026-11-19)
 
@@ -92,22 +103,28 @@ Costs are estimated from elapsed time × 4 cards per node and rounded. Ratings: 
 | 9 | Reruns | 23791554–61, 23814340, 23814343✗/23843018 | Replace the unusable parts. | Planner fix holds: 0 crashes, 0 of 1,201 points with a single plan. Wave 5: 2,757 tasks, planner pairs 1,211 (808 running). ≈ 300 card-h. | Achieved | Clean data exists. The cost was a consequence of row 8. |
 | 10 | PRM v2 (7B) | 23791608, 23814361–64 | Does a learned value model beat the baselines? | AUROC 0.873 (sd 0.003), within a task 0.564 (sd 0.007) against 0.537 (node mean) and 0.525 (text). Learning curve ≈ +0.01 AUROC per doubling of the data. An earlier "planner 0.611" was an artefact, corrected. ≈ 36 card-h. | Partly | The signal is real but small; a benefit for step choice or plan selection is not shown. 32B only as a clean scaling question. |
 | 11 | Direct vs. workflow on the held-out tasks | 23795177–82, 23814341✗, 23814831✗ | Show that the workflow beats a single model, plus a stage ablation. | Direct 0.485, workflow 0.352 (−0.13, CI −0.17 … −0.09). The variants do not differ from the workflow beyond noise. 22 % of workflow episodes fail at the planner contract (153 of them at the `calculate` check I added). Equal on `cypher_calc` (0.72 vs. 0.71). Two runs invalid because of my watchdog. | Partly | A solid, **negative** result: on this suite the workflow shows no advantage. Claims to the contrary on the website and in the whitepaper are not covered. |
-| 12 | External data and size curve | 23842891, 23842892, 23843014/16 | External validity, difficulty by size. | Direct run done: math 0.94, tables 0.67, text QA 0.59. Workflow and size curve running. | Open | First real data; shows where the single model has gaps. |
-| 13 | Answer verifier | 23842900 | A learnable checker against the trust score (AUROC 0.60). | Running. Offline: plurality vote lifts `cypher_calc` from 0.73 to 0.92. | Open | There is room; training decides. |
-| 14 | Control runs | 23843015/17/18 | Clean repeats of the invalid runs. | Running. | Open | Will show how much the `calculate` check lowers accuracy. |
+| 12 | External data and size curve | 23842891, 23842892, 23843014/16 | External validity, difficulty by size. | Direct judge on external data: math 0.94, tables 0.68, text QA 0.60. Workflow below it in all three families (−0.24 / −0.32 / −0.085); check off vs on mixed. Size curve of the direct judge: 0.66 / 0.42 / 0.16 / 0.05 at 19 / 57 / 190 / 570 rows. | Achieved | The single model is strong on small data and collapses above ≈ 60 rows; the workflow has no advantage on external data. |
+| 13 | Answer verifier | 23842900 | A learnable checker against the trust score (AUROC 0.60). | AUROC 0.952 on answers to held-out tasks; best-of-N 0.635 against 0.440 for a single answer (pooled N ≈ 8.6), 0.606 against 0.531 for the direct judge at N ≈ 3. ≈ 20 card-h. | Achieved | The largest effect of the grant; transfer to external data pending (23874318), then the pipeline. |
+| 14 | Control runs | 23843015/17/18 | Clean repeats of the invalid runs. | Deliberation 0.323 (−0.03 vs workflow); check off 0.410 vs 0.352 on held-out (+0.055), opposite sign on external data; planner pairs 808 collected. | Achieved | The check should degrade, not fail; deliberation has no benefit. |
+| 15 | Knowledge broker (product code) | branch `feat/knowledge-broker` | Infrastructure knowledge before the planner, reconciliation, expert injection, entity-hit routing. | 23 commits, 1,452 tests, all new behaviour off by default; found and fixed correction-memory, streaming and tenant defects on the way. | Achieved (code) | Effect unmeasured until gate P0 (23874159–64). |
+| 16 | Open at writing | 23857467–73, 23858647–54, 23874159–64, 23874318 | Sampling yield, router threshold, base vs fine-tuned, gate P0, verifier transfer. | Queued. | Open | See findings, section 6. |
 
 Overall picture:
 
-- **Used:** 4,998 of 18,000 card-h (27.8 %) as of 2026-11-19. About 350 went into data that had to be discarded and ≈ 15 into invalid runs. Roughly 11,000–12,000 card-h will probably stay unused; that is scientifically right if the reasons hold.
+- **Used:** 5,108 of 18,000 card-h (28.4 %) as of 2026-11-19. About 350 went into data that had to be discarded and ≈ 15 into invalid runs. Roughly 11,000–12,000 card-h will probably stay unused; that is scientifically right if the reasons hold.
 - **Solid findings:** the trust gate hides effects (correlation with correctness 0.10, AUROC 0.60); the product router does not use the graph; a single model beats the workflow on this suite; the PRM signal is small; plurality voting over samples is strong.
 - **My mistakes:** two 32B runs submitted prematurely; smokes without checking the planner logs; the watchdog killed healthy servers; the `calculate` check fails hard after three retries; the driver dropped the draft of approved episodes; the PRM planner figure was an artefact.
 - **Still missing for a result:** workflow vs. direct on external data, the clean control runs on the `calculate` check, and the verifier training. DPO, a 32B PRM and further waves stay deferred.
 
 ## 5. Negative results and dead ends
 
-Collected from the log so that they are read as findings, not hidden: ZeRO-3 + PEFT on multimodal checkpoints; rule-based DPO;
-the August expert campaign; GRPO `sequence_mask` importance sampling; the 2-node hang without Slingshot bindings; GraphRAG
-against an empty schema; arithmetic tasks that measure the planner. **To complete:** add whatever the last weeks add.
+Collected so that they are read as findings: ZeRO-3 + PEFT on multimodal checkpoints; rule-based DPO; the August expert campaign; GRPO
+`sequence_mask` importance sampling; the 2-node hang without Slingshot bindings; GraphRAG against an empty schema; arithmetic tasks that
+measure the planner. From phase J: a label confounded by the quality gate (waves 2/3 unusable as PRM data); the planner preference-pair route
+(noise as large as the effect); **the orchestrated workflow does not beat the single model on this suite or on the external sets**;
+deliberation brings nothing; fine-tuning has no demonstrated pipeline-level effect (September benchmark, base-vs-fine-tuned runs pending);
+a PRM with a small step-level gain. Own mistakes that cost compute are listed in [findings, section 3](lumi_findings_2026-11.md): the server
+fault that discarded ≈ 350 card-hours, a watchdog that killed a healthy server, a contract check that fails hard, a driver defect, a withdrawn figure.
 
 ## 6. Lessons (carry-over from the log, extend at the end)
 
@@ -142,5 +159,7 @@ sha256sum <export files> > SHA256SUMS
 
 ## 9. Open items after the allocation
 
-What cannot continue without LUMI (larger waves, seeds, phase 3), what can run locally on N04, and which questions the
-results leave: **to complete**.
+Cannot continue without LUMI: larger sampling waves, seeds, a 32B model. Can continue locally or on Colab: the verifier pipeline
+(a 7B scorer), the knowledge broker (product code, tests, N04 stack), the table-size suite, degrading the `calculate` check. Open
+questions: [findings, section 6](lumi_findings_2026-11.md). Jobs still in the queue when this was written: base-vs-fine-tuned
+(23858647–54), sampling yield and router (23857467–73), knowledge gate P0 (23874159–64), verifier transfer (23874318).

@@ -1,4 +1,4 @@
-# LUMI-G-Abschlussbericht (Entwurf, vorbereitet am 10.11.2026)
+# LUMI-G-Abschlussbericht (Entwurf, aktualisiert am 20.11.2026)
 
 **Status:** Entwurf. Abschnitte mit **zu ergänzen** werden nach Ablauf des Kontingents am **05.12.2026** gefüllt; alles andere
 stammt aus dem [Aktivitätslogbuch](lumi_activity_log.md) und trägt dessen Statuskennzeichnungen. In einem Abschnitt „zu
@@ -9,10 +9,19 @@ gekennzeichneten Auszüge der Abschnitte 3–5).
 
 ---
 
-## 1. Zusammenfassung (zu ergänzen)
+## 1. Zusammenfassung (Entwurf 20.11.2026, nach dem 05.12.2026 abzuschließen)
 
-Zuletzt schreiben, höchstens fünf Sätze: was die 18.000 Karten-Stunden hervorgebracht haben, welche Ergebnisse gemessen sind,
-welche negativ, was offen bleibt, wo die Artefakte liegen. Keine Aussage ohne einen Abschnitt unten, der den Beleg trägt.
+Von 18.000 Karten-h waren am 20.11.2026 5.108 gebucht. Was sie erbracht haben, alles gemessen auf einer synthetischen Aufgabensuite mit
+exakter Zahlenbewertung, einer zurückgehaltenen Menge von 491 Aufgaben und 770 externen Aufgaben ([Befunde](lumi_findings_2026-11.md)):
+(1) Das Quality-Gate verdeckt das meiste Signal (Korrelation mit Korrektheit 0,10, AUROC 0,60), der Gegenversuchs-Datensatz der Wellen 2/3 ist
+für ein Prozess-Belohnungsmodell daher unbrauchbar, und ein 7B-Modell auf gate-freien Labels schlägt die Baselines auf Schrittebene nur
+knapp; (2) der Produkt-Router fragte den Graph bei Nachschlage-Aufgaben nie ab, obwohl Erzwingen +0,60 Genauigkeit bringt; (3) der
+orchestrierte Workflow schlägt das darin enthaltene 32B-Einzelmodell **nicht** (−0,13 auf der Testmenge, −0,09 bis −0,32 auf externen Daten),
+wobei der größte einzelne Kostenpunkt eine Contract-Prüfung und ein abstürzender Planner-Server waren, die gefunden und behoben wurden;
+(4) ein 7B-**Antwort-Verifier** wählt korrekte Antworten weit besser als Trust-Gate oder Mehrheitsentscheid (AUROC 0,95; Best-of-N 0,64
+gegen 0,44 für eine Einzelantwort, Übertragung auf externe Daten offen). Offen: die Base-gegen-Feintune-Läufe, das Knowledge-Broker-Gate
+und die Verifier-Pipeline. Etwa 350 Karten-h gingen nach einem Serverfehler in Daten, die verworfen werden mussten; der Bericht benennt
+das als Fehler, der ungenutzte Rest steht in Abschnitt 2. Artefakte: Abschnitt 7.
 
 ## 2. Kontingent und Verbrauch
 
@@ -51,29 +60,33 @@ Wellen 2 und 3: Zahlen zu Aufgaben, Episoden, Entscheidungspunkten und Signalant
 Aufgaben, 217.704 Episoden, 52.769 Entscheidungspunkte, 24,1 % mit Signal). **Zu ergänzen:** Endsummen über beide Wellen,
 Splitgrößen von `data_ood` / `data_all`, Ablageort der Dateien.
 
-### 4.2 Orchestrierungs-Prozess-Belohnungsmodell
+### 4.2 Orchestrierungs-Prozess-Belohnungsmodell und Antwort-Verifier
 | Punkt | Wert |
 |---|---|
-| Referenzen (`test_iid`) | Familie/Knoten-Mittel: AUROC 0,71, paarweise innerhalb der Aufgabe 0,51; **Textreferenz (TF-IDF + Ridge): AUROC 0,88, paarweise 0,58** (test_ood 0,60). Das PRM muss die Textreferenz schlagen |
-| 7B-Smoke (1 Knoten), 32B-Smoke (4 Knoten) | Trainer läuft durch; 32B ≈ 2,4 Beispiele/s auf 32 Rängen |
-| 7B-Seeds, danach 32B nur bei Signal (die beiden 32B-Jobs 23603688/89 wurden abgesagt, solange sie PENDING waren) | **zu ergänzen:** Endmetriken aus `eval.json` (AUROC, Brier, Spearman, paarweise innerhalb der Aufgabe auf `test_iid` und `test_ood`), Seeds, Laufzeit, Karten-h |
-| Urteil | **zu ergänzen:** Schlägt das PRM die Familien-/Knoten-Referenz innerhalb der Aufgabe und auf der zurückgehaltenen Domäne? Auch ein Nein wird so festgehalten |
-
-Übertrifft die paarweise Genauigkeit innerhalb der Aufgabe die Referenz nicht um mehr als die Streuung über Seeds, steht im
-Bericht, dass das PRM keinen Nutzen auf Entscheidungsebene gezeigt hat, und Phase 3 ist mit dieser Begründung als nicht
-gestartet dokumentiert.
+| Baselines auf dem gate-freien Label (`test_ood`, Paargenauigkeit innerhalb einer Aufgabe) | Knoten-Mittel 0,537, Text (TF-IDF + Ridge) 0,525; auf dem verfälschten Label der Wellen 2/3 erreichte die Textbaseline 0,60 (Gate-Signal) und nur 0,50–0,53 auf gate-bestandenen Forks |
+| 7B-Smoke, 32B-Smoke (4 Knoten) | Trainer läuft Ende zu Ende; 32B ≈ 2,4 Samples/s auf 32 Ranks; die beiden 32B-Läufe (23603688/89) wurden in der Wartezeit abgebrochen |
+| **7B-PRM, drei Seeds** (23791608, 23814361–62), saubere Welle-4-Zeilen | AUROC 0,873 (sd 0,003), Brier 0,078, Paargenauigkeit innerhalb einer Aufgabe **0,564 (sd 0,007)**; Lernkurve +0,01 AUROC je Verdopplung (25 % / 50 % / 100 % der Daten: 0,848 / 0,862 / 0,874) |
+| Urteil PRM | Um mehrere Seed-Streuungen besser als beide Baselines, der Gewinn bei der Schrittwahl gegenüber dem Knoten-Mittel ist aber klein (+0,027); kein nachgewiesener Wert auf Entscheidungsebene. Eine Einzelzahl für den Planner ist nicht definiert (ein Planner-Punkt je Aufgabe); der „Planner-Wert 0,611“ vom 17.11. war ein Artefakt und ist zurückgezogen. Ein 32B-Lauf war nicht gerechtfertigt |
+| **7B-Antwort-Verifier** (23842900): Aufgabe + Entwurf → korrekt, 112.057 Zeilen, eine Epoche | Test (4.247 Antworten des direkten Judge und vier Workflow-Varianten auf die 491 zurückgehaltenen Aufgaben): AUROC **0,952**, Paargenauigkeit innerhalb einer Aufgabe 0,884, Brier 0,093; Trust-Score AUROC 0,60. Best-of-N-Genauigkeit: direkt N ≈ 3 einzeln 0,531 / Mehrheit 0,567 / **Verifier 0,606** / Orakel 0,687; Workflow N ≈ 6 0,411 / 0,511 / **0,577** / 0,684; gepoolt N ≈ 8,6 0,440 / 0,589 / **0,635** / 0,776 |
+| Urteil Verifier | Der größte Effekt des Kontingents. Offen: Übertragung auf externe Daten (23874318) und auf ungesehene Aufgabenfamilien; die Einbindung in die Pipeline |
 
 ### 4.3 GraphRAG-Ablation
 | Befund | Status |
 |---|---|
-| Wellen 2/3: GraphRAG in ~90 % der Episoden an, aber gegen einen leeren `:Entity`-Graphen (Aufgabengraphen nutzten andere Labels) | verifiziert |
-| Fuzzy-Router schaltete GraphRAG für Lookup-Pläne ab (0,30 < 0,35); Logzeile „template toggle“ irreführend | verifiziert |
-| Bei erzwungenem GraphRAG enthält der Kontext die richtigen Werte (10/10), trotzdem wird nichts beantwortet: Der Planner schickt Arithmetik mit erfundenen Ausdrücken an MCP `calculate`, das Trust-Gate blockiert, der Merger liefert leeren Text | validiert (negativ) |
-| Aufgaben ohne Arithmetik (Smoke 3, 23603690) | **zu ergänzen:** `answer_in_context`, Abrufanteil, korrekt und Entwurf korrekt je Arm |
-| Mini-Welle, externe Datensätze (TAT-QA, FinQA, GSM8K, MuSiQue, HotpotQA, CypherBench) | **zu ergänzen:** gelaufen oder „nicht gelaufen“ mit Grund |
+| Wellen 2/3: GraphRAG in ~90 % der Episoden an, aber gegen einen leeren `:Entity`-Graphen (die Aufgabengraphen nutzten andere Labels) | geprüft |
+| Der Fuzzy-Router schaltete GraphRAG für Nachschlage-Pläne ab (Graph-Konfidenz 0,30 < 0,35; die Planner-Kategorie `compounding_knowledge` ist nicht graph-lastig) | geprüft |
+| Mit erzwungenem GraphRAG enthält der Kontext die richtigen Werte (10/10), aber Rechnungen gingen mit erfundenen Ausdrücken an MCP `calculate`, und das Trust-Gate blockierte alles; rechenfreie Aufgaben und gate-freie Entwürfe behoben das | belegt |
+| Erzwungener Router, 480 Aufgaben (23814342): graph 0,61, noisy 0,61, inline 0,75, empty 0,00; graph − empty +0,60 (KI +0,50 … +0,68), graph − inline −0,14 (−0,23 … −0,04); veraltete Duplikate kosten nichts Messbares | belegt |
+| **Produkt-Router, 480 Aufgaben (23795184): Abrufanteil 0,00 in jedem Arm** | belegt |
+| Externe Datensätze: ein Funktionstest lief als Vergleich von Workflow und Direktmodell auf externen Daten (770 Aufgaben, [Befund F5](lumi_findings_2026-11.md)); der Graph-Arm mit 20 Graph-Fragen war ohne den Graphen nicht aussagekräftig | teilweise |
+| Folge im Code: Entitätstreffer führen zum Graph, der Knowledge-Broker liefert Graph-Fakten vor dem Planner (Branch `feat/knowledge-broker`); Gate P0 (23874159–64) | offen |
 
 ### 4.4 Policy-Pilot (Phase 3)
-**Zu ergänzen:** Lauf (CSO-DPO gegen SFT v4) mit Metriken, oder „nicht gestartet“ mit Grund und dem ungenutzten Budget.
+**Nicht gestartet, mit Begründung.** Ein Satz Planner-Präferenzpaare wurde erhoben und ausgewertet (23618242, 23791558–61, 23843018): Das
+Ausgangsrauschen nach dem Planner ist so groß wie der Planner-Effekt, 69 % der `calculate`-Pläne sind nicht auswertbar und die Experten
+antworten aus den Inline-Daten, und ein perfekter Planner käme auf etwa 0,45 gegen 0,49 beim Einzelmodell ([F7](lumi_findings_2026-11.md)).
+Das Budget, das diese Phase gebraucht hätte, bleibt ungenutzt; es wird als solches in Abschnitt 2 ausgewiesen und nicht für einen Lauf ohne
+Fragestellung ausgegeben.
 
 ### 4.5 Bewertung aller Läufe (Stand 19.11.2026)
 
@@ -92,23 +105,29 @@ Die Kosten sind aus Laufzeit × 4 Karten je Knoten geschätzt und gerundet. Wert
 | 9 | Wiederholungen | 23791554–61, 23814340, 23814343✗/23843018 | Unbrauchbare Teile ersetzen. | Planner-Fix hält: 0 Abstürze, 0 von 1.201 Punkten mit nur einem Plan. Welle 5: 2.757 Aufgaben, Planner-Paare 1.211 (808 läuft). ≈ 300 Karten-h. | Erreicht | Saubere Daten liegen vor. Die Kosten waren eine Folge von Zeile 8. |
 | 10 | PRM v2 (7B) | 23791608, 23814361–64 | Schlägt ein gelerntes Wertmodell die Baselines? | AUROC 0,873 (sd 0,003), innerhalb einer Aufgabe 0,564 (sd 0,007) gegen 0,537 (Knoten-Mittel) und 0,525 (Text). Lernkurve ≈ +0,01 AUROC je Datenverdopplung. Ein früherer „Planner-Wert 0,611“ war ein Artefakt, korrigiert. ≈ 36 Karten-h. | Teilweise | Das Signal ist real, aber klein; ein Nutzen für Schrittwahl oder Plan-Auswahl ist nicht gezeigt. 32B nur als saubere Skalierungsfrage. |
 | 11 | Direkt gegen Workflow auf der Testmenge | 23795177–82, 23814341✗, 23814831✗ | Zeigen, dass der Workflow ein Einzelmodell schlägt, plus Stufen-Ablation. | Direkt 0,485, Workflow 0,352 (−0,13, KI −0,17 … −0,09). Die Varianten unterscheiden sich vom Workflow nicht über das Rauschen. 22 % der Workflow-Episoden scheitern am Planner-Contract (153 davon an der von mir ergänzten `calculate`-Prüfung). Gleich bei `cypher_calc` (0,72 gegen 0,71). Zwei Läufe durch meinen Watchdog ungültig. | Teilweise | Ein belastbares, **negatives** Ergebnis: Auf dieser Suite zeigt der Workflow keinen Vorteil. Gegenteilige Aussagen auf Website und im Whitepaper sind nicht gedeckt. |
-| 12 | Externe Daten und Größenkurve | 23842891, 23842892, 23843014/16 | Externe Gültigkeit, Schwierigkeit nach Größe. | Direktlauf fertig: Mathe 0,94, Tabellen 0,67, Text-QA 0,59. Workflow und Größenkurve laufen. | Offen | Erstmals echte Daten; zeigt, wo das Einzelmodell Lücken hat. |
-| 13 | Antwort-Verifier | 23842900 | Lernbarer Prüfer gegen den Trust-Score (AUROC 0,60). | Läuft. Offline: Mehrheitsvotum hebt `cypher_calc` von 0,73 auf 0,92. | Offen | Es gibt Spielraum, das Training entscheidet. |
-| 14 | Kontrolläufe | 23843015/17/18 | Saubere Wiederholung der ungültigen Läufe. | Laufen. | Offen | Zeigen, wie stark die `calculate`-Prüfung die Genauigkeit drückt. |
+| 12 | Externe Daten und Größenkurve | 23842891, 23842892, 23843014/16 | Externe Gültigkeit, Schwierigkeit nach Größe. | Direkter Judge auf externen Daten: Mathe 0,94, Tabellen 0,68, Text-QA 0,60. Der Workflow liegt in allen drei Familien darunter (−0,24 / −0,32 / −0,085); Prüfung aus gegen an gemischt. Größenkurve des direkten Judge: 0,66 / 0,42 / 0,16 / 0,05 bei 19 / 57 / 190 / 570 Zeilen. | Erreicht | Das Einzelmodell ist bei kleinen Daten stark und bricht ab etwa 60 Zeilen ein; der Workflow hat auf externen Daten keinen Vorteil. |
+| 13 | Antwort-Verifier | 23842900 | Lernbarer Prüfer gegen den Trust-Score (AUROC 0,60). | AUROC 0,952 auf Antworten zu zurückgehaltenen Aufgaben; Best-of-N 0,635 gegen 0,440 für eine Einzelantwort (gepoolt N ≈ 8,6), 0,606 gegen 0,531 für den direkten Judge bei N ≈ 3. ≈ 20 Karten-h. | Erreicht | Der größte Effekt des Kontingents; Übertragung auf externe Daten offen (23874318), danach die Pipeline. |
+| 14 | Kontrolläufe | 23843015/17/18 | Saubere Wiederholung der ungültigen Läufe. | Deliberation 0,323 (−0,03 gegen Workflow); Prüfung aus 0,410 gegen 0,352 auf der Testmenge (+0,055), umgekehrtes Vorzeichen auf externen Daten; Planner-Paare 808 erhoben. | Erreicht | Die Prüfung sollte abstufen statt scheitern; Deliberation bringt nichts. |
+| 15 | Knowledge-Broker (Produktcode) | Branch `feat/knowledge-broker` | Infrastrukturwissen vor dem Planner, Abgleich, Experten-Injektion, Routing nach Entitätstreffern. | 23 Commits, 1.452 Tests, alles Neue standardmäßig aus; unterwegs Fehler in Correction-Memory, Streaming und Mandantentrennung gefunden und behoben. | Erreicht (Code) | Wirkung ungemessen bis Gate P0 (23874159–64). |
+| 16 | Beim Schreiben offen | 23857467–73, 23858647–54, 23874159–64, 23874318 | Stichproben-Ertrag, Router-Schwelle, Base gegen Feintune, Gate P0, Verifier-Übertragung. | In der Queue. | Offen | Siehe Befunde, Abschnitt 6. |
 
 Gesamtbild:
 
-- **Verbraucht:** 4.998 von 18.000 Karten-h (27,8 %) am 19.11.2026. Etwa 350 gingen in Daten, die verworfen werden mussten, ≈ 15 in ungültige Läufe. Voraussichtlich bleiben rund 11.000–12.000 Karten-h ungenutzt; das ist wissenschaftlich richtig, wenn die Gründe stimmen.
+- **Verbraucht:** 5.108 von 18.000 Karten-h (28,4 %) am 19.11.2026. Etwa 350 gingen in Daten, die verworfen werden mussten, ≈ 15 in ungültige Läufe. Voraussichtlich bleiben rund 11.000–12.000 Karten-h ungenutzt; das ist wissenschaftlich richtig, wenn die Gründe stimmen.
 - **Belastbare Befunde:** Das Trust-Gate verdeckt Effekte (Korrelation mit Korrektheit 0,10, AUROC 0,60); der Produkt-Router nutzt den Graph nicht; ein Einzelmodell schlägt den Workflow auf dieser Suite; das PRM-Signal ist klein; Mehrheitsentscheid über Stichproben wirkt stark.
 - **Meine Fehler:** zwei 32B-Läufe voreilig eingereicht; Smokes ohne Prüfung der Planner-Logs; der Watchdog beendete gesunde Server; die `calculate`-Prüfung scheitert nach drei Wiederholungen hart; der Treiber übernahm den Entwurf freigegebener Episoden nicht; der PRM-Planner-Wert war ein Artefakt.
 - **Für ein Ergebnis noch offen:** Workflow gegen Direkt auf externen Daten, die sauberen Kontrolläufe zur `calculate`-Prüfung und das Verifier-Training. DPO, ein 32B-PRM und weitere Wellen bleiben zurückgestellt.
 
 ## 5. Negative Ergebnisse und Sackgassen
 
-Aus dem Logbuch gesammelt, damit sie als Befunde gelesen werden und nicht verschwinden: ZeRO-3 + PEFT auf multimodalen
-Checkpoints; regelbasiertes DPO; die August-Expertenkampagne; GRPO-Importance-Sampling `sequence_mask`; der Zwei-Knoten-Hänger
-ohne Slingshot-Bindings; GraphRAG gegen ein leeres Schema; Rechenaufgaben, die den Planner messen. **Zu ergänzen:** was die
-letzten Wochen hinzufügen.
+Hier gesammelt, damit sie als Befunde gelesen werden: ZeRO-3 + PEFT auf multimodalen Checkpoints; regelbasiertes DPO; die August-
+Expertenkampagne; GRPO mit `sequence_mask`-Importance-Sampling; der 2-Knoten-Hang ohne Slingshot-Bindings; GraphRAG gegen ein leeres
+Schema; Rechenaufgaben, die den Planner messen. Aus Phase J: ein vom Quality-Gate verfälschtes Label (Wellen 2/3 als PRM-Daten
+unbrauchbar); der Planner-Präferenzpaar-Weg (Rauschen so groß wie der Effekt); **der orchestrierte Workflow schlägt das Einzelmodell auf
+dieser Suite und auf den externen Sätzen nicht**; Deliberation bringt nichts; Finetuning hat keine nachgewiesene Wirkung auf
+Pipeline-Ebene (September-Benchmark, Base-gegen-Feintune-Läufe offen); ein PRM mit kleinem Gewinn auf Schrittebene. Eigene Fehler, die
+Rechenzeit kosteten, stehen in den [Befunden, Abschnitt 3](lumi_findings_2026-11.md): der Serverfehler, der ≈ 350 Karten-h verwerfen ließ,
+ein Watchdog, der einen gesunden Server beendete, eine Contract-Prüfung, die hart scheitert, ein Treiberfehler, eine zurückgezogene Zahl.
 
 ## 6. Lehren (aus dem Logbuch übernommen, am Ende erweitern)
 
@@ -143,5 +162,7 @@ sha256sum <Exportdateien> > SHA256SUMS
 
 ## 9. Offene Punkte nach dem Kontingent
 
-Was ohne LUMI nicht weitergeht (größere Wellen, Seeds, Phase 3), was lokal auf N04 laufen kann und welche Fragen die Ergebnisse
-hinterlassen: **zu ergänzen**.
+Nicht ohne LUMI fortsetzbar: größere Stichprobenwellen, Seeds, ein 32B-Modell. Lokal oder auf Colab fortsetzbar: die Verifier-Pipeline
+(ein 7B-Scorer), der Knowledge-Broker (Produktcode, Tests, N04-Stack), die Tabellengrößen-Suite, das Abstufen der `calculate`-Prüfung.
+Offene Fragen: [Befunde, Abschnitt 6](lumi_findings_2026-11.md). Beim Schreiben noch in der Queue: Base gegen Feintune (23858647–54),
+Stichproben-Ertrag und Router (23857467–73), Knowledge-Gate P0 (23874159–64), Verifier-Übertragung (23874318).
