@@ -162,6 +162,15 @@ serve "$JUDGE" 6,7 8111 "$JUDGE_CKPT" 65536 0.90 2 olmo3 32B
 # a watchdog restarts the server if it ever exits.
 PLANNER_XTRA="${PLANNER_VLLM_XTRA---disable-hybrid-kv-cache-manager --max-num-seqs 16}"
 VLLM_XTRA="$PLANNER_XTRA" serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M"   2   8102 "$PLANNER_CKPT" 65536 0.90 1 olmo3 7B
+# a judge replica can die while starting (ROCm-SMI mutex race between the many vLLM servers: jobs 23874159-64, 23857471); restart it twice
+judge_up() {  # gcds port name
+    local n=0
+    until wait_http "http://127.0.0.1:$2/v1/models" "$3" 900 "${VPID[$2]}"; do
+        n=$((n + 1)); [ "$n" -gt 2 ] && return 1
+        log "RETRY: $3 start $n"; kill "${VPID[$2]}" 2>/dev/null; cp "$RUN/logs/vllm_$2.log" "$RUN/logs/vllm_$2.start$n.log" 2>/dev/null; sleep 5
+        SERVE_RESTART=1 serve "$JUDGE" "$1" "$2" "$JUDGE_CKPT" 65536 0.90 2 olmo3 32B
+    done
+}
 wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
 (
     n=0
@@ -177,8 +186,8 @@ wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
     done
 ) &
 if [ "${DIRECT_ONLY:-0}" = "1" ]; then   # control run: both judge replicas answer the tasks alone (same weights as the workflow's judge)
-    wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
-    wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
+    judge_up 0,1 8101 judge
+    judge_up 6,7 8111 judge-2
     SX --bind "$R/$APP:/app" --pwd /app "$R/sif/moe-sovereign-orchestrator_local.sif" python3 benchmarks/orchestration_suite/direct_baseline.py \
         --tasks "$R/$TASKS" --urls http://127.0.0.1:8101,http://127.0.0.1:8111 --model "$JUDGE" --label "${LABEL:-judge32b}" \
         --offset "${OFFSET:-0}" --n "${N:-0}" --repeats "${REPEATS:-1}" --concurrency "${CONC:-32}" --out "$RUN/rollouts.jsonl" | tee "$RUN/driver_summary.json"
@@ -200,8 +209,8 @@ for line in open(sys.argv[1]):
     m["urls"].append(f"http://127.0.0.1:{port}")
 print(json.dumps({"models": models, "embed_url": "http://127.0.0.1:21434"}, indent=1))
 PY
-wait_http http://127.0.0.1:8101/v1/models judge 900 "${VPID[8101]}"
-wait_http http://127.0.0.1:8111/v1/models judge-2 900 "${VPID[8111]}"
+judge_up 0,1 8101 judge
+judge_up 6,7 8111 judge-2
 OS="$R/sif/moe-sovereign-orchestrator_local.sif"
 bg shim SX "$OS" python3 "$R/$APP/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
 wait_http http://127.0.0.1:18100/api/tags shim 60

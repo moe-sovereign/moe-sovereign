@@ -15,7 +15,15 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+# The LUMI container has no psycopg etc.; services/pipeline/__init__ imports the whole request pipeline. interview.py and contracts.py
+# are pure, so register the package without running its __init__ (job 23875194 died on `import psycopg`).
+import types  # noqa: E402
+if "services.pipeline" not in sys.modules:
+    _pkg = types.ModuleType("services.pipeline")
+    _pkg.__path__ = [str(ROOT / "services" / "pipeline")]
+    sys.modules["services.pipeline"] = _pkg
 from services.pipeline.interview import build_interview_prompt, completion_for, parse_questions  # noqa: E402
 
 WORD = re.compile(r"[A-Za-zÄÖÜäöüß0-9]{4,}")
