@@ -9,7 +9,8 @@ draft, nothing of the pipeline state, so it can be used on any generator's answe
       --heldout 'heldout/*.jsonl' --skip-ids skip.txt --out-dir verifier_data
 
 Splits: train / val / test_iid by task hash as in build_dataset.py; `test_ood` = answers to the held-out tasks (never used for
-collection) from the direct model and the workflow variants, i.e. another generator and unseen tasks.
+collection) from the direct model and the workflow variants, i.e. another generator and unseen tasks. With --pool the answers of
+external tasks (real tables, word problems, text QA) join: split by task into train / val / `test_ext`.
 """
 import argparse
 import glob
@@ -69,6 +70,23 @@ def build(rollouts, tasks, heldout, skip, per_task=24, seed=1, min_chars=1, max_
     return rows
 
 
+def ext_split(task_id):
+    """Task-level split of the external pools: 65 % train, 5 % val, 30 % test (a task's answers never straddle splits)."""
+    b = bucket(task_id)
+    return "test_ext" if b < 6 else "val" if b == 6 else "train"
+
+
+def pool_rows(path, weight=1.0):
+    """Rows from a build_answer_pool.py file (answers of several runs on external tasks, with gate-free labels)."""
+    out = []
+    for line in open(path, encoding="utf-8"):
+        r = json.loads(line)
+        out.append({"id": r["id"], "group": r["task_id"], "split": ext_split(r["task_id"]), "family": r["family"], "node": "answer",
+                    "lang": "en", "source": f"pool:{r['src']}", "text": f"[TASK]\n{r['prompt']}\n[ANSWER]\n{r['answer']}",
+                    "q": float(r["q"] >= 0.5), "weight": weight})
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rollouts", nargs="+", required=True)
@@ -78,13 +96,17 @@ def main():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--per-task", type=int, default=24)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--pool", action="append", default=[], help="answer pool of external tasks (build_answer_pool.py); repeatable")
+    ap.add_argument("--pool-weight", type=float, default=4.0, help="loss weight of pool rows (they are few against the synthetic ones)")
     a = ap.parse_args()
     recs = [json.loads(line) for pat in a.rollouts for f in sorted(glob.glob(pat)) for line in open(f)]
     skip = set(open(a.skip_ids).read().split()) if a.skip_ids else set()
     held = [f for pat in a.heldout for f in sorted(glob.glob(pat))]
     rows = build(recs, load_tasks(a.tasks), held, skip, a.per_task, a.seed)
+    for path in a.pool:
+        rows += pool_rows(path, a.pool_weight)
     os.makedirs(a.out_dir, exist_ok=True)
-    for split in ("train", "val", "test_iid", "test_ood"):
+    for split in ("train", "val", "test_iid", "test_ood", "test_ext"):
         part = [r for r in rows if r["split"] == split]
         with open(os.path.join(a.out_dir, f"{split}.jsonl"), "w", encoding="utf-8") as f:
             for r in part:
