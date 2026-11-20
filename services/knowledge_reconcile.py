@@ -22,6 +22,7 @@ from collections import OrderedDict
 from datetime import datetime as _dt, timezone as _tz
 from typing import Iterable
 
+MIN_LLM_CONFIDENCE = 0.6  # below this a model's answer is ignored (KNOWLEDGE_LLM_MIN_CONF is not read yet: one constant, one place)
 DEFAULT_FUNCTIONAL_RELATIONS = "HAS_VALUE,HAS_VERSION,HAS_CAPACITY,HAS_YIELD,HAS_BEDS,HAS_PRICE,LOCATED_IN,CEO_OF"
 
 
@@ -115,7 +116,7 @@ def _origin_is_model(fact: dict) -> bool:
     return bool(sm) and sm not in {"fixture", "ontology"}
 
 
-def reconcile_with_llm(facts: Iterable[dict], llm_items: Iterable[dict], *, llm_cutoff=None, min_conf: float = 0.6) -> tuple[list, list]:
+def reconcile_with_llm(facts: Iterable[dict], llm_items: Iterable[dict], *, llm_cutoff=None, min_conf: float = MIN_LLM_CONFIDENCE) -> tuple[list, list]:
     """Compare a knowledge model's answers with the infrastructure facts.
 
     `llm_items`: {"subject", "relation", "answer", "confidence", "unknown", "question"}; subject/relation are set for verification
