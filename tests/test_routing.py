@@ -594,3 +594,18 @@ async def test_select_node_single_candidate_skips_reliability_lookup():
     mock_lat.assert_not_called()
     mock_pstop.assert_not_called()
     assert chosen["name"] == "RTX"
+
+
+def test_knowledge_model_fields_are_resolved_like_the_other_endpoints(fake_template, fake_perms_with_template):
+    tmpl = [{**fake_template[0], "knowledge_model": "qwen3.6:35b@RTX", "knowledge_max_questions": 4, "knowledge_timeout_s": 6,
+             "knowledge_broker": "ON", "knowledge_share_context": True}]
+    with patch("services.routing._read_expert_templates", return_value=tmpl):
+        out = _routing._resolve_template_prompts(fake_perms_with_template)
+    assert out["knowledge_model_override"] == "qwen3.6:35b" and out["knowledge_url_override"]
+    assert out["knowledge_max_questions"] == 4 and out["knowledge_timeout_s"] == 6.0
+    assert out["knowledge_broker"] == "on" and out["knowledge_share_context"] is True
+
+
+def test_knowledge_fields_default_to_off(fake_perms_no_template):
+    out = _routing._resolve_template_prompts(fake_perms_no_template)
+    assert out["knowledge_model_override"] == "" and out["knowledge_broker"] == "" and out["knowledge_share_context"] is False

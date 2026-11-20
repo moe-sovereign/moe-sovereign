@@ -293,6 +293,13 @@ def template_state_extras(tp: Optional[dict]) -> dict:
         "graphrag_template_allowed": bool(tp.get("enable_graphrag", True)),
         "enable_web_research": tp.get("enable_web_research", True),
         "graphrag_max_chars": tp.get("graphrag_max_chars", 0),
+        "knowledge_broker_mode": tp.get("knowledge_broker", ""),
+        "knowledge_model_override": tp.get("knowledge_model_override", ""),
+        "knowledge_url_override": tp.get("knowledge_url_override", ""),
+        "knowledge_token_override": tp.get("knowledge_token_override", ""),
+        "knowledge_max_questions": tp.get("knowledge_max_questions", 0),
+        "knowledge_timeout_s": tp.get("knowledge_timeout_s", 0.0),
+        "knowledge_share_context": bool(tp.get("knowledge_share_context", False)),
     }
 
 
@@ -319,6 +326,8 @@ def _resolve_template_prompts(
         "tool_expert_model_override": "", "tool_expert_url_override": "", "tool_expert_token_override": "",
         "guardrail_prompt": "",
         "guardrail_model_override": "", "guardrail_url_override": "", "guardrail_token_override": "",
+        "knowledge_model_override": "", "knowledge_url_override": "", "knowledge_token_override": "",
+        "knowledge_max_questions": 0, "knowledge_timeout_s": 0.0, "knowledge_broker": "", "knowledge_share_context": False,
         "planner_num_ctx": 0, "judge_num_ctx": 0, "tool_expert_num_ctx": 0, "guardrail_num_ctx": 0,
         "enable_cache": True, "enable_graphrag": True, "enable_web_research": True,
         "enable_habe": False,
@@ -371,6 +380,7 @@ def _resolve_template_prompts(
         planner_m,     planner_ep     = _split_model_ep(tmpl.get("planner_model", ""))
         tool_expert_m, tool_expert_ep = _split_model_ep(tmpl.get("tool_expert_model", ""))
         guardrail_m,   guardrail_ep   = _split_model_ep(tmpl.get("guardrail_model", ""))
+        knowledge_m,   knowledge_ep   = _split_model_ep(tmpl.get("knowledge_model", ""))
 
         def _resolve_ep_url(ep: str) -> tuple:
             if ep in URL_MAP:
@@ -384,6 +394,7 @@ def _resolve_template_prompts(
         planner_url,     planner_tok     = _resolve_ep_url(planner_ep)     if planner_ep     else ("", "ollama")
         tool_expert_url, tool_expert_tok = _resolve_ep_url(tool_expert_ep) if tool_expert_ep else ("", "ollama")
         guardrail_url,   guardrail_tok   = _resolve_ep_url(guardrail_ep)   if guardrail_ep   else ("", "ollama")
+        knowledge_url,   knowledge_tok   = _resolve_ep_url(knowledge_ep)   if knowledge_ep   else ("", "ollama")
         return {
             "planner_prompt":              tmpl.get("planner_prompt", ""),
             "judge_prompt":                tmpl.get("judge_prompt", ""),
@@ -400,6 +411,14 @@ def _resolve_template_prompts(
             "guardrail_model_override":    guardrail_m,
             "guardrail_url_override":      guardrail_url,
             "guardrail_token_override":    guardrail_tok,
+            # external knowledge model (services/knowledge_llm.py): the swappable holder of what the infrastructure lacks
+            "knowledge_model_override":    knowledge_m,
+            "knowledge_url_override":      knowledge_url,
+            "knowledge_token_override":    knowledge_tok,
+            "knowledge_max_questions":     int(tmpl.get("knowledge_max_questions") or 0),
+            "knowledge_timeout_s":         float(tmpl.get("knowledge_timeout_s") or 0.0),
+            "knowledge_broker":            str(tmpl.get("knowledge_broker") or "").lower() if str(tmpl.get("knowledge_broker") or "").lower() in ("on", "off") else "",
+            "knowledge_share_context":     bool(tmpl.get("knowledge_share_context", False)),
             "planner_num_ctx":             int(tmpl.get("planner_num_ctx") or 0),
             "judge_num_ctx":               int(tmpl.get("judge_num_ctx") or 0),
             "tool_expert_num_ctx":         int(tmpl.get("tool_expert_num_ctx") or 0),
