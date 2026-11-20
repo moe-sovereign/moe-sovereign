@@ -160,6 +160,16 @@ def _conflict_view(conflicts: list, facts_all: list) -> list:
     return out
 
 
+async def _interview_questions(state_: dict, kept: list, gaps: list, cfg: dict) -> Optional[list]:
+    """The planner model's questions for the knowledge model; None when it did not answer usably (the caller asks rule-based ones)."""
+    from services.inference import _invoke_planner_with_retry
+    from services.pipeline.interview import INTERVIEW_SCHEMA, build_interview_prompt, parse_questions
+    known = render_knowledge_block({"facts": kept, "gaps": []}, 1500)
+    prompt = build_interview_prompt(state_.get("input") or "", known, gaps, cfg["max_questions"])
+    res, _ = await _invoke_planner_with_retry({**dict(state_), "planner_schema_override": INTERVIEW_SCHEMA}, prompt, temperature=0.0)
+    return parse_questions(getattr(res, "content", None) or str(res), cfg["max_questions"])
+
+
 async def knowledge_broker_node(state_: AgentState):
     """Collect infrastructure knowledge for the request. Returns {} when the broker is off or has nothing to add."""
     if state_.get("cache_hit") or (state_.get("mode") or "default") != "default" or not broker_enabled(state_):
@@ -237,15 +247,29 @@ async def knowledge_broker_node(state_: AgentState):
     llm_conflicts: list = []
     cfg = knowledge_config(state_)
     llm_meta = {"llm_model": "", "llm_cutoff": ""}
+    interview: dict = {}
     if cfg is not None:
         questions: list = []
         meta: list = []
         # KNOWLEDGE_CONSULT_BY=planner: the planner model asks the gap questions itself (planner interview); the broker only checks
-        if os.getenv("KNOWLEDGE_CONSULT_BY", "broker") != "planner":
+        by_planner = os.getenv("KNOWLEDGE_CONSULT_BY", "broker") == "planner"
+        interview = {"source": "rule", "questions": []}
+        if by_planner and os.getenv("PLANNER_INTERVIEW", "0") == "1":
+            asked, i_status = await _bounded(_interview_questions(state_, kept, gaps, cfg), cfg["timeout_s"], state_, "knowledge_broker:interview")
+            if asked is not None:
+                interview = {"source": "planner", "questions": asked}
+                for q in asked:
+                    questions.append(q)
+                    meta.append({"subject": "", "relation": ""})
+            else:
+                interview = {"source": "rule_fallback", "status": i_status, "questions": []}
+        if not by_planner or interview["source"] == "rule_fallback":
             for term in gaps:
                 if len(questions) < cfg["max_questions"]:
                     questions.append(gap_question(term))
                     meta.append({"subject": "", "relation": ""})
+            if interview["source"] == "rule_fallback":
+                interview["questions"] = list(questions)
         functional = functional_relations()
         seen_subjects: set = set()
         for f in sorted(kept, key=lambda f: -int(f.get("authority") or 0)):
@@ -286,6 +310,7 @@ async def knowledge_broker_node(state_: AgentState):
         "cache": {"hit": False, **{k: cache_meta.get(k) for k in ("ts", "confidence", "distance") if k in cache_meta}} if cache_meta else {},
         "llm_answers": llm_facts,  # only what is shown as model knowledge: this is what keeps the answer out of the graph write-back
         **llm_meta,
+        "interview": interview,
         "sources": sources,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
         "truncated": len(kept) > MAX_FACTS,

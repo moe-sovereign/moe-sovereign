@@ -54,6 +54,9 @@ def planner_schema_for_state(state: Mapping, global_experts: Sequence[str], *, w
     (`planner_tool_names`, set by planner_node)."""
     from services.pipeline.plan_categories import allowed_plan_categories
 
+    override = state.get("planner_schema_override")  # another structured task of the planner model (the interview)
+    if override:
+        return override
     if os.getenv("PLANNER_SCHEMA_ENUMS", "1") == "0":
         return build_planner_schema([], [], wrap_object=wrap_object)
     categories = allowed_plan_categories(state.get("user_experts"), global_experts)
