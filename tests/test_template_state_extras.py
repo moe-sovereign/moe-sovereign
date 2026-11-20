@@ -13,7 +13,9 @@ from types import SimpleNamespace
 def test_template_state_extras_defaults_and_overrides():
     assert template_state_extras({}) == {
         "enable_cache": True, "enable_graphrag": True, "graphrag_template_allowed": True,
-        "enable_web_research": True, "graphrag_max_chars": 0,
+        "enable_web_research": True, "graphrag_max_chars": 0, "knowledge_broker_mode": "", "knowledge_model_override": "",
+        "knowledge_url_override": "", "knowledge_token_override": "", "knowledge_max_questions": 0, "knowledge_timeout_s": 0.0,
+        "knowledge_share_context": False,
     }
     out = template_state_extras({"enable_graphrag": False, "enable_cache": False, "graphrag_max_chars": 900})
     assert out["enable_graphrag"] is False and out["graphrag_template_allowed"] is False

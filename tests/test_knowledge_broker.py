@@ -172,3 +172,111 @@ def test_render_orders_facts_by_authority_then_recency_and_golden_text():
         "\n"
         "[OPEN GAPS (no infrastructure knowledge for)]\n"
         "- Birch7")
+
+
+# ---- the knowledge model ---------------------------------------------------------------------------------------------------
+LLM_STATE = {"knowledge_model_override": "qwen3.6:35b", "knowledge_url_override": "http://127.0.0.1:9/v1"}
+
+
+def _answers(*items):
+    async def fake(state, questions, cfg, **kw):
+        return [{"question": q, "answer": a, "confidence": c, "unknown": u, "as_of": "2025-01"} for q, (a, c, u) in zip(questions, items)]
+    return fake
+
+
+@pytest.mark.asyncio
+async def test_without_a_configured_model_nothing_is_asked(env, monkeypatch):
+    for k in ("KNOWLEDGE_LLM_MODEL", "KNOWLEDGE_LLM_URL"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setattr(kb, "ask_knowledge", AsyncMock(side_effect=AssertionError("no model configured")))
+    out = await kb.knowledge_broker_node(state_())
+    assert out["knowledge_bundle"]["sources"]["knowledge_llm"] == "disabled" and out["knowledge_bundle"]["llm_answers"] == []
+
+
+@pytest.mark.asyncio
+async def test_gap_and_verification_questions_go_in_one_call_and_the_answers_are_reconciled(env, monkeypatch):
+    asked = []
+    inner = _answers(("A ward with 12 beds", 0.8, False), ("55", 0.9, False))
+
+    async def fake(state, questions, cfg, **kw):
+        asked.append(list(questions))
+        return await inner(state, questions, cfg)
+
+    monkeypatch.setattr(kb, "ask_knowledge", fake)
+    logged = []
+    monkeypatch.setattr(kb, "log_decision", lambda t, rid, why, meta=None: logged.append(why))
+    out = await kb.knowledge_broker_node(state_(**LLM_STATE))
+    assert len(asked) == 1 and asked[0] == ["What is Birch7? Answer in one or two sentences.", "What is the capacity of Elm12? Answer with the value only."]
+    bundle = out["knowledge_bundle"]
+    assert bundle["sources"]["knowledge_llm"] == "ok" and bundle["llm_model"] == "qwen3.6:35b"
+    assert [f["object"] for f in bundle["llm_answers"]] == ["A ward with 12 beds"]  # the disagreeing capacity answer is not shown as knowledge
+    assert any(c["rule"] == "infra_authority" and c["llm"] == "55" for c in bundle["conflicts"]) and any("vs model 55" in w for w in logged)
+    block = out["knowledge_block"]
+    assert "[UNVERIFIED MODEL KNOWLEDGE (qwen3.6:35b" in block and "A ward with 12 beds" in block and "the model said 55" in block
+    assert "Elm12 HAS_CAPACITY 40 pallets" in block and out["knowledge_llm_context"] == "What is Birch7? Answer in one or two sentences. -> A ward with 12 beds"
+
+
+@pytest.mark.asyncio
+async def test_the_model_text_stays_out_of_the_graph_text(env, monkeypatch):
+    monkeypatch.setattr(kb, "ask_knowledge", _answers(("A ward with 12 beds", 0.8, False), ("55", 0.9, False)))
+    out = await kb.knowledge_broker_node(state_(**LLM_STATE))
+    assert "A ward" not in out["knowledge_bundle"]["rendered_graph"] and "55" not in out["knowledge_bundle"]["rendered_graph"]
+
+
+@pytest.mark.asyncio
+async def test_the_number_of_questions_is_capped(env, monkeypatch):
+    asked = []
+
+    async def fake(state, questions, cfg, **kw):
+        asked.append(list(questions))
+        return []
+
+    monkeypatch.setattr(kb, "ask_knowledge", fake)
+    await kb.knowledge_broker_node(state_(**LLM_STATE, knowledge_max_questions=1))
+    assert len(asked[0]) == 1 and asked[0][0].startswith("What is Birch7")
+
+
+@pytest.mark.asyncio
+async def test_unsure_answers_are_ignored_and_a_timeout_degrades_alone(env, monkeypatch):
+    monkeypatch.setattr(kb, "ask_knowledge", _answers(("", 0.0, True), ("55", 0.2, False)))
+    out = await kb.knowledge_broker_node(state_(**LLM_STATE))
+    assert out["knowledge_bundle"]["llm_answers"] == [] and out["knowledge_bundle"]["sources"]["knowledge_llm"] == "empty"
+
+    async def slow(*a, **k):
+        await asyncio.sleep(3)
+
+    monkeypatch.setattr(kb, "ask_knowledge", slow)
+    out = await kb.knowledge_broker_node(state_(**LLM_STATE, knowledge_timeout_s=0.5))
+    assert out["knowledge_bundle"]["sources"]["knowledge_llm"] == "timeout" and "[KNOWN FACTS" in out["knowledge_block"]
+
+
+@pytest.mark.asyncio
+async def test_when_the_planner_interviews_the_broker_only_checks_attributes(env, monkeypatch):
+    monkeypatch.setenv("KNOWLEDGE_CONSULT_BY", "planner")
+    asked = []
+
+    async def fake(state, questions, cfg, **kw):
+        asked.append(list(questions))
+        return []
+
+    monkeypatch.setattr(kb, "ask_knowledge", fake)
+    await kb.knowledge_broker_node(state_(**LLM_STATE))
+    assert asked == [["What is the capacity of Elm12? Answer with the value only."]]
+
+
+@pytest.mark.asyncio
+async def test_a_bundle_with_model_answers_marks_the_commit_payload(env, monkeypatch):
+    from services.response_commit import build_response_commit_payload
+    monkeypatch.setattr(kb, "ask_knowledge", _answers(("A ward with 12 beds", 0.8, False), ("40", 0.9, False)))
+    out = await kb.knowledge_broker_node(state_(**LLM_STATE))
+    assert build_response_commit_payload({"input": "q", "final_response": "a", **out})["knowledge_llm_used"] is True
+
+
+def test_the_trust_score_does_not_read_model_knowledge():
+    from services.trust_score import compute_trust_score
+    base = {"input": "q", "plan": [{"task": "t", "category": "general"}], "expert_results": ["[m / general]: " + "x" * 80],
+            "graph_context": "", "web_research": "", "mcp_evidence": [], "retrieved_graph_chunks": []}
+    with_llm = {**base, "knowledge_block": "[UNVERIFIED MODEL KNOWLEDGE]\n- Birch7 -> a ward", "knowledge_llm_context": "Birch7 -> a ward",
+                "knowledge_bundle": {"llm_answers": [{"text": "Birch7 -> a ward"}]}}
+    a, b = compute_trust_score(dict(base)), compute_trust_score(dict(with_llm))
+    assert (a.score, a.verdict) == (b.score, b.verdict)  # a model's claim is no evidence for the answer it produced

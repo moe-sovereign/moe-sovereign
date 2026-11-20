@@ -7,6 +7,8 @@
 #   json_schema         — honours response_format={"type":"json_schema",...}
 #   json_object         — honours response_format={"type":"json_object"}
 #   stream              — supports streaming (stream=true)
+#   knowledge_cutoff   — "YYYY-MM": the model's documented training-data cutoff; the knowledge broker prefers a newer infrastructure
+#                         fact over the model's answer on that basis. Leave it out unless the vendor states it.
 #   native_tool_calling — Ollama's `tools` param can be sent without the
 #                         grammar/sampler failing to initialize. Set false
 #                         for models whose GBNF compiler chokes on Claude

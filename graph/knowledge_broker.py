@@ -30,7 +30,9 @@ from pipeline.state import AgentState
 from services.deadline import RequestDeadlineExceeded, remaining_timeout
 from services.decision_log import DecisionType, log_decision
 from services.helpers import _report
-from services.knowledge_reconcile import reconcile_facts
+from services.knowledge_llm import ask_knowledge, gap_question, knowledge_config, verification_question
+from services.knowledge_reconcile import MIN_LLM_CONFIDENCE, functional_relations, reconcile_facts, reconcile_with_llm
+from services.model_capabilities import get_knowledge_cutoff
 from services.tracking import _record_stage
 
 logger = logging.getLogger("MOE-SOVEREIGN")
@@ -99,7 +101,8 @@ def render_knowledge_block(bundle: dict, max_chars: int = 2500) -> str:
     """The text experts (and optionally the planner) get. Empty when the infrastructure knows nothing."""
     facts, conflicts = bundle.get("facts") or [], bundle.get("conflicts") or []
     corrections, episode = bundle.get("corrections") or [], (bundle.get("episode_hint") or "").strip()
-    if not (facts or corrections or episode):
+    llm = bundle.get("llm_answers") or []
+    if not (facts or corrections or episode or llm):
         return ""
     sections: list = []
     if facts:
@@ -107,6 +110,14 @@ def render_knowledge_block(bundle: dict, max_chars: int = 2500) -> str:
         for f in sorted(facts, key=lambda f: (-int(f.get("authority") or 0), -(f.get("valid_from_ms") or 0))):
             tags = ", ".join(t for t in ("verified" if f.get("verified") else "", f.get("origin") or "", _date(f.get("valid_from_ms"))) if t)
             lines.append(f"- {f['text']}" + (f" ({tags})" if tags else ""))
+        sections.append(lines)
+    if llm:
+        cutoff = bundle.get("llm_cutoff") or ""
+        lines = [f"[UNVERIFIED MODEL KNOWLEDGE ({bundle.get('llm_model') or 'external model'}" + (f", cutoff {cutoff}" if cutoff else "")
+                 + "); not verified by the infrastructure, check against the facts above]"]
+        for f in llm:
+            tail = f" (confidence {f['confidence']:.0%}" + (f", as of {f['as_of']}" if f.get("as_of") else "") + ")"
+            lines.append(f"- {f['text']}{tail}")
         sections.append(lines)
     if conflicts:
         lines = ["[CONFLICTS (several values stored; the first one is kept)]"]
@@ -147,6 +158,16 @@ def _conflict_view(conflicts: list, facts_all: list) -> list:
                     "kept_text": "; ".join(sorted({text[i] for i in kept if i in text})),
                     "dropped_text": "; ".join(sorted({text[i] for i in c["candidates"] if i not in kept and i in text}))})
     return out
+
+
+async def _interview_questions(state_: dict, kept: list, gaps: list, cfg: dict) -> Optional[list]:
+    """The planner model's questions for the knowledge model; None when it did not answer usably (the caller asks rule-based ones)."""
+    from services.inference import _invoke_planner_with_retry
+    from services.pipeline.interview import INTERVIEW_SCHEMA, build_interview_prompt, parse_questions
+    known = render_knowledge_block({"facts": kept, "gaps": []}, 1500)
+    prompt = build_interview_prompt(state_.get("input") or "", known, gaps, cfg["max_questions"])
+    res, _ = await _invoke_planner_with_retry({**dict(state_), "planner_schema_override": INTERVIEW_SCHEMA}, prompt, temperature=0.0)
+    return parse_questions(getattr(res, "content", None) or str(res), cfg["max_questions"])
 
 
 async def knowledge_broker_node(state_: AgentState):
@@ -220,17 +241,76 @@ async def knowledge_broker_node(state_: AgentState):
     cache_meta = state_.get("cached_facts_meta") or {}
     sources["cache"] = "ok" if cache_meta else "empty"
 
+    # --- the knowledge model: only for what the infrastructure lacks (gap questions) or to check an attribute it holds -----------
+    gaps = _gaps(list((graph or {}).get("searched_terms") or []), (graph or {}).get("term_hits") or {}) if g_status == "ok" and graph else []
+    llm_facts: list = []
+    llm_conflicts: list = []
+    cfg = knowledge_config(state_)
+    llm_meta = {"llm_model": "", "llm_cutoff": ""}
+    interview: dict = {}
+    if cfg is not None:
+        questions: list = []
+        meta: list = []
+        # KNOWLEDGE_CONSULT_BY=planner: the planner model asks the gap questions itself (planner interview); the broker only checks
+        by_planner = os.getenv("KNOWLEDGE_CONSULT_BY", "broker") == "planner"
+        interview = {"source": "rule", "questions": []}
+        if by_planner and os.getenv("PLANNER_INTERVIEW", "0") == "1":
+            asked, i_status = await _bounded(_interview_questions(state_, kept, gaps, cfg), cfg["timeout_s"], state_, "knowledge_broker:interview")
+            if asked is not None:
+                interview = {"source": "planner", "questions": asked}
+                for q in asked:
+                    questions.append(q)
+                    meta.append({"subject": "", "relation": ""})
+            else:
+                interview = {"source": "rule_fallback", "status": i_status, "questions": []}
+        if not by_planner or interview["source"] == "rule_fallback":
+            for term in gaps:
+                if len(questions) < cfg["max_questions"]:
+                    questions.append(gap_question(term))
+                    meta.append({"subject": "", "relation": ""})
+            if interview["source"] == "rule_fallback":
+                interview["questions"] = list(questions)
+        functional = functional_relations()
+        seen_subjects: set = set()
+        for f in sorted(kept, key=lambda f: -int(f.get("authority") or 0)):
+            if len(questions) >= cfg["max_questions"]:
+                break
+            if f.get("relation") in functional and f.get("subject") not in seen_subjects:
+                seen_subjects.add(f["subject"])
+                questions.append(verification_question(f["subject"], f["relation"]))
+                meta.append({"subject": f["subject"], "relation": f["relation"]})
+        if questions:
+            share = (graph or {}).get("rendered") or "" if cfg["share_context"] else ""
+            answers, k_status = await _bounded(ask_knowledge(state_, questions, cfg, context=share), cfg["timeout_s"] + 0.5, state_, "knowledge_broker:llm")
+            answered = [{**a, **m} for a, m in zip(answers or [], meta)]
+            cutoff = get_knowledge_cutoff(cfg["model"])
+            llm_facts, llm_conflicts = reconcile_with_llm(kept, answered, llm_cutoff=cutoff)
+            llm_meta = {"llm_model": cfg["model"], "llm_cutoff": cutoff.strftime("%Y-%m") if cutoff else ""}
+            sources["knowledge_llm"] = k_status if k_status != "ok" else (
+                "ok" if any(not a["unknown"] and a["confidence"] >= MIN_LLM_CONFIDENCE for a in (answers or [])) else "empty")
+        else:
+            sources["knowledge_llm"] = "skipped"
+        for c in llm_conflicts:
+            view = {**c, "candidates": c["kept"], "kept_text": str(c["infra"]), "dropped_text": f"the model said {c['llm']}"}
+            conflicts.append(view)
+            try:
+                log_decision(DecisionType.KNOWLEDGE_CONFLICT, request_id, f"{c['key']}: infrastructure {c['infra']} vs model {c['llm']} ({c['rule']})", {"conflict": view})
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("knowledge broker: decision log failed: %s", exc)
+
     bundle = {
         "schema": BUNDLE_SCHEMA,
         "terms": list((graph or {}).get("terms") or []),
         "entity_hits": dict((graph or {}).get("entity_hits") or {}),
-        "gaps": _gaps(list((graph or {}).get("searched_terms") or []), (graph or {}).get("term_hits") or {}) if g_status == "ok" and graph else [],
+        "gaps": gaps,
         "facts": kept[:MAX_FACTS],
         "conflicts": conflicts,
         "corrections": list(corr or [])[:3],
         "episode_hint": epi or "",
         "cache": {"hit": False, **{k: cache_meta.get(k) for k in ("ts", "confidence", "distance") if k in cache_meta}} if cache_meta else {},
-        "llm_answers": [],
+        "llm_answers": llm_facts,  # only what is shown as model knowledge: this is what keeps the answer out of the graph write-back
+        **llm_meta,
+        "interview": interview,
         "sources": sources,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
         "truncated": len(kept) > MAX_FACTS,
@@ -243,5 +323,5 @@ async def knowledge_broker_node(state_: AgentState):
         "knowledge_block": block,
         "knowledge_entity_hits": list(bundle["entity_hits"]),
         "knowledge_gaps": bundle["gaps"],
-        "knowledge_llm_context": "",
+        "knowledge_llm_context": "\n".join(f["text"] for f in llm_facts),
     }

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import logging
 import re
 import time
@@ -121,6 +122,9 @@ def build_response_commit_payload(
         ),
         "skip_research": bool(state_.get("skip_research")),
         "enable_graphrag": bool(state_.get("enable_graphrag", True)),
+        # an answer that rests on a knowledge model's statements (services/knowledge_llm.py) must not become infrastructure
+        # knowledge with the confidence of one: write-back is guarded below
+        "knowledge_llm_used": bool((state_.get("knowledge_bundle") or {}).get("llm_answers")),
         "tier_escalations": int(state_.get("tier_escalations") or 0),
         "response_commit_context": state_.get("response_commit_context") or {},
         "query_embedding": state_.get("query_embedding") or [],
@@ -303,6 +307,9 @@ async def _sink_map(payload: Mapping[str, Any]) -> dict[str, Callable[[], Awaita
         for item in payload.get("expert_results") or []
     ]
     ingest_confidence = sum(confidences) / len(confidences) if confidences else 0.5
+    llm_derived = bool(payload.get("knowledge_llm_used"))
+    if llm_derived:  # cap what a model's statement may claim; the semantic cache then no longer bypasses the pipeline on it
+        ingest_confidence = min(ingest_confidence, float(os.getenv("KNOWLEDGE_LLM_WRITEBACK_MAX_CONF", "0.3")))
     expert_domain = next(
         (
             str(item.get("category") or "")
@@ -364,6 +371,8 @@ async def _sink_map(payload: Mapping[str, Any]) -> dict[str, Callable[[], Awaita
             await log_episode(driver, dict(payload))
 
     async def kafka_ingest() -> None:
+        if llm_derived and os.getenv("KNOWLEDGE_LLM_WRITEBACK", "0") != "1":
+            return  # default: model knowledge is not written back into the graph (KNOWLEDGE_LLM_WRITEBACK=1 allows it, capped)
         markers = {
             "requires", "must", "necessary", "prerequisite", "needed",
             "location", "on-site", "on premises", "physically", "necessitates",
@@ -375,8 +384,9 @@ async def _sink_map(payload: Mapping[str, Any]) -> dict[str, Callable[[], Awaita
             "domain": expert_domain,
             "source_expert": expert_domain,
             "source_model": (
-                (payload.get("expert_models_used") or [JUDGE_MODEL])[0]
+                "knowledge_llm" if llm_derived else (payload.get("expert_models_used") or [JUDGE_MODEL])[0]
             ),
+            "knowledge_origin": "llm" if llm_derived else "",
             "template_name": payload.get("template_name"),
             "confidence": round(ingest_confidence, 2),
             "knowledge_type": (

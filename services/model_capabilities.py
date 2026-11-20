@@ -63,6 +63,19 @@ def model_supports_json_object(model: str) -> bool:
     return bool(get_model_caps(model).get("json_object", True))
 
 
+def get_knowledge_cutoff(model: str):
+    """The model's training-data cutoff as a date (first day of the month), or None when it is not documented.
+
+    YAML field ``knowledge_cutoff: "YYYY-MM"`` per model. Only enter values a model card or the vendor states; a guess here makes
+    the reconciliation prefer infrastructure facts for the wrong reasons."""
+    import datetime as _dt
+    raw = str(get_model_caps(model).get("knowledge_cutoff") or "").strip()
+    try:
+        return _dt.datetime.strptime(raw, "%Y-%m").date()
+    except ValueError:
+        return None
+
+
 def model_supports_streaming(model: str) -> bool:
     """True if the model can stream tokens."""
     return bool(get_model_caps(model).get("stream", True))
