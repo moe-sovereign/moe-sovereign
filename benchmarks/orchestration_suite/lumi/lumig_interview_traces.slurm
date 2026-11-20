@@ -20,5 +20,5 @@ export ROCR_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 
 singularity exec --bind /scratch/project_465003058:/scratch/project_465003058 \
   --env HF_HOME=$S/hf_cache --env HF_HUB_OFFLINE=1 --env TRITON_CACHE_DIR=$S/triton_cache --env TMPDIR=$S/tmp \
   --env ROCR_VISIBLE_DEVICES=$ROCR_VISIBLE_DEVICES --env HIP_VISIBLE_DEVICES=$HIP_VISIBLE_DEVICES --env PYTORCH_HIP_ALLOC_CONF=$PYTORCH_HIP_ALLOC_CONF \
-  $S/lumi-multitorch-latest.sif python3 $S/moe-stack/app_kb/benchmarks/orchestration_suite/interview/generate_traces.py \
+  $S/lumi-multitorch-latest.sif python3 $S/moe-stack/app_pilot/benchmarks/orchestration_suite/interview/generate_traces.py \
   --tasks "$TASKS" --model "$MODEL" --out "$OUT" | tee "$S/moe-stack/interview/traces_${TAG}.summary.json"
