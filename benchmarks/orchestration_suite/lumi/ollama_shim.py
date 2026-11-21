@@ -64,6 +64,12 @@ def openai_request(body: dict, stream: bool) -> dict:
     return out
 
 
+def usage_line(model: str, usage: dict, seconds: float) -> str:
+    """One JSON line of the optional token log (--usage-log): the model's prompt and completion tokens of one chat call."""
+    return json.dumps({"t": round(time.time(), 2), "model": model, "prompt": int(usage.get("prompt_tokens") or 0),
+                       "completion": int(usage.get("completion_tokens") or 0), "seconds": round(seconds, 2)})
+
+
 def ollama_chat_response(model: str, oai: dict, started: float) -> dict:
     choice = (oai.get("choices") or [{}])[0]
     msg = choice.get("message") or {}
@@ -127,7 +133,7 @@ class Replicas:
         self.inflight[url] -= 1
 
 
-def build_app(cfg: dict):
+def build_app(cfg: dict, usage_log: str = ""):
     import httpx
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -137,6 +143,14 @@ def build_app(cfg: dict):
     app = FastAPI(title="ollama-shim")
 
     replicas = Replicas(models)
+
+    def log_usage(model: str, usage: dict, started: float) -> None:
+        if usage_log and usage:
+            try:
+                with open(usage_log, "a", encoding="utf-8") as f:  # tiny appends; no lock needed for line-sized writes
+                    f.write(usage_line(model, usage, time.monotonic() - started) + "\n")
+            except OSError:
+                pass  # the token log is a measurement aid, never a reason to fail a request
 
     @app.exception_handler(ShimError)
     async def _shim_error(_req, exc: ShimError):
@@ -180,7 +194,9 @@ def build_app(cfg: dict):
                 replicas.release(base)
             if r.status_code != 200:
                 raise ShimError(r.status_code, r.text[:500])
-            return ollama_chat_response(body["model"], r.json(), started)
+            data = r.json()
+            log_usage(body["model"], data.get("usage") or {}, started)
+            return ollama_chat_response(body["model"], data, started)
 
         async def gen():
             try:
@@ -208,6 +224,7 @@ def build_app(cfg: dict):
                             if delta.get("reasoning_content"):
                                 msg["thinking"] = delta["reasoning_content"]
                             yield json.dumps({"model": body["model"], "created_at": now_iso(), "message": msg, "done": False}) + "\n"
+            log_usage(body["model"], usage, started)
             final = ollama_chat_response(body["model"], {"choices": [{"message": {}, "finish_reason": reason}], "usage": usage}, started)
             yield json.dumps(final) + "\n"
         return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -268,9 +285,10 @@ def main():
     ap.add_argument("--config", required=True)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, required=True)
+    ap.add_argument("--usage-log", default="", help="append one JSON line per chat call with its token counts (research measurement)")
     a = ap.parse_args()
     import uvicorn
-    uvicorn.run(build_app(json.load(open(a.config))), host=a.host, port=a.port, log_level="warning")
+    uvicorn.run(build_app(json.load(open(a.config)), a.usage_log), host=a.host, port=a.port, log_level="warning")
 
 
 if __name__ == "__main__":

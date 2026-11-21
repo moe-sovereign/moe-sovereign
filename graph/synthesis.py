@@ -246,6 +246,37 @@ async def _call_rust_loom_check(source: str) -> dict:
         return {"compiles": None, "passed": None}
 
 
+_MERGER_MODES = ("default", "judge_solo", "evidence", "best_member")
+
+
+def _merger_mode() -> str:
+    """Research switch MERGER_MODE (default `default` = unchanged behaviour): how the judge uses the experts' answers.
+
+    judge_solo   the judge sees the request and the tool/graph/web evidence but none of the experts' answers
+    evidence     the experts' answers are shown as hints that may be wrong; the judge solves the task itself and names contradictions
+    judge_solo and evidence also replace the merging instructions of the mode prefix by a neutral "answer completely and correctly" prefix.
+    best_member  the judge copies the single expert answer it judges most likely correct, unchanged (no merging)
+    Used to test where the workflow loses against the single model (pre-registration B); not a product mode. The single-expert fast path is skipped
+    in every mode but `default`, so that all modes reach the judge.
+    """
+    mode = os.getenv("MERGER_MODE", "default").strip().lower()
+    return mode if mode in _MERGER_MODES else "default"
+
+
+_MERGER_EVIDENCE_HEADER = (
+    "EXPERT HINTS (answers of small specialist models; they may be wrong or contradict each other). Solve the task yourself from the request "
+    "and the data it contains; use a hint only where it agrees with your own working, and name a contradiction instead of averaging it away:\n"
+)
+_MERGER_SOLVE_PREFIX = (
+    "Answer the request completely and correctly. If it has several parts, address every part. Work from the data contained in the request "
+    "and compute carefully. Priority: MCP calculations (copy their result verbatim) > knowledge graph > web research > everything else.\n"
+)
+_MERGER_BEST_MEMBER_PREFIX = (
+    "You are given the request and the answers of several specialist models. Do not merge them. Decide which single answer is most likely "
+    "correct and output exactly that answer, unchanged.\n\n"
+)
+
+
 async def merger_node(state_: AgentState):
     from datetime import datetime
     from parsing import _extract_usage, _parse_expert_confidence, _expert_category, _dedup_by_category, _collect_conflicts, _improvement_ratio
@@ -731,7 +762,8 @@ async def merger_node(state_: AgentState):
             "INFRASTRUCTURE KNOWLEDGE (known before planning, authoritative first; prefer it over model memory, "
             f"and flag a contradiction):\n{knowledge_blk}"
         )
-    if expert_results:
+    _merger_mode_now = _merger_mode()
+    if expert_results and _merger_mode_now != "judge_solo":
         # Dynamic per-expert truncation: budget scales with expert count so
         # multi-expert synthesis retains enough of each response to synthesise.
         # With 1 expert: 3500 chars. With 2: 2800 each. With 4+: 2000 each.
@@ -769,7 +801,9 @@ async def merger_node(state_: AgentState):
             else:
                 trimmed.append(er)
 
-        if _n_experts > 1:
+        if _merger_mode_now == "evidence":
+            expert_header = _MERGER_EVIDENCE_HEADER
+        elif _n_experts > 1:
             expert_header = (
                 f"EXPERT RESPONSES ({_n_experts} domains — confidence-weighted synthesis):\n"
                 + "\n".join(weight_rows) + "\n"
@@ -856,6 +890,10 @@ async def merger_node(state_: AgentState):
 
     _custom_judge = (state_.get("judge_prompt") or "").strip()
     merger_prefix = _custom_judge if _custom_judge else mode_cfg["merger_prefix"]
+    if _merger_mode_now == "best_member":
+        merger_prefix = _MERGER_BEST_MEMBER_PREFIX
+    elif _merger_mode_now in ("judge_solo", "evidence"):
+        merger_prefix = _MERGER_SOLVE_PREFIX  # the default prefix tells the judge to integrate every expert, which these arms must not do
     _behavioral = (state_.get("behavioral_directives") or "").strip()
     if _behavioral:
         merger_prefix = f"MANDATORY RESPONSE DIRECTIVES (override all other instructions):\n{_behavioral}\n\n{merger_prefix}"
@@ -1003,7 +1041,8 @@ async def merger_node(state_: AgentState):
                 _parse_expert_confidence(expert_results[0]) == "high"
                 or _is_trivial_direct
             )
-            and mode in _single_expert_modes):
+            and mode in _single_expert_modes
+            and _merger_mode_now == "default"):
         _raw_fp = re.sub(r'^\[[^\]]+\]:\s*', '', expert_results[0])
         _details_m = re.search(r'DETAILS:\n?(.*)', _raw_fp, re.DOTALL)
         fast_resp = _details_m.group(1).strip() if _details_m else _raw_fp.strip()

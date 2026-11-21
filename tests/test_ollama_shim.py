@@ -75,3 +75,11 @@ def test_replicas_go_to_least_loaded_and_unknown_models_404():
     with pytest.raises(shim.ShimError) as e:
         r.acquire("missing")
     assert e.value.status == 404
+
+
+def test_usage_line_is_one_json_object_with_token_counts():
+    import json
+    line = shim.usage_line("m", {"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17}, 1.234)
+    d = json.loads(line)
+    assert "\n" not in line and (d["model"], d["prompt"], d["completion"], d["seconds"]) == ("m", 12, 5, 1.23)
+    assert json.loads(shim.usage_line("m", {}, 0.0))["prompt"] == 0  # a missing usage block counts as zero, never raises

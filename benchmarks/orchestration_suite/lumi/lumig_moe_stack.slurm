@@ -223,7 +223,7 @@ PY
 judge_up 0,1 8101 judge
 judge_up 6,7 8111 judge-2
 OS="$R/sif/moe-sovereign-orchestrator_local.sif"
-bg shim SX "$OS" python3 "$R/$APP/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100
+bg shim SX "$OS" python3 "$R/$APP/benchmarks/orchestration_suite/lumi/ollama_shim.py" --config "$SHIM_CFG" --port 18100 --usage-log "$RUN/shim_usage.jsonl"
 wait_http http://127.0.0.1:18100/api/tags shim 60
 
 # ---- MCP precision + orchestrator --------------------------------------------------------------
