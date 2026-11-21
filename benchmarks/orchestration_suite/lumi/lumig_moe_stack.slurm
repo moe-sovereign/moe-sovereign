@@ -21,6 +21,8 @@
 #SBATCH --mem=480G
 #SBATCH --output=/scratch/project_465003058/hornphil/moe-stack/logs/stack_%j.out
 #SBATCH --error=/scratch/project_465003058/hornphil/moe-stack/logs/stack_%j.err
+#SBATCH --requeue
+#SBATCH --open-mode=append
 set -euo pipefail
 SCRATCH=/scratch/project_465003058/hornphil
 R=$SCRATCH/moe-stack
@@ -30,8 +32,20 @@ SHM=/dev/shm/moe_$SLURM_JOB_ID
 CK=$SCRATCH/checkpoints
 mkdir -p "$RUN/logs" "$SHM" && chmod 700 "$RUN" "$SHM"
 PIDS=()
-cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; sleep 5; rm -rf "$SHM"; }
+GUARD_PID=""
+# the guard is stopped first: after a normal end the cleanup removes $SHM itself and must not look like a wipe
+cleanup() { [ -n "$GUARD_PID" ] && kill "$GUARD_PID" 2>/dev/null || true; for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; sleep 5; rm -rf "$SHM"; }
 trap cleanup EXIT
+# /dev/shm of a node can be wiped a few minutes after the job started (observed 2026-11-21/22 on 11 of 20 stack jobs on small-g and standard-g: Kafka loses its
+# log dir, PostgreSQL shuts down, containers cannot mount $SHM, vLLM loses its shared-memory segments). Cause not established (the node epilog is a suspect).
+# The guard notices it within seconds and requeues the job (new node, same job id, output appended) up to three times, instead of burning the allocation.
+( while sleep 10; do
+    [ -d "$SHM" ] && continue
+    echo "[$(date +%H:%M:%S)] GUARD: $SHM vanished (restart count ${SLURM_RESTART_COUNT:-0})"
+    if [ "${SLURM_RESTART_COUNT:-0}" -lt 3 ]; then scontrol requeue "$SLURM_JOB_ID"; else kill -TERM $$; fi
+    sleep 60
+  done ) &
+GUARD_PID=$!
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 wait_http() {  # url name [tries] [pid: fail fast once that process is gone]
     for _ in $(seq "${3:-180}"); do
