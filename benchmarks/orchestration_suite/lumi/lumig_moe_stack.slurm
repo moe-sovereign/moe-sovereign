@@ -171,7 +171,16 @@ judge_up() {  # gcds port name
         SERVE_RESTART=1 serve "$JUDGE" "$1" "$2" "$JUDGE_CKPT" 65536 0.90 2 olmo3 32B
     done
 }
-wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"
+# the planner can die at start from the same ROCm-SMI race as the judges (job 23900912): restart it twice before the watchdog takes over
+planner_up() {
+    local n=0
+    until wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"; do
+        n=$((n + 1)); [ "$n" -gt 2 ] && return 1
+        log "RETRY: planner start $n"; kill "${VPID[8102]}" 2>/dev/null; cp "$RUN/logs/vllm_8102.log" "$RUN/logs/vllm_8102.start$n.log" 2>/dev/null; sleep 5
+        SERVE_RESTART=1 VLLM_XTRA="$PLANNER_XTRA" serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M" 2 8102 "$PLANNER_CKPT" 65536 0.90 1 olmo3 7B
+    done
+}
+planner_up
 (
     n=0
     while sleep 30; do
@@ -231,6 +240,7 @@ mkdir -p "$RUN/mcp_generated"   # /app is read-only in the SIF (smoke 23515108: 
 bg mcp SX --env-file "$RUN/stack.env" --env "MOE_GENERATED_DIR=$RUN/mcp_generated" --pwd /app "$R/sif/moe-mcp-precision_lumi.sif" python server.py
 MCP_PID=$LASTPID
 mkdir -p "$RUN/applogs"
+mkdir -p "$R/$APP/logs" "$R/$APP/data"   # bind-mount points: a source tree uploaded from git has neither (jobs 23900909/10 died here after 12-23 min of startup)
 APPB=(--bind "$R/$APP:/app" --bind "$R/data:/app/data" --bind "$RUN/applogs:/app/logs" --bind "$RUN/stack.env:/app/.env" --env-file "$RUN/stack.env" --pwd /app)
 wait_http http://127.0.0.1:18001/api/v2/heartbeat chroma 120
 wait_http http://127.0.0.1:7474/ neo4j 120
