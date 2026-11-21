@@ -2577,7 +2577,7 @@ async def critic_node(state_: AgentState):
         return {"final_response": final_response}
 
 
-async def quality_gate_node(state_: AgentState):
+async def _quality_gate_core(state_: AgentState):
     """Apply the final, non-bypassable quality/HITL decision.
 
     Trust is calculated in ``merger_node`` so self-critique can improve the
@@ -2698,3 +2698,16 @@ async def quality_gate_node(state_: AgentState):
         "cynefin_domain": decision.cynefin_domain,
         "quality_gate_status": "pending",
     }
+
+
+async def quality_gate_node(state_: AgentState):
+    """Quality gate with the optional answer verifier in front (VERIFIER_MODE=off|shadow|gate, default off).
+
+    The verifier score is computed first and handed to the unchanged gate logic as extra state; in `shadow` mode it is only recorded,
+    in `gate` mode `evaluate_quality_gate` uses its verdict in place of the trust verdict. With the verifier off the gate runs exactly as before.
+    """
+    from services.answer_verifier import apply_verifier
+
+    extra = await apply_verifier(dict(state_))
+    out = await _quality_gate_core({**state_, **extra} if extra else state_)
+    return {**extra, **out} if extra else out
