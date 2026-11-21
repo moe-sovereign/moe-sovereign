@@ -233,6 +233,8 @@ class AgentState(TypedDict):
     verifier_score: float               # P(answer correct) from the answer verifier (VERIFIER_MODE shadow|gate)
     verifier_status: str                # ok|unavailable|timeout|disabled
     verifier_verdict: str               # PROCEED|PROCEED_WITH_ASSUMPTION|BLOCK, only in gate mode
+    verifier_escalated: bool            # the answer was replaced by a direct judge answer (VERIFIER_ESCALATE)
+    verifier_score_initial: float       # score of the answer that was replaced
     response_commit_context: dict       # Deferred synthesis/learning inputs, never written pre-gate
     response_commit_status: str         # complete|partial|reused|skipped|blocked
     response_commit_key: str            # Request/response/contract/evidence idempotency key
