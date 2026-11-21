@@ -16,6 +16,7 @@ STRANDS = {
     "C fine-tuned vs base experts": [23924033, 23924034],
     "D1 teacher rationales": [23924043],
     "E1 SQL tool: base evals + 32B control + inline runs": [23914685, 23914686, 23914687, 23924037, 23924038, 23924039, 23924040],
+    "E2 SQL tool: GRPO full runs + pilot-model eval": [23924058, 23924059, 23924060],
     "E0 SQL tool: GRPO pilot + eval smoke": [23914683, 23914684],
     "F1 prospective router test set": [23924035, 23914503],
     "F2 memory write pre-check": [23924041, 23924042],
