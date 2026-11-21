@@ -214,6 +214,9 @@ class AgentState(TypedDict):
     candidate_status: str               # normal|degraded|unavailable
     candidate_reason: str               # Why a validated degraded candidate was selected
     quality_gate_status: str            # passed|blocked|pending; sole commit router authority
+    verifier_score: float               # P(answer correct) from the answer verifier (VERIFIER_MODE shadow|gate)
+    verifier_status: str                # ok|unavailable|timeout|disabled
+    verifier_verdict: str               # PROCEED|PROCEED_WITH_ASSUMPTION|BLOCK, only in gate mode
     response_commit_context: dict       # Deferred synthesis/learning inputs, never written pre-gate
     response_commit_status: str         # complete|partial|reused|skipped|blocked
     response_commit_key: str            # Request/response/contract/evidence idempotency key

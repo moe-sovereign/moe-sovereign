@@ -204,6 +204,10 @@ def precision_evidence_issues(state_: dict) -> list[str]:
 def evaluate_quality_gate(state_: dict) -> QualityGateDecision:
     """Return ``pass``, ``block`` or ``gate`` without performing I/O."""
     trust_verdict = (state_.get("trust_verdict") or "").upper()
+    # VERIFIER_MODE=gate: the answer verifier's verdict replaces the trust verdict (set by graph.synthesis.quality_gate_node only then)
+    verifier_verdict = (state_.get("verifier_verdict") or "").upper()
+    if verifier_verdict in ("PROCEED", "PROCEED_WITH_ASSUMPTION", "BLOCK"):
+        trust_verdict = verifier_verdict
     cynefin_domain = classify_cynefin(state_).value
 
     incomplete = incomplete_plan_tasks(state_)
@@ -251,7 +255,7 @@ def evaluate_quality_gate(state_: dict) -> QualityGateDecision:
             )
 
     if trust_verdict == "BLOCK":
-        return QualityGateDecision("block", "trust_score_block", cynefin_domain)
+        return QualityGateDecision("block", "verifier_block" if verifier_verdict == "BLOCK" else "trust_score_block", cynefin_domain)
 
     # Optional 3-tier assertion gate check via DSPy teleprompter trace if provided
     trace_data = state_.get("dspy_trace") or state_.get("trace")
