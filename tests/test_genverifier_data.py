@@ -26,3 +26,21 @@ def test_verdict_parsing_and_rejection_sampling():
     assert gr.accept(["a\nVERDICT: INCORRECT", "b\nVERDICT: CORRECT"], 1) == "b\nVERDICT: CORRECT"
     assert gr.accept(["a\nVERDICT: CORRECT", "junk"], 0) is None
     assert gr.prompt_of("[TASK]\nt\n[ANSWER]\na").endswith("[TASK]\nt\n[ANSWER]\na") and "Keep the check short" in gr.prompt_of("")
+
+
+def test_bundle_split_is_by_task_and_rows_are_chat_messages():
+    import genverifier_bundle as gb
+    rows = [{"id": f"t{i // 3}#{i % 3}", "prompt": "p", "completion": "c\nVERDICT: CORRECT"} for i in range(60)]
+    train, held = gb.split(rows, 5, 1)
+    assert {r["id"].split("#")[0] for r in train}.isdisjoint({r["id"].split("#")[0] for r in held}) and len(held) == 15 and len(train) == 45
+    assert gb.message_row(rows[0]) == {"messages": [{"role": "user", "content": "p"}, {"role": "assistant", "content": "c\nVERDICT: CORRECT"}]}
+
+
+def test_score_from_the_verdict_token_distribution():
+    import math
+    import score_genverifier as sg
+    assert sg.rationale_prefix("step 1\nstep 2\nVERDICT: INCORRECT") == "step 1\nstep 2\n"
+    s = sg.score_from_top({" CORRECT": math.log(0.6), " INCORRECT": math.log(0.2), "x": math.log(0.1)})
+    assert abs(s - 0.75) < 1e-9
+    assert sg.score_from_top({"foo": -1.0}) is None
+    assert sg.score_from_top({"IN": math.log(0.5), " CORRECT": math.log(0.5)}) == 0.5  # split tokenisation of INCORRECT
