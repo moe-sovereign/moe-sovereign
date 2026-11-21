@@ -63,3 +63,25 @@ RLVR ist durch die Verteilung des Basismodells begrenzt.
 ## Laufend und unverändert
 
 Gate P0 des Knowledge-Brokers (Jobs 23900909–14) und der Planner-Interview-Pilot behalten ihre eigenen Kriterien (siehe Knowledge-Broker-Plan).
+
+## Nachtrag 22.11.2026 (geschrieben vor jedem Ergebnis zu G–J)
+
+**G. Planner mit ausgelagertem Wissen (Entscheidung festgehalten).** Der Planner, der entscheidet, was er ein Wissensmodell fragt, wird stufenweise entwickelt; nur die erste Stufe
+verbraucht vor dem 05.12.2026 Rechenzeit. *G1* (läuft): ein LoRA-SFT-OLMo-3-7B-Interview-Planner aus Lehrer-Traces (Qwen3-Next-80B; regelbasiert je Aufgabenart akzeptiert), offline auf 369 Held-out-Interviewaufgaben
+(öffentliche Fakten, Zwei-Hop-QA, Antwort schon bekannt, private Inline-Daten) und im Stack auf den Konfliktarmen von Gate P0 ausgewertet. **G-H1:** Er schlägt den aktuellen Planner (regelbasierte Lückenfragen) auf den Konfliktarmen von
+Gate P0 und hält den Anteil unnötiger Fragen bei bekannter Antwort und Inline-Aufgaben unter 10 %; **Abbruch:** nicht besser auf den Konfliktarmen. *G2* (ein kleiner, von Grund auf trainierter Planner, dessen Gewichte kein Faktenwissen tragen, oder
+fortgesetztes Pretraining auf Ökosystem-Daten) ist in der [Konzeptnotiz](lumi_planner_concept.md) beschrieben und erhält **vor dem 05.12.2026 keine Rechenzeit, außer G1 besteht**; Gründe: Ein perfekter
+Planner erreichte auf diesen Aufgaben nur ≈ 0,45 gegen 0,49 für das Einzelmodell (F7), und Feintuning von Planner und Judge hat keinen messbaren Effekt (F12).
+
+**H. Ungesehene Aufgabenfamilien.** Der Verifier wurde auf `sql_calc`, `cypher_calc`, `cypher_sql_calc` und externen Mengen trainiert. Neue Aufgaben der Familien `tool_chain`
+(mehrstufige Rechnung mit Werkzeugen) und `direct` (einstufige Arithmetik), Seed 888, IDs ungesehen (250 + 250 Aufgaben, `orch_tasks_heldout4.jsonl`), direkter Judge × 3 und Workflow × 2.
+**H-H1:** AUROC von Verifier v1 und v2 ≥ 0,80 je ungesehener Familie. **H-H2:** Die Freigaberegel aus A-H2 mit den *jetzt* festgelegten Schwellen aus den gesehenen Familien (t = 0,80 für v2, 0,85 für v1)
+schlägt den direkten Judge allein um ≥ +0,02 (KI ohne Null) auf den ungesehenen Familien. Ein Verfehlen wird als Grenze des Verifiers berichtet, nicht wiederholt.
+
+**I. Seed-Wiederholung des Verifiers.** Ein zweites Training von Verifier v2 (Seed 2, gleiche Daten und Einstellungen). **I-H1:** AUROC auf `test_iid`, `test_ood`, `test_ext` innerhalb ±0,01 von Seed 1, und der
+A-H2-Effekt von Seed 2 im Konfidenzintervall von Seed 1. Beide Seeds werden berichtet.
+
+**J. Freigaberegel auf externen Daten.** Verifier **nur v1** (v2 sah externe Antworten im Training) bewertet die externen Antworten der Base-gegen-Feintune-Läufe (7.490 Antworten zu 770 Aufgaben). Berichtet je externer Familie
+(Mathe, Tabellen, Text-QA): AUROC, ECE und Abdeckungs-Genauigkeits-Kurve gegen den Trust-Score. **J-H1 (beschreibend):** AUROC ≥ 0,80 bei Mathe und Tabellen und < 0,65 bei Text-QA, wie in der früheren Transfermessung.
+
+**Auswertungsregel.** Jeder Strang wird ausgewertet, sobald alle seine Jobs mit Exit-Code 0 beendet sind, mit dem in seinem Abschnitt genannten Skript; Infrastrukturfehler werden behoben und neu eingereicht und sind keine Ergebnisse.

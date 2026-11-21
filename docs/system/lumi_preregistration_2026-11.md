@@ -63,3 +63,26 @@ RLVR is bounded by the base model's distribution.
 ## Running and unchanged
 
 Gate P0 of the knowledge broker (jobs 23900909–14) and the planner-interview pilot keep their own criteria (see the knowledge-broker plan).
+
+## Addendum 2026-11-22 (written before any result of G–J)
+
+**G. Planner with externalised knowledge (decision recorded).** The planner that decides what to ask a knowledge model is developed in steps, and only the first
+step spends compute before 2026-12-05. *G1* (running): a LoRA-SFT OLMo-3-7B interview planner from teacher traces (Qwen3-Next-80B; accepted by
+rule per task kind), evaluated offline on 369 held-out interview tasks (public facts, two-hop QA, answer already known, private inline data) and in the stack on the conflict
+arms of gate P0. **G-H1:** it beats the current planner (rule-based gap questions) on the conflict arms of gate P0 and keeps the share of needless questions on
+known-answer and inline tasks below 10 %; **abort:** no better on the conflict arms. *G2* (a small planner trained from scratch with knowledge kept out of the weights, or
+continued pre-training on ecosystem data) is described in the [concept note](lumi_planner_concept.md) and receives **no compute before 2026-12-05 unless G1 passes**; reasons: a perfect
+planner would reach only ≈ 0.45 against 0.49 for the single model on these tasks (F7), and fine-tuning planner and judge has no measurable end-to-end effect (F12).
+
+**H. Unseen task families.** The verifier was trained on `sql_calc`, `cypher_calc`, `cypher_sql_calc` and external sets. New tasks of the families `tool_chain`
+(multi-step calculation with tools) and `direct` (single-step arithmetic), seed 888, ids unseen (250 + 250 tasks, `orch_tasks_heldout4.jsonl`), direct judge × 3 and workflow × 2.
+**H-H1:** AUROC of verifier v1 and v2 ≥ 0.80 on each unseen family. **H-H2:** the release rule of A-H2 with the thresholds fixed *now* from the seen families (t = 0.80 for v2, 0.85 for v1)
+beats the direct judge alone by ≥ +0.02 (CI excluding 0) on the unseen families. A miss is reported as a limit of the verifier, not retried.
+
+**I. Seed repeat of the verifier.** A second training run of verifier v2 (seed 2, same data and settings). **I-H1:** AUROC on `test_iid`, `test_ood`, `test_ext` within ±0.01 of seed 1, and the
+A-H2 effect of seed 2 inside the confidence interval of seed 1. Both seeds are reported.
+
+**J. Release rule on external data.** Verifier **v1 only** (v2 saw external answers in training) scores the external answers of the base-vs-fine-tuned runs (7,490 answers to 770 tasks). Reported per external family
+(math, tables, text QA): AUROC, ECE and coverage-accuracy curve against the trust score. **J-H1 (descriptive):** AUROC ≥ 0.80 on math and tables and < 0.65 on text QA, as in the earlier transfer measurement.
+
+**Evaluation rule.** Each strand is evaluated once all of its jobs have finished with exit code 0, with the script named in its section; infrastructure failures are fixed and resubmitted and are not results.
