@@ -113,7 +113,7 @@ def main():
     tok.save_pretrained(os.path.join(a.output_dir, "final"))
 
     report = {}
-    for split in ("val", "test_iid", "test_ood"):
+    for split in ("val", "test_iid", "test_ood", "test_ext"):
         path = os.path.join(a.data_dir, f"{split}.jsonl")
         if not os.path.exists(path):
             continue

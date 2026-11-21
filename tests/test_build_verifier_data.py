@@ -1,5 +1,6 @@
 """Verifier rows: labelled drafts of forks and base episodes, held-out answers as the ood split, skipped tasks left out."""
 import importlib.util
+import json
 from pathlib import Path
 
 _PATH = Path(__file__).resolve().parents[1] / "benchmarks" / "orchestration_suite" / "prm" / "build_verifier_data.py"
@@ -26,3 +27,18 @@ def test_rows_use_drafts_of_blocked_forks_and_skip_listed_tasks(tmp_path):
     assert all(r["text"].startswith("[TASK]\nq1\n[ANSWER]\n") for r in rows)
     ood = [r for r in rows if r["split"] == "test_ood"]
     assert len(ood) == 1 and ood[0]["q"] == 0.0 and ood[0]["source"] == "direct"
+
+
+def test_external_pool_rows_are_split_by_task_and_weighted(tmp_path):
+    pool = tmp_path / "pool.jsonl"
+    rows = [{"id": f"t{i}#d{k}", "task_id": f"t{i}", "src": "d", "family": "ext_math", "prompt": "p", "answer": "a", "q": float(k % 2)}
+            for i in range(200) for k in range(3)]
+    pool.write_text("\n".join(json.dumps(r) for r in rows))
+    out = bv.pool_rows(str(pool), weight=4.0)
+    assert {r["weight"] for r in out} == {4.0} and out[0]["text"] == "[TASK]\np\n[ANSWER]\na" and out[0]["source"] == "pool:d"
+    by_task = {}
+    for r in out:
+        by_task.setdefault(r["group"], set()).add(r["split"])
+    assert all(len(v) == 1 for v in by_task.values())  # a task's answers never straddle splits
+    share = {s: sum(r["split"] == s for r in out) / len(out) for s in ("train", "val", "test_ext")}
+    assert 0.5 < share["train"] < 0.8 and 0.15 < share["test_ext"] < 0.45
