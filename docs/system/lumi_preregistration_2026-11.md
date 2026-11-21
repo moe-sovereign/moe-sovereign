@@ -1,0 +1,65 @@
+# LUMI-G end-game: pre-registration of six experiments (2026-11-21)
+
+**Status:** written and committed on 2026-11-21, before any result of the experiments below exists. Hypotheses, metrics, thresholds,
+splits and abort rules are fixed here; deviations are reported as deviations in the [findings](lumi_findings_2026-11.md) and the
+[final report](lumi_final_report.md). Allocation: project_465003058, expires 2026-12-05. Planned use ≈ 920–1,725 of ≈ 12,700 remaining
+card-hours; the rest is left unused on purpose.
+
+**Rules for all experiments.** Correctness is the gate-free draft accuracy (`effective_correct`); comparisons are paired by task with a
+bootstrap over tasks (95 % interval); a claim needs the interval to exclude zero *and* the stated minimum effect. Infrastructure faults are
+not results: analyse, fix, resubmit. Tasks used to choose a threshold are never used to report it.
+
+## A. Verifier as a calibrated release rule
+
+*Background.* The trust score separates correct from incorrect answers with AUROC 0.60; the 7B verifier reaches 0.95 on unseen tasks of the
+same families (F1, F10). Related work: calibrated deferral from a small to a large model (ReDAct, ICML 2026 guardrail cascades),
+prover-verifier selective prediction.
+- **A-H1.** At equal coverage (share of answers released), the accuracy of released workflow answers is higher with the verifier than with
+  the trust gate by ≥ +0.10.
+- **A-H2.** "Release the workflow answer if the verifier score ≥ t, otherwise use the direct 32B answer" beats the direct 32B alone by ≥ +0.02.
+- **Data.** Held-out workflow and direct answers of 2026-11-20 (491 tasks). Split: `sha256(task_id) mod 2` into dev and test, fixed now;
+  t is chosen on dev, reported on test. External data: verifier v1 only (v2 saw external answers in training).
+- **Metrics.** Coverage-accuracy curves, AUROC, ECE (10 bins), escalation rate against accuracy.
+- **Abort.** A-H1 not met → no in-loop run; the result is reported.
+
+## B. Where does the workflow lose? Synthesis ablation at equal compute
+
+*Background.* LLM teams often fall below their best member because they average expert and non-expert views (Pappu et al., ICML 2026).
+- **B-H1.** The loss arises in the merge step: `MERGER_MODE=evidence` beats `default` by ≥ +0.05 on the held-out tasks; `judge_solo` equals the
+  direct 32B within 0.03 (otherwise the loss sits in the pipeline shell).
+- **B-H2.** At equal token budget the direct 32B with a plurality vote reaches at least the workflow's accuracy.
+- **Arms.** `judge_solo`, `evidence`, `best_member` against the existing `default` (3 × 2 repeats) and direct (8 repeats) runs. B-H2 requires
+  token counts per episode; without them only B-H1 is tested.
+
+## C. Fine-tuned experts
+
+- **C-H1.** Replacing the fine-tuned 3B experts with the SmolLM3-3B base changes pipeline accuracy by less than ±0.03 (held-out and external).
+  A larger change is a finding about the experts; none is the null result already found for planner and judge (F12).
+
+## D. Generative verifier
+
+*Background.* Verifiers that reason before judging outperform discriminative ones; small tool-augmented verifiers rival much larger reward models.
+- **D-H1.** A 7B verifier trained on teacher rationales (Qwen3-Next-80B, filtered to those whose verdict matches the label) reaches AUROC ≥ 0.70
+  on external text QA (the discriminative v1: 0.59–0.61) with an in-domain loss ≤ 0.02 against v2.
+- **Abort.** Rationale yield < 30 % or no loss decrease in the smoke run. No second run after a miss.
+
+## E. Reinforcement learning with execution rewards on large tables
+
+*Background.* Execution-reward GRPO gives small models strong text-to-SQL results; simple rewards are preferred over fine-grained ones;
+RLVR is bounded by the base model's distribution.
+- **E-H1.** A 3B or 7B model with a SQL tool, trained with GRPO on an execution reward, beats the direct 32B (table inline) by ≥ +0.20
+  at ≥ 3× the base table size (≈ 57 rows).
+- **Mandatory control.** The 32B *with* the same SQL tool and no training; if it matches the trained small model, the finding is "tool, not training".
+- **Also reported.** pass@k, k = 1…64, before and after training. **Abort.** No reward increase in the 2 h pilot.
+
+## F. Prospective router and memory ablation
+
+- **F1-H1.** Two rules fixed now, evaluated on a new held-out set (new seed, 491 tasks, known ids excluded): R1 workflow only for
+  `cypher_sql_calc`, otherwise direct; R2 workflow answer if its verifier score exceeds the direct answer's, otherwise direct. Both beat direct
+  (post hoc on the old set R1 gave +0.017, 95 % CI +0.007 … +0.028; per-task oracle 0.555).
+- **F2-H1.** With Correction Memory and graph ingest on, accuracy on a repeated task template rises from first to second occurrence by more than
+  with the memory off. Precondition (smoke): corrections or facts are actually written during the benchmark; if not, F2 is dropped and that is the result.
+
+## Running and unchanged
+
+Gate P0 of the knowledge broker (jobs 23900909–14) and the planner-interview pilot keep their own criteria (see the knowledge-broker plan).

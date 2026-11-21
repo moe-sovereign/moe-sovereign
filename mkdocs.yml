@@ -141,6 +141,7 @@ nav:
     - LUMI-G Activity Log: system/lumi_activity_log.md
     - LUMI-G Final Report (draft): system/lumi_final_report.md
     - LUMI-G Research Findings (Nov. 2026): system/lumi_findings_2026-11.md
+    - LUMI-G Pre-registration (Nov. 2026): system/lumi_preregistration_2026-11.md
     - Tool Stack:
       - system/toolstack/index.md
       - LangGraph: system/toolstack/langgraph.md
@@ -193,6 +194,7 @@ nav:
     - LUMI-G-Aktivitätslogbuch: system/de/lumi_activity_log.md
     - LUMI-G-Abschlussbericht (Entwurf): system/de/lumi_final_report.md
     - LUMI-G-Forschungsbefunde (Nov. 2026): system/de/lumi_findings_2026-11.md
+    - LUMI-G-Präregistrierung (Nov. 2026): system/de/lumi_preregistration_2026-11.md
   - Publications: publications.md
   - Changelog: changelog.md
   - Legal:
