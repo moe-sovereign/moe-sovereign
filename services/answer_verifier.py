@@ -9,6 +9,11 @@ Modes (VERIFIER_MODE, default off):
   shadow  the answer is scored and the score is recorded (state, decision log); the gate is unchanged
   gate    the score decides: < VERIFIER_BLOCK -> BLOCK, < VERIFIER_PASS -> PROCEED_WITH_ASSUMPTION (the existing human/Cynefin path), else PROCEED
 
+Escalation (VERIFIER_ESCALATE=1, default off, needs a mode other than off): when the score is below VERIFIER_PASS the answer is replaced by one direct judge
+answer to the original request and scored again. Evidence: in the held-out evaluation "workflow answer if the verifier score >= t, otherwise the
+direct judge" beat the direct judge alone (F17); it costs one more judge call for the answers that are not trusted. Not used for requests with
+required precision contracts (their bound response must not change).
+
 Configuration: VERIFIER_URL (scoring server, scripts/verifier_server.py), VERIFIER_PASS (0.7), VERIFIER_BLOCK (0.2), VERIFIER_TIMEOUT_S (5).
 No server, a timeout or an error never changes the gate: the status becomes `unavailable`/`timeout` and the trust verdict stays in force
 (fail-closed would turn an outage of an optional component into an outage of the product). Precision/contract checks of the gate run
@@ -110,4 +115,32 @@ async def apply_verifier(state_: dict, *, client: Optional[httpx.AsyncClient] = 
                       "trust_verdict": state_.get("trust_verdict") or ""})
     except Exception as exc:  # noqa: BLE001 - logging must not fail the request
         logger.debug("answer verifier: decision log failed: %s", exc)
+    return out
+
+
+def escalation_enabled() -> bool:
+    return verifier_mode() != "off" and os.getenv("VERIFIER_ESCALATE", "0").strip() == "1"
+
+
+async def escalate(state_: dict, extra: Mapping, answer_fn, *, client: Optional[httpx.AsyncClient] = None) -> dict:
+    """State keys to add when a low-scored answer is replaced by `await answer_fn(state_)`; {} when nothing changes.
+
+    The replacement is scored again; in gate mode its verdict replaces the first one, so the gate judges the answer that is actually released.
+    """
+    cfg = verifier_config()
+    score = extra.get("verifier_score")
+    if not escalation_enabled() or cfg is None or score is None or score >= cfg["pass"] or state_.get("required_precision_intents"):
+        return {}
+    try:
+        answer = str(await answer_fn(state_) or "").strip()
+    except Exception as exc:  # noqa: BLE001 - escalation is an optional improvement, the original answer stays
+        logger.warning("answer verifier: escalation failed: %s: %s", type(exc).__name__, exc)
+        return {}
+    if not answer:
+        return {}
+    out: dict = {"final_response": answer, "verifier_escalated": True, "verifier_score_initial": float(score)}
+    again = await apply_verifier({**state_, "final_response": answer}, client=client)
+    out.update(again)
+    if verifier_mode() == "gate" and "verifier_verdict" not in again:
+        out["verifier_verdict"] = ""  # the replacement could not be scored: the trust verdict of the original answer no longer describes it
     return out

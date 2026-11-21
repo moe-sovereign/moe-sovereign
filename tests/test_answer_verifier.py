@@ -148,3 +148,66 @@ async def test_the_node_wraps_the_unchanged_gate(monkeypatch):
     out = await synthesis.quality_gate_node(state)
     assert out["verifier_score"] == 0.4 and out["quality_gate_status"] == "passed"
     assert core.await_args.args[0]["verifier_verdict"] == "BLOCK"
+
+
+# ---- escalation ----------------------------------------------------------------------------------------------------------------
+def esc_env(monkeypatch, mode="gate", escalate="1"):
+    set_env(monkeypatch, mode)
+    monkeypatch.setenv("VERIFIER_ESCALATE", escalate)
+
+
+def seq_client(scores):
+    it = iter(scores)
+    return httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"scores": [next(it)]})))
+
+
+@pytest.mark.asyncio
+async def test_a_low_scored_answer_is_replaced_and_scored_again(monkeypatch):
+    esc_env(monkeypatch)
+    calls = []
+
+    async def direct(state):
+        calls.append(state["input"])
+        return "direct answer"
+
+    first = {"verifier_status": "ok", "verifier_score": 0.2, "verifier_verdict": "PROCEED_WITH_ASSUMPTION"}
+    out = await av.escalate(dict(BASE), first, direct, client=seq_client([0.9]))
+    assert calls == ["What is 2+2?"] and out["final_response"] == "direct answer" and out["verifier_escalated"] is True
+    assert out["verifier_score_initial"] == 0.2 and out["verifier_score"] == 0.9 and out["verifier_verdict"] == "PROCEED"
+
+
+@pytest.mark.asyncio
+async def test_no_escalation_for_trusted_answers_when_off_or_for_precision_contracts(monkeypatch):
+    never = AsyncMock(side_effect=AssertionError("must not be called"))
+    esc_env(monkeypatch)
+    assert await av.escalate(dict(BASE), {"verifier_score": 0.95}, never) == {}               # trusted
+    assert await av.escalate(dict(BASE), {"verifier_status": "unavailable"}, never) == {}     # no score
+    assert await av.escalate({**BASE, "required_precision_intents": [{"tool": "x"}]}, {"verifier_score": 0.1}, never) == {}
+    esc_env(monkeypatch, escalate="0")
+    assert await av.escalate(dict(BASE), {"verifier_score": 0.1}, never) == {}
+    esc_env(monkeypatch, mode="off")
+    assert await av.escalate(dict(BASE), {"verifier_score": 0.1}, never) == {}
+
+
+@pytest.mark.asyncio
+async def test_a_failing_or_empty_replacement_keeps_the_original(monkeypatch):
+    esc_env(monkeypatch)
+    assert await av.escalate(dict(BASE), {"verifier_score": 0.1}, AsyncMock(side_effect=RuntimeError("judge down"))) == {}
+    assert await av.escalate(dict(BASE), {"verifier_score": 0.1}, AsyncMock(return_value="  ")) == {}
+
+
+@pytest.mark.asyncio
+async def test_an_unscorable_replacement_drops_the_stale_verdict_in_gate_mode(monkeypatch):
+    esc_env(monkeypatch)
+    out = await av.escalate(dict(BASE), {"verifier_score": 0.1, "verifier_verdict": "BLOCK"}, AsyncMock(return_value="new"), client=client(status=500))
+    assert out["final_response"] == "new" and out["verifier_verdict"] == ""  # empty: the gate falls back to the trust verdict of the new answer
+
+
+@pytest.mark.asyncio
+async def test_the_node_escalates_before_the_gate_decides(monkeypatch):
+    core = AsyncMock(return_value={"quality_gate_status": "passed"})
+    monkeypatch.setattr(synthesis, "_quality_gate_core", core)
+    monkeypatch.setattr(av, "apply_verifier", AsyncMock(return_value={"verifier_status": "ok", "verifier_score": 0.1}))
+    monkeypatch.setattr(av, "escalate", AsyncMock(return_value={"final_response": "direct", "verifier_escalated": True}))
+    out = await synthesis.quality_gate_node(dict(BASE))
+    assert core.await_args.args[0]["final_response"] == "direct" and out["verifier_escalated"] is True

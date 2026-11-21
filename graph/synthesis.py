@@ -2690,6 +2690,12 @@ async def _quality_gate_core(state_: AgentState):
     }
 
 
+async def _escalation_answer(state_: AgentState) -> str:
+    """One direct judge answer to the original request (VERIFIER_ESCALATE)."""
+    res = await _invoke_judge_with_retry(state_, str(state_.get("input") or ""), max_retries=1, temperature=0.0)
+    return (getattr(res, "content", "") or "").strip()
+
+
 async def quality_gate_node(state_: AgentState):
     """Quality gate with the optional answer verifier in front (VERIFIER_MODE=off|shadow|gate, default off).
 
@@ -2699,5 +2705,8 @@ async def quality_gate_node(state_: AgentState):
     from services.answer_verifier import apply_verifier
 
     extra = await apply_verifier(dict(state_))
+    if extra:
+        from services.answer_verifier import escalate
+        extra = {**extra, **await escalate(dict(state_), extra, _escalation_answer)}
     out = await _quality_gate_core({**state_, **extra} if extra else state_)
     return {**extra, **out} if extra else out
