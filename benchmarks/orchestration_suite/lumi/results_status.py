@@ -20,8 +20,11 @@ STRANDS = {
     "F1 prospective router test set": [23914502, 23914503],
     "F2 memory write pre-check": [23914707, 23914708],
     "G1 interview traces": [23900915],
-    "P0 knowledge-broker gate": [23919612, 23919613, 23919614, 23900911, 23900913, 23900914],
+    "P0 knowledge-broker gate": [23919612, 23919613, 23919614, 23900911, 23900913, 23921919],
     "stack smoke (new paths)": [23919615],
+    "H unseen families": [23921903, 23921904],
+    "I verifier v2 seed 2": [23921905],
+    "J external release rule (scoring)": [23921906],
 }
 
 
