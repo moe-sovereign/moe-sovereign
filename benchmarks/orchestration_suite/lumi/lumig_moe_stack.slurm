@@ -196,10 +196,21 @@ fi
 port=8103; i=0
 for role in omni research security governance datainfra coder precision graphrag; do
     gcd=$((3 + i / 3))
-    serve "$E/smollm3-expert-$role-3b:Q4_K_M" "$gcd" "$port" "$CK/merged_smollm3_expert_$role" 48128 0.29 1 smollm3 3B
+    # EXPERT_CKPT: one local snapshot directory for all eight experts (e.g. the SmolLM3-3B base) under the same served names
+    serve "$E/smollm3-expert-$role-3b:Q4_K_M" "$gcd" "$port" "${EXPERT_CKPT:-$CK/merged_smollm3_expert_$role}" 48128 0.29 1 smollm3 3B
     wait_http "http://127.0.0.1:$port/v1/models" "expert $role" 600 "${VPID[$port]}"   # sequential start: later servers on a GCD size against free memory
     port=$((port + 1)); i=$((i + 1))
 done
+log "expert weights: ${EXPERT_CKPT:-fine-tuned per role}"
+# Answer verifier (optional): scalar-head 7B on GCD 5 (two experts use 0.29 of it each, ~27 GB stay free; the model needs ~15 GB).
+# The orchestrator reads VERIFIER_URL; VERIFIER_MODE (off|shadow|gate) comes from EXTRA_STACK_ENV.
+if [ -n "${VERIFIER_CKPT:-}" ]; then
+    bg verifier env -u HIP_VISIBLE_DEVICES -u CUDA_VISIBLE_DEVICES ROCR_VISIBLE_DEVICES=5 singularity exec --bind "$SCRATCH:$SCRATCH" --env "$VENV" "$VS" \
+        python3 "$R/$APP/scripts/verifier_server.py" --model-dir "$VERIFIER_CKPT" --host 127.0.0.1 --port "${VERIFIER_PORT:-8120}"
+    VPID[${VERIFIER_PORT:-8120}]=$LASTPID
+    wait_http "http://127.0.0.1:${VERIFIER_PORT:-8120}/health" verifier 600 "${VPID[${VERIFIER_PORT:-8120}]}" || { log "verifier did not start"; exit 1; }
+    echo "VERIFIER_URL=http://127.0.0.1:${VERIFIER_PORT:-8120}" >> "$RUN/stack.env"
+fi
 python3 - "$SHIM_ROWS" > "$SHIM_CFG" <<'PY'
 import json, sys
 models = {}
