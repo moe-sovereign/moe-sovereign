@@ -254,6 +254,17 @@ if [ -n "${TASKS:-}" ]; then
         --api http://127.0.0.1:8000 --key-file "$RUN/research.key" --tasks "$R/$TASKS" \
         --template "${TEMPLATE:-LUMI-G OLMo + SmolLM3 Sovereign Ensemble}" --out "$RUN/rollouts.jsonl" \
         --n "${N:-0}" --offset "${OFFSET:-0}" --forks "${FORKS:-4}" --concurrency "${CONC:-16}" ${DRIVER_ARGS:-} | tee "$RUN/driver_summary.json"
+    # POST_STATS=1: what did the run write into the knowledge graph (learning-loop check, pre-registration F2)? Waits for the async ingest first.
+    if [ "${POST_STATS:-0}" = "1" ]; then
+        sleep "${POST_STATS_WAIT_S:-120}"
+        JH=$(ls -d "$SCRATCH"/neo4jtest/jdk-21* | head -1)
+        JAVA_HOME="$JH" PATH="$JH/bin:$PATH" "$SHM/neo4j/bin/cypher-shell" -a bolt://127.0.0.1:7687 --format plain \
+            "MATCH (n) RETURN labels(n)[0] AS label, count(n) AS n ORDER BY n DESC LIMIT 25" > "$RUN/graph_stats_nodes.txt" 2>&1 || true
+        JAVA_HOME="$JH" PATH="$JH/bin:$PATH" "$SHM/neo4j/bin/cypher-shell" -a bolt://127.0.0.1:7687 --format plain \
+            "MATCH ()-[r]->() RETURN type(r) AS rel, count(r) AS n ORDER BY n DESC LIMIT 25" > "$RUN/graph_stats_rels.txt" 2>&1 || true
+        grep -ciE "ingest|correction" "$RUN"/applogs/*.jsonl "$RUN"/logs/*.log 2>/dev/null | grep -v ":0$" > "$RUN/ingest_log_hits.txt" || true
+        log "graph stats written (graph_stats_nodes.txt, graph_stats_rels.txt)"
+    fi
 else
     log "no TASKS given: keeping the stack alive for ${HOLD_MIN:-30} min"; sleep $(( ${HOLD_MIN:-30} * 60 ))
 fi
