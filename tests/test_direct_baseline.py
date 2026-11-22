@@ -39,7 +39,7 @@ def test_scores_each_task_repeat_and_balances_replicas(tmp_path, monkeypatch):
     assert len(set(seen)) == 2  # both replicas got requests
 
 
-def test_a_system_prompt_is_sent_when_requested(tmp_path):
+def test_a_system_prompt_is_sent_when_requested(tmp_path, monkeypatch):
     import asyncio
     import json as _json
     from types import SimpleNamespace
@@ -64,7 +64,7 @@ def test_a_system_prompt_is_sent_when_requested(tmp_path):
     tasks = tmp_path / "t.jsonl"
     tasks.write_text(_json.dumps({"id": "t1", "family": "f", "lang": "en", "prompts": {"en": "What is 6*7?"}, "final": {"ref": 42, "tol": 0.5}}) + "\n")
     base = dict(tasks=str(tasks), urls="http://x", model="m", label="l", offset=0, n=0, repeats=1, temperature=0.7, max_tokens=50, concurrency=1, timeout=5, out=str(tmp_path / "o.jsonl"))
-    mod.httpx.AsyncClient = lambda **k: FakeHttp()
+    monkeypatch.setattr(mod.httpx, "AsyncClient", lambda **k: FakeHttp())  # restored after the test: httpx is the shared module
     asyncio.run(mod.main(SimpleNamespace(**base, system_file=str(prompts), system_role="coder")))
     asyncio.run(mod.main(SimpleNamespace(**base)))
     assert sent[0] == [{"role": "system", "content": "You are the coder."}, {"role": "user", "content": "What is 6*7?"}]
