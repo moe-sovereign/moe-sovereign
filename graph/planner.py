@@ -1082,6 +1082,14 @@ JSON array:"""
     _retry_model_override = ""
     _contract_repair_used = False
     _contract_repair_hint = ""
+    if os.getenv("PLANNER_MODE", "llm").strip().lower() == "rule":
+        # research switch (pre-registration O2): rule-based routing instead of the LLM planner, so no planner call and no contract error
+        from services.pipeline.rule_router import rule_plan
+        plan, _planned_task_events = _prepare_handoff_plan(rule_plan(state_["input"], list((state_.get("user_experts") or {}).keys())))
+        categories = [t.get("category", "?") for t in plan]
+        logger.info(f"📋 Plan (rule, {len(plan)} Tasks): {json.dumps(plan, ensure_ascii=False)}")
+        await _record_stage(state_.get("response_id", ""), "planner", "done", ", ".join(categories))
+        _structured_attempts = 0  # the planning loop below is skipped
     for attempt in range(_structured_attempts):
         # the catalog of this request constrains the output schema (services/pipeline/planner_schema.py)
         _attempt_state = {**dict(state_), "planner_tool_names": sorted(_handoff_tool_schemas)}
