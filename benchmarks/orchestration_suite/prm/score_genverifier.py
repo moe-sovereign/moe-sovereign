@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # hf_overrides
 from gen_rationales import prompt_of, verdict_of  # noqa: E402
 
 CUT = re.compile(r"\n?\s*VERDICT:\s*(?:CORRECT|INCORRECT)\s*$", re.IGNORECASE)
@@ -52,7 +53,8 @@ def main():
     tok = AutoTokenizer.from_pretrained(a.model_dir)
     rows = [json.loads(l) for l in open(a.rows, encoding="utf-8")]
     rows = rows[:a.limit] if a.limit else rows
-    llm = LLM(model=a.model_dir, dtype="bfloat16", tensor_parallel_size=a.tp, max_model_len=8192, gpu_memory_utilization=0.9, trust_remote_code=True)
+    from hf_overrides import llm_kwargs
+    llm = LLM(model=a.model_dir, dtype="bfloat16", tensor_parallel_size=a.tp, max_model_len=8192, gpu_memory_utilization=0.9, trust_remote_code=True, **llm_kwargs(a.model_dir))
     chat = [tok.apply_chat_template([{"role": "user", "content": prompt_of(r["text"])}], tokenize=False, add_generation_prompt=True, enable_thinking=False) for r in rows]
     g = llm.generate(chat, SamplingParams(temperature=0.0, max_tokens=450))
     rationales = [o.outputs[0].text for o in g]

@@ -21,6 +21,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[2]))
+sys.path.insert(0, str(HERE.parent))  # benchmarks/orchestration_suite (hf_overrides)
 import types  # noqa: E402
 if "services.pipeline" not in sys.modules:  # the container has no psycopg: register the package without its __init__ (as generate_traces.py)
     _pkg = types.ModuleType("services.pipeline")
@@ -67,7 +68,8 @@ def main():
         from transformers import AutoTokenizer
         from vllm import LLM, SamplingParams  # LUMI only
         tok = AutoTokenizer.from_pretrained(a.model)
-        llm = LLM(model=a.model, dtype="bfloat16", max_model_len=8192, gpu_memory_utilization=0.9, trust_remote_code=True)
+        from hf_overrides import llm_kwargs  # noqa: PLC0415
+        llm = LLM(model=a.model, dtype="bfloat16", max_model_len=8192, gpu_memory_utilization=0.9, trust_remote_code=True, **llm_kwargs(a.model))
         chats = [tok.apply_chat_template([{"role": "user", "content": build_interview_prompt(t["request"], t["known_facts"], t["gaps"], a.max_questions)}],
                                          tokenize=False, add_generation_prompt=True, enable_thinking=False) for t in tasks]
         outs = llm.generate(chats, SamplingParams(temperature=0.0, max_tokens=300))

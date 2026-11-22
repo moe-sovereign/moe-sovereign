@@ -181,7 +181,7 @@ judge_up() {  # gcds port name
     local n=0
     until wait_http "http://127.0.0.1:$2/v1/models" "$3" 900 "${VPID[$2]}"; do
         n=$((n + 1)); [ "$n" -gt 2 ] && return 1
-        log "RETRY: $3 start $n"; kill "${VPID[$2]}" 2>/dev/null; cp "$RUN/logs/vllm_$2.log" "$RUN/logs/vllm_$2.start$n.log" 2>/dev/null; sleep 5
+        log "RETRY: $3 start $n"; kill "${VPID[$2]}" 2>/dev/null || true; cp "$RUN/logs/vllm_$2.log" "$RUN/logs/vllm_$2.start$n.log" 2>/dev/null || true; sleep 5   # `|| true`: set -e is active in this loop body and kill fails on a process that is already dead (job 23924032 died here)
         SERVE_RESTART=1 serve "$JUDGE" "$1" "$2" "$JUDGE_CKPT" 65536 0.90 2 olmo3 32B
     done
 }
@@ -190,7 +190,7 @@ planner_up() {
     local n=0
     until wait_http http://127.0.0.1:8102/v1/models planner 600 "${VPID[8102]}"; do
         n=$((n + 1)); [ "$n" -gt 2 ] && return 1
-        log "RETRY: planner start $n"; kill "${VPID[8102]}" 2>/dev/null; cp "$RUN/logs/vllm_8102.log" "$RUN/logs/vllm_8102.start$n.log" 2>/dev/null; sleep 5
+        log "RETRY: planner start $n"; kill "${VPID[8102]}" 2>/dev/null || true; cp "$RUN/logs/vllm_8102.log" "$RUN/logs/vllm_8102.start$n.log" 2>/dev/null || true; sleep 5
         SERVE_RESTART=1 VLLM_XTRA="$PLANNER_XTRA" serve "$E/moe-sovereign-planner-olmo3-7b:Q4_K_M" 2 8102 "$PLANNER_CKPT" 65536 0.90 1 olmo3 7B
     done
 }

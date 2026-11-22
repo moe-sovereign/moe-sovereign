@@ -14,6 +14,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))  # hf_overrides
 import build_sql_tasks as B  # noqa: E402
 import sql_exec_reward as SR  # noqa: E402
 
@@ -49,7 +50,8 @@ def main():
     from transformers import AutoTokenizer
     from vllm import LLM, SamplingParams  # LUMI only
     tok = AutoTokenizer.from_pretrained(a.model)
-    llm = LLM(model=a.model, dtype="bfloat16", tensor_parallel_size=a.tp, trust_remote_code=True, max_model_len=a.max_model_len, gpu_memory_utilization=0.9)
+    from hf_overrides import llm_kwargs
+    llm = LLM(model=a.model, dtype="bfloat16", tensor_parallel_size=a.tp, trust_remote_code=True, max_model_len=a.max_model_len, gpu_memory_utilization=0.9, **llm_kwargs(a.model))
     sp = SamplingParams(temperature=0.7, top_p=0.8, top_k=20, max_tokens=a.max_tokens, n=a.n)
     ks = [k for k in (1, 2, 4, 8, 16, 32, 64) if k <= a.n]
     result = {"model": a.model, "n": a.n, "scales": {}}
