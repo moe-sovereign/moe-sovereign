@@ -24,6 +24,7 @@ STRANDS = {
     "G1 interview SFT + offline eval (evaluated)": [23921943, 23926561],
     "P0 knowledge-broker gate (evaluated)": [23919612, 23924026, 23924027, 23900911, 23900913, 23924028],
     "stack smoke (new paths) (evaluated)": [23919615],
+    "A5 smoke (fallback + verifier gate, 30 tasks)": [23944495],
     "H unseen families (evaluated)": [23921903, 23924036, 23928226, 23928227],
     "I verifier v2 seed 2 (evaluated)": [23921905, 23928229],
     "F1 scoring of the new held-out set (evaluated)": [23926557, 23926558],
