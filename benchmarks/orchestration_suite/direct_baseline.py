@@ -30,7 +30,7 @@ async def main(a):
     out = open(a.out, "w", encoding="utf-8")
     done = {"n": 0, "correct": 0, "errors": 0}
     system = ""
-    if a.system_file:  # {role: system prompt}: the prompt an expert was fine-tuned with (strand O1)
+    if getattr(a, "system_file", ""):  # {role: system prompt}: the prompt an expert was fine-tuned with (strand O1)
         system = json.load(open(a.system_file, encoding="utf-8"))[a.system_role]
 
     async def one(http, task, rep):
