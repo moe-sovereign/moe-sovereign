@@ -85,3 +85,14 @@ A-H2-Effekt von Seed 2 im Konfidenzintervall von Seed 1. Beide Seeds werden beri
 (Mathe, Tabellen, Text-QA): AUROC, ECE und Abdeckungs-Genauigkeits-Kurve gegen den Trust-Score. **J-H1 (beschreibend):** AUROC ≥ 0,80 bei Mathe und Tabellen und < 0,65 bei Text-QA, wie in der früheren Transfermessung.
 
 **Auswertungsregel.** Jeder Strang wird ausgewertet, sobald alle seine Jobs mit Exit-Code 0 beendet sind, mit dem in seinem Abschnitt genannten Skript; Infrastrukturfehler werden behoben und neu eingereicht und sind keine Ergebnisse.
+
+## Nachtrag 23.11.2026 (geschrieben vor jedem Ergebnis zu A5)
+
+**A5. Rückfall auf den direkten Judge bei Pipeline-Ausfall.** F26 zeigte: Das Verifier-Gate mit Eskalation hebt die Genauigkeit bei den Episoden, die eine Antwort liefern (0,594 gegen 0,500
+für den direkten Judge auf denselben Aufgaben), aber 23 % der Episoden scheitern vor dem Gate und zählen als falsch. Der Produktschalter `PIPELINE_FALLBACK_DIRECT=1` beantwortet eine solche Anfrage
+(Pipeline-Fehler oder Zeitlimit) mit einem direkten Judge-Aufruf (Temperatur 0, nur die ursprüngliche Anfrage) und kennzeichnet die Antwort. Held-out-Aufgaben (`orch_tasks_heldout2.jsonl`, 491 Aufgaben × 2),
+zwei Arme, sonst derselbe Stack wie der A4-Lauf: **A5a** nur Rückfall (Verifier aus), **A5b** Rückfall mit `VERIFIER_MODE=gate`, `VERIFIER_ESCALATE=1`, `VERIFIER_PASS=0.8`.
+- **A5-H1.** A5b schlägt den direkten Judge (Mittel aus 8 Stichproben, 0,489) um ≥ +0,02 mit einem Konfidenzintervall ohne 0 (Entwurfsgenauigkeit, gepaart je Aufgabe). Das Gedankenexperiment aus F26 sagt etwa +0,07 voraus.
+- **A5-H2 (Zerlegung).** A5a schlägt den Workflow-Standard (0,331) um ≥ +0,05, und A5b schlägt A5a um ≥ +0,02.
+- **Beschreibend.** Anteil der vom Rückfall beantworteten Episoden; Genauigkeit der Rückfall-Antworten gegen das Mittel des direkten Judges auf denselben Aufgaben; Genauigkeit je Familie; Tokens je Episode.
+- **Abbruch.** Ein Smoke-Lauf mit 30 Aufgaben muss Rückfall-Antworten zeigen (sonst wird der Haken nicht erreicht), bevor die beiden vollen Läufe eingereicht werden.

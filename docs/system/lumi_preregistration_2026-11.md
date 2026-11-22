@@ -86,3 +86,14 @@ A-H2 effect of seed 2 inside the confidence interval of seed 1. Both seeds are r
 (math, tables, text QA): AUROC, ECE and coverage-accuracy curve against the trust score. **J-H1 (descriptive):** AUROC ≥ 0.80 on math and tables and < 0.65 on text QA, as in the earlier transfer measurement.
 
 **Evaluation rule.** Each strand is evaluated once all of its jobs have finished with exit code 0, with the script named in its section; infrastructure failures are fixed and resubmitted and are not results.
+
+## Addendum 2026-11-23 (written before any result of A5)
+
+**A5. Fallback to the direct judge on pipeline failure.** F26 showed that the verifier gate with escalation raises accuracy on the episodes that produce an answer (0.594 against 0.500
+for the direct judge on the same tasks) but that 23 % of the episodes fail before the gate and count as wrong. The product switch `PIPELINE_FALLBACK_DIRECT=1` answers such a request
+(pipeline error or time limit) with one direct judge call (temperature 0, the original request only) and marks the response. Held-out tasks (`orch_tasks_heldout2.jsonl`, 491 tasks × 2),
+two arms, same stack as the A4 run otherwise: **A5a** fallback only (verifier off), **A5b** fallback with `VERIFIER_MODE=gate`, `VERIFIER_ESCALATE=1`, `VERIFIER_PASS=0.8`.
+- **A5-H1.** A5b beats the direct judge (mean of 8 samples, 0.489) by ≥ +0.02 with a confidence interval that excludes 0 (draft accuracy, paired by task). The counterfactual of F26 predicts about +0.07.
+- **A5-H2 (decomposition).** A5a beats the workflow default (0.331) by ≥ +0.05, and A5b beats A5a by ≥ +0.02.
+- **Descriptive.** Share of episodes answered by the fallback; accuracy of the fallback answers against the direct judge's mean on the same tasks; accuracy by family; tokens per episode.
+- **Abort.** A smoke run of 30 tasks must show fallback answers (otherwise the hook is not reached) before the two full runs are submitted.
