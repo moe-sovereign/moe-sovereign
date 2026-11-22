@@ -40,7 +40,8 @@ GUARD=$!
 ev() {  # tag model gcds rank tp n
     local tag=$1 model=$2 gcds=$3 rank=$4 tp=$5 n=$6
     mkdir -p "$R/rlvr/$tag"
-    ( singularity exec --bind "$S:$S" --env "$ENVB,PGSOCK=$PGS,RANK=$rank,ROCR_VISIBLE_DEVICES=$gcds" "$SIF" \
+    # a comma in a --env value splits it (GCD lists like 5,6): SINGULARITYENV_ carries the device list instead (job 23926560: the 32B control died on it)
+    ( SINGULARITYENV_ROCR_VISIBLE_DEVICES=$gcds singularity exec --bind "$S:$S" --env "$ENVB,PGSOCK=$PGS,RANK=$rank" "$SIF" \
         python3 "$APP/eval_sql_models.py" --model "$model" --tests "$R/sqlrl/test_s1.jsonl" "$R/sqlrl/test_s3.jsonl" "$R/sqlrl/test_s10.jsonl" "$R/sqlrl/test_s30.jsonl" \
         --n "$n" --tp "$tp" --out "$R/rlvr/$tag/eval.json" > "$R/rlvr/$tag/eval.log" 2>&1 ) &
 }
