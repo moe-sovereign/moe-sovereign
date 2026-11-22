@@ -97,3 +97,27 @@ two arms, same stack as the A4 run otherwise: **A5a** fallback only (verifier of
 - **A5-H2 (decomposition).** A5a beats the workflow default (0.331) by ≥ +0.05, and A5b beats A5a by ≥ +0.02.
 - **Descriptive.** Share of episodes answered by the fallback; accuracy of the fallback answers against the direct judge's mean on the same tasks; accuracy by family; tokens per episode.
 - **Abort.** A smoke run of 30 tasks must show fallback answers (otherwise the hook is not reached) before the two full runs are submitted.
+
+## Addendum 2026-11-23 (2) (written before any result of O1-O3): is the MoE logic wrong, or was it never tested?
+
+*Background.* F30: the planner sends 74 % of the subtasks to the `precision_tools` category and 56 % of the requests use no expert other than that tool path; every pipeline failure
+(F26) is a planner contract error. The comparison "workflow against the direct judge" therefore did not test "specialist experts against a generalist". Three claims are separated: (a) the experts are
+good on their topic; (b) correct routing would let them help; (c) their answers can be selected well. Tasks: the 491 held-out tasks (`orch_tasks_heldout.jsonl`); comparator: the direct fine-tuned 32B judge
+(8 samples exist, 16 more are added, 24 in total); the experts are the eight fine-tuned SmolLM3-3B experts. The comparator is an open 32B model, not a frontier model.
+
+**O1. Each expert alone, and what routing or selection could gain at best.** Every expert answers every task 3 times, with the system prompt it was fine-tuned with (primary) and without it (descriptive),
+no planner, no judge, no gate; the judge answers 16 more times. Split of the tasks by `sha256(task_id) mod 2` (dev / test), fixed now.
+- **O1-H1 (specialists on their topic).** At least one (expert, family) pair beats the direct judge on that family by ≥ +0.05 (mean accuracy per task, paired bootstrap, CI excluding 0).
+- **O1-H2 (realistic routing).** A router that picks, per family, the best of {judge, the eight experts} on dev and is evaluated on test beats the judge on the test tasks by ≥ +0.02 (CI excluding 0).
+- **O1-H3 (selection among answers).** With the verifier v2 choosing one answer from a matched number of 24 candidates per task, a pool of 12 judge + 12 expert answers beats a pool of 24 judge answers by ≥ +0.02 (CI excluding 0):
+  the experts add something beyond the gain of choosing among more answers. Reported with it: 24 expert answers, 24 judge answers, and the curve over the number of candidates. Random subsets are drawn 200 times per task.
+- **Decision rule.** If H2 or H3 is met, the MoE logic is justified for these tasks and the next step is a learned router or selector. If none of H1-H3 is met, experts of this quality add nothing on these tasks, and the
+  test moves to knowledge-heavy tasks with real specialist models and a stronger generalist.
+
+**O2. Forced routing instead of the LLM planner.** `PLANNER_MODE=rule` replaces the planner by rules: one task per request, category by keywords (data tables, SQL, database → `data_analyst`; graph, nodes, relationships, Cypher
+→ `compounding_knowledge`; calculation of quantities → `precision_tools`; otherwise `general`), no planner call, no contract errors. Held-out tasks `orch_tasks_heldout2.jsonl`, the judge as in the default run.
+- **O2-H1.** The workflow with rule routing beats the default workflow (0.331) by ≥ +0.05 (so the planner was an obstacle).
+- **O2-H2.** It reaches the direct judge (0.489) within 0.03 or beats it (so routing was the main obstacle).
+- Descriptive: share of failed episodes (expected 0), accuracy by family, tokens per episode, and the same with `MERGER_MODE=best_member`.
+
+**O3. Routing audit.** From the plans of the default run: for each family, the categories the planner chose, compared with the expert that O1 finds best on that family; share of requests whose plan contains the best expert. Descriptive.

@@ -96,3 +96,27 @@ zwei Arme, sonst derselbe Stack wie der A4-Lauf: **A5a** nur Rückfall (Verifier
 - **A5-H2 (Zerlegung).** A5a schlägt den Workflow-Standard (0,331) um ≥ +0,05, und A5b schlägt A5a um ≥ +0,02.
 - **Beschreibend.** Anteil der vom Rückfall beantworteten Episoden; Genauigkeit der Rückfall-Antworten gegen das Mittel des direkten Judges auf denselben Aufgaben; Genauigkeit je Familie; Tokens je Episode.
 - **Abbruch.** Ein Smoke-Lauf mit 30 Aufgaben muss Rückfall-Antworten zeigen (sonst wird der Haken nicht erreicht), bevor die beiden vollen Läufe eingereicht werden.
+
+## Nachtrag 23.11.2026 (2) (geschrieben vor jedem Ergebnis zu O1–O3): Ist die MoE-Logik falsch, oder wurde sie nie getestet?
+
+*Hintergrund.* F30: Der Planner schickt 74 % der Teilaufgaben auf die Kategorie `precision_tools`, und 56 % der Anfragen nutzen außer diesem Werkzeugpfad keinen Experten; jeder Pipeline-Ausfall (F26) ist ein
+Planner-Vertragsfehler. Der Vergleich „Workflow gegen direkten Judge“ hat „spezialisierte Experten gegen einen Generalisten“ daher nicht getestet. Drei Behauptungen werden getrennt: (a) Die Experten sind auf ihrem
+Thema gut; (b) richtiges Routing ließe sie helfen; (c) ihre Antworten lassen sich gut auswählen. Aufgaben: die 491 Held-out-Aufgaben (`orch_tasks_heldout.jsonl`); Vergleichsmodell: der direkte feingetunte 32B-Judge
+(8 Stichproben vorhanden, 16 weitere kommen hinzu, insgesamt 24); die Experten sind die acht feingetunten SmolLM3-3B-Experten. Das Vergleichsmodell ist ein offenes 32B-Modell, kein Frontier-Modell.
+
+**O1. Jeder Experte allein, und was Routing oder Auswahl bestenfalls gewinnen könnten.** Jeder Experte beantwortet jede Aufgabe 3-mal, mit dem System-Prompt seines Feintunings (primär) und ohne ihn (beschreibend),
+ohne Planner, Judge und Gate; der Judge antwortet 16-mal zusätzlich. Aufteilung der Aufgaben nach `sha256(task_id) mod 2` (Dev / Test), jetzt festgelegt.
+- **O1-H1 (Spezialisten auf ihrem Thema).** Mindestens ein Paar (Experte, Familie) schlägt den direkten Judge auf dieser Familie um ≥ +0,05 (mittlere Genauigkeit je Aufgabe, gepaarter Bootstrap, KI ohne 0).
+- **O1-H2 (realistisches Routing).** Ein Router, der je Familie das Beste aus {Judge, die acht Experten} auf Dev wählt und auf Test bewertet wird, schlägt den Judge auf den Testaufgaben um ≥ +0,02 (KI ohne 0).
+- **O1-H3 (Auswahl unter Antworten).** Wählt der Verifier v2 aus einer gleichen Zahl von 24 Kandidaten je Aufgabe eine Antwort, schlägt ein Pool aus 12 Judge- und 12 Expertenantworten einen Pool aus 24 Judge-Antworten um ≥ +0,02 (KI ohne 0):
+  Die Experten tragen etwas bei, das über den Gewinn des Auswählens unter mehr Antworten hinausgeht. Mitberichtet: 24 Expertenantworten, 24 Judge-Antworten und die Kurve über die Kandidatenzahl. Zufällige Teilmengen werden je Aufgabe 200-mal gezogen.
+- **Entscheidungsregel.** Ist H2 oder H3 erreicht, ist die MoE-Logik für diese Aufgaben gerechtfertigt, und der nächste Schritt ist ein gelernter Router oder Selektor. Ist keine der Hypothesen H1–H3 erreicht, tragen Experten
+  dieser Qualität auf diesen Aufgaben nichts bei, und der Test wandert zu wissensintensiven Aufgaben mit echten Spezialmodellen und einem stärkeren Generalisten.
+
+**O2. Erzwungenes Routing statt LLM-Planner.** `PLANNER_MODE=rule` ersetzt den Planner durch Regeln: eine Teilaufgabe je Anfrage, Kategorie nach Schlüsselwörtern (Datentabellen, SQL, Datenbank → `data_analyst`; Graph, Knoten, Beziehungen, Cypher
+→ `compounding_knowledge`; Berechnung von Größen → `precision_tools`; sonst `general`), kein Planner-Aufruf, keine Vertragsfehler. Held-out-Aufgaben `orch_tasks_heldout2.jsonl`, der Judge wie im Standardlauf.
+- **O2-H1.** Der Workflow mit Regel-Routing schlägt den Standard-Workflow (0,331) um ≥ +0,05 (der Planner war also ein Hindernis).
+- **O2-H2.** Er erreicht den direkten Judge (0,489) bis auf 0,03 oder schlägt ihn (Routing war also das Haupthindernis).
+- Beschreibend: Anteil gescheiterter Episoden (erwartet 0), Genauigkeit je Familie, Tokens je Episode, und dasselbe mit `MERGER_MODE=best_member`.
+
+**O3. Routing-Audit.** Aus den Plänen des Standardlaufs: je Familie die vom Planner gewählten Kategorien, verglichen mit dem Experten, den O1 auf dieser Familie als besten findet; Anteil der Anfragen, deren Plan den besten Experten enthält. Beschreibend.
