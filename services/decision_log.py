@@ -40,6 +40,7 @@ class DecisionType(str, Enum):
     SCOPE_VIOLATION         = "SCOPE_VIOLATION"
     MCP_TOOL_ACCESS         = "MCP_TOOL_ACCESS"
     VERIFIER_SCORE          = "VERIFIER_SCORE"
+    FALLBACK_DIRECT         = "FALLBACK_DIRECT"
 
 
 def log_decision(
