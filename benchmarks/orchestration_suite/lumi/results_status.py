@@ -26,6 +26,7 @@ STRANDS = {
     "stack smoke (new paths) (evaluated)": [23919615],
     "A5 smoke (fallback + verifier gate, 30 tasks)": [23944495],
     "O1 smoke + judge x16": [23944743, 23944744],
+    "O2 smoke (rule routing)": [23944800],
     "H unseen families (evaluated)": [23921903, 23924036, 23928226, 23928227],
     "I verifier v2 seed 2 (evaluated)": [23921905, 23928229],
     "F1 scoring of the new held-out set (evaluated)": [23926557, 23926558],
