@@ -225,6 +225,25 @@ for role in omni research security governance datainfra coder precision graphrag
     port=$((port + 1)); i=$((i + 1))
 done
 log "expert weights: ${EXPERT_CKPT:-fine-tuned per role}"
+# EXPERTS_DIRECT=1 (strand O1): every expert answers the tasks alone, with and without its fine-tuning system prompt; no planner, no judge, no gate.
+if [ "${EXPERTS_DIRECT:-0}" = "1" ]; then
+    OSX="$R/sif/moe-sovereign-orchestrator_local.sif"; XP=benchmarks/orchestration_suite/experts/expert_system_prompts.json
+    p=8103; XPIDS=()   # wait only for these: a bare `wait` would also wait for the servers started in the background
+    for role in omni research security governance datainfra coder precision graphrag; do
+        for variant in sys plain; do
+            extra=""; [ "$variant" = sys ] && extra="--system-file $XP --system-role $role"
+            SX --bind "$R/$APP:/app" --pwd /app "$OSX" python3 benchmarks/orchestration_suite/direct_baseline.py \
+                --tasks "$R/$TASKS" --urls "http://127.0.0.1:$p" --model "$E/smollm3-expert-$role-3b:Q4_K_M" --label "expert-$role-$variant" $extra \
+                --offset "${OFFSET:-0}" --n "${N:-0}" --repeats "${REPEATS:-1}" --concurrency "${CONC:-24}" --out "$RUN/expert_${role}_${variant}.jsonl" \
+                > "$RUN/logs/expert_${role}_${variant}.log" 2>&1 &
+            XPIDS+=($!)
+        done
+        p=$((p + 1))
+    done
+    wait "${XPIDS[@]}" || true
+    for f in "$RUN"/logs/expert_*.log; do echo "$(basename "$f" .log): $(tail -n 1 "$f")"; done | tee "$RUN/expert_summary.txt"
+    exit 0
+fi
 # Answer verifier (optional): scalar-head 7B on GCD 5 (two experts use 0.29 of it each, ~27 GB stay free; the model needs ~15 GB).
 # The orchestrator reads VERIFIER_URL; VERIFIER_MODE (off|shadow|gate) comes from EXTRA_STACK_ENV.
 if [ -n "${VERIFIER_CKPT:-}" ]; then

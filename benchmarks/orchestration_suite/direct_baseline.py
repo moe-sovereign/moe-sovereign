@@ -29,6 +29,9 @@ async def main(a):
     sem = asyncio.Semaphore(a.concurrency)
     out = open(a.out, "w", encoding="utf-8")
     done = {"n": 0, "correct": 0, "errors": 0}
+    system = ""
+    if a.system_file:  # {role: system prompt}: the prompt an expert was fine-tuned with (strand O1)
+        system = json.load(open(a.system_file, encoding="utf-8"))[a.system_role]
 
     async def one(http, task, rep):
         async with sem:
@@ -37,8 +40,9 @@ async def main(a):
             rec = {"task_id": task["id"], "family": task["family"], "arm": f"direct:{a.label}", "lang": lang, "repeat": rep,
                    "started": time.time(), "base": None, "errors": []}
             try:
+                messages = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
                 r = await http.post(f"{next(urls)}/v1/chat/completions", json={
-                    "model": a.model, "messages": [{"role": "user", "content": prompt}],
+                    "model": a.model, "messages": messages,
                     "temperature": a.temperature, "max_tokens": a.max_tokens})
                 r.raise_for_status()
                 body = r.json()
@@ -73,5 +77,7 @@ if __name__ == "__main__":
     ap.add_argument("--max-tokens", type=int, default=3000)
     ap.add_argument("--concurrency", type=int, default=16)
     ap.add_argument("--timeout", type=float, default=900)
+    ap.add_argument("--system-file", default="", help="json {role: system prompt}; with --system-role the answer is requested under that system prompt")
+    ap.add_argument("--system-role", default="")
     ap.add_argument("--out", required=True)
     asyncio.run(main(ap.parse_args()))
