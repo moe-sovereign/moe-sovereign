@@ -11,7 +11,7 @@ import sys
 
 STRANDS = {
     "A1 verifier scoring (done)": [23914482, 23914483],
-    "A4 verifier gate + escalation in the loop": [23924029],
+    "A4 verifier gate + escalation in the loop": [23928260],
     "B synthesis ablation": [23924030, 23924031, 23926559, 23914438],
     "C fine-tuned vs base experts (evaluated)": [23924033, 23924034],
     "D1 teacher rationales (done) + generative verifier SFT": [23924043, 23928243],
