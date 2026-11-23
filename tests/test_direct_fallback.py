@@ -64,3 +64,12 @@ async def test_the_chat_helper_answers_only_when_enabled(monkeypatch):
     assert invoke.await_args.args[1] == "What is 2+2?" and invoke.await_args.args[0]["judge_model_override"] == "m"
     monkeypatch.setattr(inference, "_invoke_judge_with_retry", AsyncMock(side_effect=RuntimeError("down")))
     assert await chat_mod._direct_fallback_response("error", "c1", "default", "q", tmpl, "u") is None  # the original 500 / 504 is returned instead
+
+
+@pytest.mark.asyncio
+async def test_the_response_can_carry_extra_fields_such_as_the_research_thread(monkeypatch):
+    monkeypatch.setattr(inference, "_invoke_judge_with_retry", AsyncMock(return_value=SimpleNamespace(content="direct answer")))
+    monkeypatch.setattr(chat_mod, "JSONResponse", lambda status_code, content: SimpleNamespace(status_code=status_code, body=json.dumps(content)))
+    monkeypatch.setenv("PIPELINE_FALLBACK_DIRECT", "1")
+    resp = await chat_mod._direct_fallback_response("error", "c1", "default", "q", {}, "u", {"moe_thread_id": "research-abc"})
+    assert json.loads(resp.body)["moe_thread_id"] == "research-abc" and json.loads(resp.body)["moe_fallback"] == "direct_judge:error"

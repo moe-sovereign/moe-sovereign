@@ -19,7 +19,7 @@ import state
 import starfleet_config as _starfleet
 
 
-async def _direct_fallback_response(kind: str, chat_id: str, mode: str, user_input: str, tmpl: dict, user_id: str):
+async def _direct_fallback_response(kind: str, chat_id: str, mode: str, user_input: str, tmpl: dict, user_id: str, extra: dict | None = None):
     """JSONResponse with one direct judge answer when PIPELINE_FALLBACK_DIRECT allows it for this failure kind, else None (services/direct_fallback.py)."""
     from services.direct_fallback import completion_payload, direct_answer, fallback_enabled, judge_state
     from services.inference import _invoke_judge_with_retry
@@ -34,7 +34,9 @@ async def _direct_fallback_response(kind: str, chat_id: str, mode: str, user_inp
         log_decision(DecisionType.FALLBACK_DIRECT, chat_id, f"pipeline {kind}: answered by one direct judge call", {"kind": kind, "mode": mode})
     except Exception as exc:  # noqa: BLE001 - logging must not fail the request
         logger.debug("fallback decision log failed: %s", exc)
-    return JSONResponse(status_code=200, content=completion_payload(chat_id, MODES.get(mode, MODES["default"])["model_id"], answer, kind))
+    payload = completion_payload(chat_id, MODES.get(mode, MODES["default"])["model_id"], answer, kind)
+    payload.update(extra or {})  # e.g. moe_thread_id: the research driver drops a response that does not echo its thread id (A5 first runs: 206 answers lost)
+    return JSONResponse(status_code=200, content=payload)
 import mission_context as _mission_context
 from parsing import _oai_content_to_str, _extract_oai_images
 from config import (
