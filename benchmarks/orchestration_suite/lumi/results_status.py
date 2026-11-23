@@ -27,7 +27,7 @@ STRANDS = {
     "A5 smoke (evaluated)": [23944495],
     "A5 first runs (fallback answers lost, invalid) -> reruns smoke/b/a": [23948421, 23948422, 23948423],
     "O1 smoke (evaluated)": [23944743],
-    "O1 experts alone + judge x16 (H1/H2 done) + verifier scoring for H3": [23945261, 23944744, 23948347, 23948366],
+    "O1 H3 plain-variant scoring (primary evaluated: F33)": [23945261, 23944744, 23948347, 23949859],
     "O2 smoke (evaluated)": [23944800],
     "O2a/O2b rule routing (evaluated)": [23945262, 23945263],
     "O3 default plans (audit, first part evaluated)": [23945264],
