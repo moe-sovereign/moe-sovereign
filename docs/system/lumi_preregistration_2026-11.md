@@ -121,3 +121,25 @@ no planner, no judge, no gate; the judge answers 16 more times. Split of the tas
 - Descriptive: share of failed episodes (expected 0), accuracy by family, tokens per episode, and the same with `MERGER_MODE=best_member`.
 
 **O3. Routing audit.** From the plans of the default run: for each family, the categories the planner chose, compared with the expert that O1 finds best on that family; share of requests whose plan contains the best expert. Descriptive.
+
+## Addendum 2026-11-23 (3) (written before any result of O4–O6): Do the experts help once their training prompt is gone and the route is chosen by competence?
+
+Reason (F32–F34): the experts lose half their accuracy under the prompt they were fine-tuned with (F33); topic-named routing sends table tasks to the weakest expert (F32); the only configuration that beats the direct judge is the one with a verifier gate (F34). Three strands separate the remaining explanations. Tasks `orch_tasks_heldout2.jsonl` (491 tasks × 2) unless stated; paired bootstrap over tasks (2000 draws); run settings as in O2/A5.
+
+**O4. Workflow without the experts' training prompt.** New switch `EXPERT_SYSTEM_PROMPT=plain` (the expert's own system prompt is left out; the mode suffix stays). O4a = `PLANNER_MODE=rule`, `MERGER_MODE=best_member`, plain prompt, no gate (identical to O2b except for the prompt). O4b = O4a + `PIPELINE_FALLBACK_DIRECT=1` + verifier gate with escalation (identical to A5b except for routing, merger and prompt).
+- **O4-H1.** O4a beats O2b (0.457) by ≥ +0.04, CI excluding 0 (the prompt was an obstacle inside the workflow, too).
+- **O4-H2.** O4b beats A5b (0.584) by ≥ +0.02, CI excluding 0.
+- Reading: if O4-H1 fails, the template prompt of the pipeline does not harm the way the training prompt did, and the expert side is not the limit.
+
+**O5. Base model against role fine-tunes.** The eight experts answer the 491 held-out tasks (3 samples) served from the SmolLM3-3B base checkpoint instead of the role fine-tunes (`EXPERT_CKPT`), with and without the role prompt, otherwise as in O1.
+- **O5-H1.** The fine-tuned experts without prompt (mean over the eight roles 0.428, O1) beat the base model without prompt by ≥ +0.03 (paired over task × role, CI excluding 0): the role fine-tuning added competence.
+- **O5-H2.** For at least one family the best fine-tuned expert beats the best base-model role by ≥ +0.03 (CI excluding 0).
+- Reading: if neither holds, the role fine-tuning has no measurable benefit on these tasks and one base model would replace eight experts.
+
+**O6. Competence router.** `RULE_ROUTER_MATRIX_FILE` maps the task family (detected by keywords: tables only, graph only, both) to the expert that is best on the **dev half** of the tasks (sha256(task_id) mod 2 = 0) in O1's plain variant (`experts/build_competence_matrix.py`; ties go to the alphabetically first role). The matrix is fixed before the run: `cypher_calc` → general, `cypher_sql_calc` → governance, `sql_calc` → code_reviewer. O6a = O4a with this routing; O6b = O4b with it. **Evaluation on the test half only** (mod 2 = 1).
+- **O6-H1.** O6a beats O4a by ≥ +0.03, CI excluding 0 (routing by competence beats routing by topic).
+- **O6-H2.** O6b beats O4b by ≥ +0.02, CI excluding 0.
+
+**Decision rule.** If O4-H2 or O6-H2 is met, the best configuration is the gated workflow with plain experts (and competence routing), and the next step is the verifier-versus-strong-baselines comparison with a cost metric. If none of O4-H1, O4-H2, O6-H1, O6-H2 is met, the expert side does not limit the workflow and the gain of F34 is selection by the verifier alone. Reported in every case: failed share, accuracy by family, tokens per episode, and the share of episodes the gate sent to the direct fallback.
+
+**Limits stated in advance.** The family detection by keywords is exact on this synthetic generator (491 of 491) and says nothing about free text; one run per arm; the matrix is chosen on 50 % of the tasks and evaluated on the other 50 %, so O6 has about half the power of O4; the verifier v2 comes from the same task generator; `precision_tools` stays an MCP category and is not a model in the pipeline (in O1 it was a fine-tuned model), so it is never selected by the matrix.

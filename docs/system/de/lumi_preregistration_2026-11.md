@@ -120,3 +120,25 @@ ohne Planner, Judge und Gate; der Judge antwortet 16-mal zusätzlich. Aufteilung
 - Beschreibend: Anteil gescheiterter Episoden (erwartet 0), Genauigkeit je Familie, Tokens je Episode, und dasselbe mit `MERGER_MODE=best_member`.
 
 **O3. Routing-Audit.** Aus den Plänen des Standardlaufs: je Familie die vom Planner gewählten Kategorien, verglichen mit dem Experten, den O1 auf dieser Familie als besten findet; Anteil der Anfragen, deren Plan den besten Experten enthält. Beschreibend.
+
+## Nachtrag 23.11.2026 (3) (geschrieben vor jedem Ergebnis zu O4–O6): Helfen die Experten, wenn ihr Trainings-Prompt wegfällt und die Route nach Kompetenz gewählt wird?
+
+Anlass (F32–F34): Die Experten verlieren unter dem Prompt, mit dem sie feingetunt wurden, die Hälfte ihrer Genauigkeit (F33); Routing nach Themenname schickt Tabellenaufgaben an den schwächsten Experten (F32); die einzige Konfiguration, die den direkten Judge schlägt, ist die mit Verifier-Gate (F34). Drei Stränge trennen die verbleibenden Erklärungen. Aufgaben `orch_tasks_heldout2.jsonl` (491 Aufgaben × 2), sofern nicht anders angegeben; gepaarter Bootstrap über Aufgaben (2000 Ziehungen); Laufeinstellungen wie bei O2/A5.
+
+**O4. Workflow ohne den Trainings-Prompt der Experten.** Neuer Schalter `EXPERT_SYSTEM_PROMPT=plain` (der eigene System-Prompt des Experten entfällt; der Modus-Zusatz bleibt). O4a = `PLANNER_MODE=rule`, `MERGER_MODE=best_member`, Prompt aus, kein Gate (identisch zu O2b bis auf den Prompt). O4b = O4a + `PIPELINE_FALLBACK_DIRECT=1` + Verifier-Gate mit Eskalation (identisch zu A5b bis auf Routing, Merger und Prompt).
+- **O4-H1.** O4a schlägt O2b (0,457) um ≥ +0,04, KI schließt 0 aus (der Prompt war auch im Workflow ein Hindernis).
+- **O4-H2.** O4b schlägt A5b (0,584) um ≥ +0,02, KI schließt 0 aus.
+- Lesart: Scheitert O4-H1, schadet der Template-Prompt der Pipeline nicht so wie der Trainings-Prompt, und die Expertenseite ist nicht die Grenze.
+
+**O5. Basismodell gegen Rollen-Feintunes.** Die acht Experten beantworten die 491 Held-out-Aufgaben (3 Stichproben), serviert vom SmolLM3-3B-Basis-Checkpoint statt der Rollen-Feintunes (`EXPERT_CKPT`), mit und ohne Rollen-Prompt, sonst wie O1.
+- **O5-H1.** Die feingetunten Experten ohne Prompt (Mittel über die acht Rollen 0,428, O1) schlagen das Basismodell ohne Prompt um ≥ +0,03 (gepaart über Aufgabe × Rolle, KI schließt 0 aus): Das Rollen-Feintuning hat Kompetenz hinzugefügt.
+- **O5-H2.** Für mindestens eine Familie schlägt der beste feingetunte Experte die beste Basismodell-Rolle um ≥ +0,03 (KI schließt 0 aus).
+- Lesart: Gilt keines von beiden, hat das Rollen-Feintuning auf diesen Aufgaben keinen messbaren Nutzen, und ein Basismodell würde acht Experten ersetzen.
+
+**O6. Kompetenz-Router.** `RULE_ROUTER_MATRIX_FILE` ordnet die Aufgabenfamilie (per Stichwort erkannt: nur Tabellen, nur Graph, beides) dem Experten zu, der auf der **Dev-Hälfte** der Aufgaben (sha256(task_id) mod 2 = 0) in O1s Variante ohne Prompt am besten ist (`experts/build_competence_matrix.py`; Gleichstand geht an die alphabetisch erste Rolle). Die Matrix steht vor dem Lauf fest: `cypher_calc` → general, `cypher_sql_calc` → governance, `sql_calc` → code_reviewer. O6a = O4a mit diesem Routing; O6b = O4b damit. **Auswertung nur auf der Test-Hälfte** (mod 2 = 1).
+- **O6-H1.** O6a schlägt O4a um ≥ +0,03, KI schließt 0 aus (Routing nach Kompetenz schlägt Routing nach Thema).
+- **O6-H2.** O6b schlägt O4b um ≥ +0,02, KI schließt 0 aus.
+
+**Entscheidungsregel.** Ist O4-H2 oder O6-H2 erfüllt, ist die beste Konfiguration der Workflow mit Gate und Experten ohne Prompt (und Kompetenz-Routing), und der nächste Schritt ist der Vergleich Verifier gegen starke Baselines mit Kostenmaß. Ist keine der Hypothesen O4-H1, O4-H2, O6-H1, O6-H2 erfüllt, begrenzt die Expertenseite den Workflow nicht, und der Gewinn aus F34 ist allein Auswahl durch den Verifier. In jedem Fall berichtet: Anteil gescheiterter Episoden, Genauigkeit nach Familie, Tokens je Episode und der Anteil der Episoden, die das Gate an den direkten Fallback geschickt hat.
+
+**Vorab genannte Grenzen.** Die Familienerkennung per Stichwort ist auf diesem synthetischen Generator exakt (491 von 491) und sagt nichts über freien Text; ein Lauf je Arm; die Matrix wird auf 50 % der Aufgaben gewählt und auf den anderen 50 % ausgewertet, O6 hat also etwa die halbe Trennschärfe von O4; der Verifier v2 stammt aus demselben Aufgabengenerator; `precision_tools` bleibt eine MCP-Kategorie und kein Modell in der Pipeline (in O1 war es ein feingetuntes Modell) und wird daher von der Matrix nie gewählt.
