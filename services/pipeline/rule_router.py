@@ -10,6 +10,8 @@ A category that the active template does not define falls back to `general` (or 
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 from typing import Sequence
 
@@ -20,9 +22,30 @@ RULES = (
 )
 
 
+def task_family(request: str) -> str:
+    """Coarse task family by keywords: `sql_calc` (tables only), `cypher_calc` (graph only), `cypher_sql_calc` (both) or `other`."""
+    text = request or ""
+    has_table = bool(RULES[0][1].search(text))
+    has_graph = bool(RULES[1][1].search(text))
+    return "cypher_sql_calc" if has_table and has_graph else "sql_calc" if has_table else "cypher_calc" if has_graph else "other"
+
+
+def _competence_matrix() -> dict:
+    """RULE_ROUTER_MATRIX_FILE (pre-registration O6): JSON {family: category}, chosen on the dev half of the tasks by experts/build_competence_matrix.py."""
+    path = os.getenv("RULE_ROUTER_MATRIX_FILE", "")
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def route_category(request: str, allowed: Sequence[str] = ()) -> str:
     """The category for a request; a category the template lacks becomes `general` (or the template's first one)."""
-    chosen = next((cat for cat, rx in RULES if rx.search(request or "")), "general")
+    chosen = _competence_matrix().get(task_family(request)) or next((cat for cat, rx in RULES if rx.search(request or "")), "general")
     if allowed and chosen not in allowed:
         chosen = "general" if "general" in allowed else list(allowed)[0]
     return chosen

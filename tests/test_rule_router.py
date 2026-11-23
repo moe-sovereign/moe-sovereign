@@ -48,3 +48,22 @@ async def test_the_planner_node_makes_no_llm_call_in_rule_mode(monkeypatch):
     out = await asyncio.wait_for(planner.planner_node(state_), timeout=5)
     llm.assert_not_awaited()
     assert len(out["plan"]) == 1 and out["plan"][0]["category"] == "data_analyst" and out["plan"][0]["task"] == TABLE
+
+
+def test_task_family_by_keywords():
+    from services.pipeline.rule_router import task_family
+    assert task_family("In der Datenbank liegt die Tabelle t(id). Summe?") == "sql_calc"
+    assert task_family("Im Graphen gibt es Knoten und Beziehungen") == "cypher_calc"
+    assert task_family("Im Graphen gibt es Knoten; die Tabelle x liegt in der Datenbank") == "cypher_sql_calc"
+    assert task_family("Wie ist das Wetter?") == "other"
+
+
+def test_competence_matrix_overrides_the_topic_rule(tmp_path, monkeypatch):
+    from services.pipeline import rule_router as rr
+    f = tmp_path / "m.json"
+    f.write_text('{"sql_calc": "code_reviewer"}')
+    monkeypatch.setenv("RULE_ROUTER_MATRIX_FILE", str(f))
+    assert rr.route_category("Die Tabelle t in der Datenbank", ("general", "code_reviewer", "data_analyst")) == "code_reviewer"
+    assert rr.route_category("Die Tabelle t in der Datenbank", ("general", "data_analyst")) == "general"  # category absent from the template
+    monkeypatch.setenv("RULE_ROUTER_MATRIX_FILE", str(tmp_path / "missing.json"))
+    assert rr.route_category("Die Tabelle t in der Datenbank", ("general", "data_analyst")) == "data_analyst"  # unreadable file = topic rule

@@ -358,6 +358,8 @@ async def expert_worker(state_: AgentState):
                 model_cfg.get("_system_prompt")
                 or _get_expert_prompt(cat, state_.get("user_experts"))
             )
+            if os.getenv("EXPERT_SYSTEM_PROMPT", "default") == "plain":
+                _expert_sys = ""  # research switch (pre-registration O4): the experts' fine-tuning prompt halves their accuracy when it is used at inference (F33)
             _base_static_sys = (
                 _expert_sys
                 + mode_cfg["expert_suffix"]
