@@ -24,6 +24,11 @@ Format basiert auf [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Documentation of the `INFERENCE_SERVERS` fields `timeout`, `vram_gb` and `gpu_count` and of the
   `model@node` routing rules in `docs/system/toolstack/ollama_cluster.md`.
 
+### Documentation
+
+- Measured per-node performance for `qwen3.6:35b` (prefill/decode, direct vs. gateway) and an open N11 cooling note in
+  `docs/system/toolstack/ollama_cluster.md`; `model@node` silent-fallback example.
+
 ---
 
 ## [2.9.0] - 2026-07-10
