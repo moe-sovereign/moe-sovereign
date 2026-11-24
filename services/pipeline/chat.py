@@ -28,7 +28,7 @@ from config import (
     JUDGE_TIMEOUT, EXPERT_TIMEOUT, PLANNER_TIMEOUT, ORCHESTRATION_TIMEOUT,
     JUDGE_MODEL, JUDGE_URL, JUDGE_TOKEN,
     PLANNER_MODEL, PLANNER_URL, PLANNER_TOKEN,
-    URL_MAP, TOKEN_MAP, API_TYPE_MAP, TIMEOUT_MAP, INFERENCE_SERVERS_LIST,
+    URL_MAP, TOKEN_MAP, API_TYPE_MAP, TIMEOUT_MAP, INFERENCE_SERVERS_LIST, INFERENCE_DEFAULT_TIMEOUT,
     MODES, _MODEL_ID_TO_MODE, _CLAUDE_PRETTY_NAMES, _model_display_name,
     MAX_GRAPH_CONTEXT_CHARS, MCP_URL, GRAPH_VIA_MCP,
     CACHE_HIT_THRESHOLD, SOFT_CACHE_THRESHOLD, SOFT_CACHE_MAX_EXAMPLES,
@@ -1844,7 +1844,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                         "model":    _req_model_base,
                         "node":     _ep_node,
                         "api_type": API_TYPE_MAP.get(_ep_node, "ollama"),
-                        "timeout":  TIMEOUT_MAP.get(_ep_node, 300),
+                        "timeout":  TIMEOUT_MAP.get(_ep_node, INFERENCE_DEFAULT_TIMEOUT),
                     }
                     break
             if _native_endpoint:
@@ -1859,7 +1859,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                     "model":      _req_model_base,
                     "node":       _req_node_hint,
                     "api_type":   _uc.get("api_type", "openai"),
-                    "timeout":    _uc.get("timeout", 300),
+                    "timeout":    _uc.get("timeout", INFERENCE_DEFAULT_TIMEOUT),
                     "_user_conn": True,
                 }
             elif not _req_node_hint:
@@ -1878,7 +1878,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                             "model":      _req_model_base,
                             "node":       _cname,
                             "api_type":   _uc.get("api_type", "openai"),
-                            "timeout":    _uc.get("timeout", 300),
+                            "timeout":    _uc.get("timeout", INFERENCE_DEFAULT_TIMEOUT),
                             "_user_conn": True,
                         }
                         break  # first matching connection wins
@@ -2452,7 +2452,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                 # stuck ("GPU discovery watchdog timed out") for every
                 # subsequent request until the container is restarted -- this
                 # keeps our own cancellation from ever triggering that.
-                async with httpx.AsyncClient(timeout=float(_native_endpoint.get("timeout", 300))) as _hc:
+                async with httpx.AsyncClient(timeout=float(_native_endpoint.get("timeout", INFERENCE_DEFAULT_TIMEOUT))) as _hc:
                     return await _hc.post(
                         _ns_base + "/api/chat",
                         headers={"Authorization": f"Bearer {_native_endpoint['token']}", "Content-Type": "application/json"},
@@ -2566,7 +2566,7 @@ async def chat_completions(raw_request: Request, request: ChatCompletionRequest)
                 # Shielded for the same reason as the native-Ollama branch
                 # above: a client disconnect must not cancel an in-flight
                 # model load on the shared node.
-                async with httpx.AsyncClient(timeout=float(_native_endpoint.get("timeout", 300))) as _hc:
+                async with httpx.AsyncClient(timeout=float(_native_endpoint.get("timeout", INFERENCE_DEFAULT_TIMEOUT))) as _hc:
                     return await _hc.post(
                         _native_oai_url,
                         headers={"Authorization": f"Bearer {_native_endpoint['token']}", "Content-Type": "application/json"},

@@ -52,6 +52,44 @@ Ollama activates Flash Attention automatically when the hardware supports it. No
 Inference servers are registered and managed in the **Admin UI → Configuration** panel.
 No static config file is needed — the orchestrator reads the list at startup from `.env`.
 
+### Per-server fields and timeouts
+
+Each entry of `INFERENCE_SERVERS` may carry these optional fields (besides `name` and `url`):
+
+| Field | Meaning |
+|---|---|
+| `timeout` | Read timeout in seconds for native/proxy inference calls to this node. Overrides `INFERENCE_DEFAULT_TIMEOUT`. |
+| `vram_gb` | Total VRAM of the host in GB. Drives routing, pre-evict and the `vram_high` alert, so it must be the real total (e.g. 4× Tesla M10 = 32). |
+| `gpu_count` | Number of GPUs of the host. |
+
+`INFERENCE_DEFAULT_TIMEOUT` (environment variable, seconds) is the single fallback for every
+server or user connection without an explicit `timeout`. The code default is `300`; `.env.example`
+suggests `1800`. Example for a slow-prefill node:
+
+```bash
+INFERENCE_DEFAULT_TIMEOUT=1800
+# INFERENCE_SERVERS entry with its own limit:
+# {"name":"N11-TM10","url":"http://<node>:11434","timeout":18000,"vram_gb":32,"gpu_count":4}
+```
+
+**Streaming semantics:** for streamed responses the timeout is the **maximum gap between two
+bytes** (`read=`), not the total duration. It therefore has to cover model loading plus prompt
+prefill until the first token arrives; on slow GPUs (Maxwell/M10, roughly 23 tok/s prefill) a
+~10k-token agent prompt alone can exceed 300 s. The Ollama proxy (`ollama-proxy.py`) uses an
+upstream limit of 1800 s for inference paths, so a larger per-server `timeout` has no effect
+beyond that when the node is reached through the proxy.
+
+### Routing `model@node`
+
+A request such as `qwen3.6:35b@N11-TM10` is routed natively only if **both** hold:
+
+1. the node name after `@` matches a `name` in `INFERENCE_SERVERS` **exactly**, and
+2. the user has a matching `model_endpoint` permission (`model@node` or `*@node`).
+
+Otherwise the request does **not** fail: it silently falls back to the orchestrator. A typo in the
+node name (for example `@N11-M10` instead of `@N11-TM10`) therefore looks like a working request
+but is not answered by the intended node.
+
 ## Dynamic VRAM Management
 
 VRAM management is handled entirely by Ollama on each node:

@@ -49,6 +49,7 @@ from graph_rag.corrections import (
 )
 
 from config import (
+    INFERENCE_DEFAULT_TIMEOUT,
     # Runtime flags
     CORRECTION_MEMORY_ENABLED, _EDGE_MODE, LOG_LEVEL,
     MCP_STRUCTURED_RESULT_REQUIRED,
@@ -1702,7 +1703,7 @@ async def _stream_native_llm(
 
     # Use the per-server timeout from INFERENCE_SERVERS config (fallback: 300s).
     # A 10s connect timeout prevents silent hangs when the server URL is wrong.
-    _srv_timeout = float(endpoint.get("timeout", 300))
+    _srv_timeout = float(endpoint.get("timeout", INFERENCE_DEFAULT_TIMEOUT))
     _http_timeout = httpx.Timeout(connect=10.0, read=_srv_timeout, write=30.0, pool=10.0)
 
     try:

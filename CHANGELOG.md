@@ -5,6 +5,27 @@ Format basiert auf [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-11-24
+
+### Fixed
+
+- **Native inference calls (`model@node`) ran into `ReadTimeout` after 300 s.** Six call sites
+  (`services/pipeline/chat.py`: global endpoints, user connections, both non-streaming httpx
+  calls; `main.py`: `_stream_native_llm` read timeout) used a hardcoded `300` fallback, and
+  slow-prefill nodes (N11 Tesla M10) had no `timeout` in `INFERENCE_SERVERS`. Large agentic
+  prompts (OpenCode, ~10k+ tokens) then timed out during prefill. All sites now use the single
+  setting `INFERENCE_DEFAULT_TIMEOUT` (`config.py`); a per-server `timeout` still wins.
+  Code: commit `7c021c21`; tests: `tests/test_native_timeout_map.py`.
+
+### Added
+
+- **`INFERENCE_DEFAULT_TIMEOUT`** (seconds, env, code default `300`, `.env.example` suggests
+  `1800`): fallback read timeout for servers and user connections without an explicit `timeout`.
+- Documentation of the `INFERENCE_SERVERS` fields `timeout`, `vram_gb` and `gpu_count` and of the
+  `model@node` routing rules in `docs/system/toolstack/ollama_cluster.md`.
+
+---
+
 ## [2.9.0] - 2026-07-10
 
 ### Added
