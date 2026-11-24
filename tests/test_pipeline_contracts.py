@@ -814,6 +814,33 @@ def test_chained_precision_task_rejects_reference_to_non_precision_task():
     assert [issue.code for issue in issues] == ["invalid_task_result_reference"]
 
 
+CALC_SCHEMA = {"calculate": {"required": ["expression"], "args": {}}}
+
+
+def _calc(expression):
+    return validate_plan_tasks(
+        [{"task": "Compute", "category": "precision_tools", "mcp_tool": "calculate", "mcp_args": {"expression": expression}}],
+        CALC_SCHEMA,
+    )
+
+
+def test_calculate_rejects_planner_placeholders_and_unknown_names():
+    for bad in ("sum([depot_capacity_1, depot_capacity_2, ...]) * 1.07",   # smoke 23572488: unknown function, placeholders
+                "(Shorebfb910+Roof63a317+Field100824)*1.19",                # variables named after task entities
+                "((20+22+16+15)*1.19)}"):                                   # stray bracket
+        assert [i.code for i in _calc(bad)] == ["unevaluable_calculate_expression"], bad
+
+
+def test_calculate_accepts_what_the_tool_evaluates():
+    for good in ("47+53", "(739+583+257+321)*1.19", "15% of 239.99", "sqrt(2) * pi", "factorial(5)/e", "2^10", "100 * (1 + 19/100)"):
+        assert _calc(good) == [], good
+
+
+def test_calculate_check_can_be_switched_off_for_policy_sampling(monkeypatch):
+    monkeypatch.setenv("PLANNER_CALC_EXPRESSION_CHECK", "0")  # preference-pair collection wants the planner's own mistakes
+    assert _calc("sum([a_1, ...]) * 1.07") == []
+
+
 def test_disperse_category_hotspots_keyword_security():
     tasks = [
         {"id": "task-1", "task": "Implement ringbuffer in Rust", "category": "code_reviewer"},

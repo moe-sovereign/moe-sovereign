@@ -70,7 +70,7 @@ from metrics import (
 from services.auth import _validate_api_key, _extract_api_key, _extract_session_id
 from services.kafka import _kafka_publish
 from services.routing import (
-    _resolve_user_experts, _resolve_template_prompts,
+    _resolve_user_experts, _resolve_template_prompts, template_state_extras, request_tenant_ids,
     _server_info, _is_endpoint_error,
 )
 from services.tracking import (
@@ -2956,6 +2956,8 @@ async def _anthropic_moe_handler(
         "images": user_images,
         "user_permissions": session.user_perms,
         "user_experts": session.experts,
+        **template_state_extras(_pcfg),
+        "tenant_ids": request_tenant_ids(user_id, session.user_perms),
         "planner_prompt": _pcfg.get("planner_prompt", ""),
         "judge_prompt":   _pcfg.get("judge_prompt", ""),
         "judge_model_override":   _pcfg.get("judge_model_override", ""),

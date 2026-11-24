@@ -18,6 +18,7 @@
       // Interactive LangGraph pipeline (existing StateGraph, main.py)
       { id: 'cache',              label: 'Cache (L0–L4)',     branch: 'interactive' },
       { id: 'semantic_router',    label: 'Semantic Router',   branch: 'interactive' },
+      { id: 'knowledge_broker',   label: 'Knowledge Broker',  branch: 'interactive' },
       { id: 'planner',            label: 'Planner',           branch: 'interactive' },
       { id: 'fuzzy_router',       label: 'Fuzzy Router',      branch: 'interactive' },
       { id: 'expert',             label: 'Experts',           branch: 'interactive' },
@@ -39,7 +40,7 @@
       { id: 'agent_writeback',    label: 'Write-Back (async)',branch: 'agent' },
     ],
     edges: [
-      ['cache', 'semantic_router'], ['semantic_router', 'planner'], ['planner', 'fuzzy_router'],
+      ['cache', 'semantic_router'], ['semantic_router', 'knowledge_broker'], ['knowledge_broker', 'planner'], ['planner', 'fuzzy_router'],
       ['fuzzy_router', 'expert'], ['fuzzy_router', 'research'], ['fuzzy_router', 'mcp'], ['fuzzy_router', 'graph_rag'],
       ['expert', 'research_fallback'], ['research', 'research_fallback'],
       ['mcp', 'research_fallback'], ['graph_rag', 'research_fallback'],
@@ -712,21 +713,22 @@
   const NODE_POSITIONS = {
     cache:              { x:   40, y: 260 },
     semantic_router:    { x:  170, y: 260 },
-    planner:            { x:  300, y: 260 },
-    fuzzy_router:       { x:  430, y: 260 },
+    knowledge_broker:   { x:  300, y: 260 },
+    planner:            { x:  430, y: 260 },
+    fuzzy_router:       { x:  560, y: 260 },
     // Parallel Execution block — same x (depth), stacked vertically
-    expert:             { x:  570, y: 100 },
-    research:           { x:  570, y: 190 },
-    mcp:                { x:  570, y: 280 },
-    graph_rag:          { x:  570, y: 370 },
-    research_fallback:  { x:  710, y: 260 },
-    thinking:           { x:  840, y: 260 },
-    strategy_review:    { x:  970, y: 260 },
-    merger:             { x: 1100, y: 260 },
+    expert:             { x:  700, y: 100 },
+    research:           { x:  700, y: 190 },
+    mcp:                { x:  700, y: 280 },
+    graph_rag:          { x:  700, y: 370 },
+    research_fallback:  { x:  840, y: 260 },
+    thinking:           { x:  970, y: 260 },
+    strategy_review:    { x: 1100, y: 260 },
+    merger:             { x: 1230, y: 260 },
     // merger's conditional edge picks one of these three siblings
-    resolve_conflicts:  { x: 1240, y: 180 },
-    self_critique:      { x: 1240, y: 340 }, // loops back to merger
-    critic:             { x: 1370, y: 180 },
+    resolve_conflicts:  { x: 1370, y: 180 },
+    self_critique:      { x: 1370, y: 340 }, // loops back to merger
+    critic:             { x: 1500, y: 180 },
 
     // Agentic tool-calling fast path — separate lane, genuinely serial per
     // the real code flow (each step's output gates the next).

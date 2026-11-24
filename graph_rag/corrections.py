@@ -44,6 +44,7 @@ _QUERY_CORRECTIONS = """
 MATCH (c:Correction)
 WHERE c.category = $category
   AND c.confidence >= $min_confidence
+  AND ($tenant_ids = [] OR c.tenant_id IS NULL OR c.tenant_id = '' OR c.tenant_id IN $tenant_ids)
 WITH c, apoc.text.sorensenDiceSimilarity(toLower(c.prompt_pattern), toLower($query)) AS sim
 WHERE sim > $min_similarity
 RETURN c.wrong_summary AS wrong, c.correct_summary AS correct,
@@ -56,6 +57,7 @@ _QUERY_CORRECTIONS_FALLBACK = """
 MATCH (c:Correction)
 WHERE c.category = $category
   AND c.confidence >= $min_confidence
+  AND ($tenant_ids = [] OR c.tenant_id IS NULL OR c.tenant_id = '' OR c.tenant_id IN $tenant_ids)
 RETURN c.wrong_summary AS wrong, c.correct_summary AS correct,
        c.source_model AS model, c.correction_source AS source
 ORDER BY c.created DESC
@@ -124,28 +126,41 @@ async def query_corrections(
     limit: int = 3,
     min_confidence: float = 0.6,
     min_similarity: float = 0.25,
+    tenant_ids: Optional[list] = None,
 ) -> list[dict]:
-    """Find corrections relevant to *query* in *category*."""
+    """Find corrections relevant to *query* in *category*.
+
+    With *tenant_ids* only global corrections (no tenant) and those of the given tenants are returned; without them the
+    query is unscoped, like the entity lookups in GraphRAGManager."""
     if driver is None:
         return []
     try:
         async with driver.session() as session:
             try:
+                # Parameters go in a dict: session.run() has a positional argument called `query`, so passing the Cypher
+                # parameter `query` as a keyword raised a TypeError that the except below swallowed, and the similarity
+                # query never ran (every call used the newest-first fallback).
                 result = await session.run(
                     _QUERY_CORRECTIONS,
-                    query=query[:500],
-                    category=category,
-                    limit=limit,
-                    min_confidence=min_confidence,
-                    min_similarity=min_similarity,
+                    {
+                        "query": query[:500],
+                        "category": category,
+                        "limit": limit,
+                        "min_confidence": min_confidence,
+                        "min_similarity": min_similarity,
+                        "tenant_ids": list(tenant_ids or []),
+                    },
                 )
                 records = [dict(r) async for r in result]
             except Exception:
                 result = await session.run(
                     _QUERY_CORRECTIONS_FALLBACK,
-                    category=category,
-                    limit=limit,
-                    min_confidence=min_confidence,
+                    {
+                        "category": category,
+                        "limit": limit,
+                        "min_confidence": min_confidence,
+                        "tenant_ids": list(tenant_ids or []),
+                    },
                 )
                 records = [dict(r) async for r in result]
             return records

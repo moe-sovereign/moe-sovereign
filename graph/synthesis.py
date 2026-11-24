@@ -337,6 +337,8 @@ async def merger_node(state_: AgentState):
         else state_.get("mcp_result") or ""
     )
     graph_ctx        = state_.get("graph_context")     or ""
+    # infrastructure knowledge from the broker (graph/knowledge_broker.py); a non-empty block means the judge must see it
+    knowledge_blk    = (state_.get("knowledge_block") or "") if os.getenv("KNOWLEDGE_TO_MERGER", "1") != "0" else ""
     reasoning        = state_.get("reasoning_trace")   or ""
     strategy_feedback = state_.get("strategy_feedback") or ""
 
@@ -723,6 +725,11 @@ async def merger_node(state_: AgentState):
         # Store compression telemetry in state for causal-path logging
         state_["graphrag_entities"] = state_.get("graphrag_entities") or []
         sections.append(f"STRUCTURED KNOWLEDGE (Ontology/Knowledge Graph):\n{_gctx}")
+    if knowledge_blk:
+        sections.append(
+            "INFRASTRUCTURE KNOWLEDGE (known before planning, authoritative first; prefer it over model memory, "
+            f"and flag a contradiction):\n{knowledge_blk}"
+        )
     if expert_results:
         # Dynamic per-expert truncation: budget scales with expert count so
         # multi-expert synthesis retains enough of each response to synthesise.
@@ -990,7 +997,7 @@ async def merger_node(state_: AgentState):
     )
     if (len(expert_results) == 1
             and not ensemble_results
-            and not web and not mcp_res and not math_res and not graph_ctx
+            and not web and not mcp_res and not math_res and not graph_ctx and not knowledge_blk
             and (
                 _parse_expert_confidence(expert_results[0]) == "high"
                 or _is_trivial_direct
@@ -1037,7 +1044,7 @@ async def merger_node(state_: AgentState):
     # auxiliary context needs merging, the judge call adds tokens without
     # discriminative power — take the consensus answer directly.
     # Flag: MOE_JUDGE_GATE=1 (services/judge_gate.py).
-    if not ensemble_results and not web and not mcp_res and not math_res and not graph_ctx:
+    if not ensemble_results and not web and not mcp_res and not math_res and not graph_ctx and not knowledge_blk:
         from services.judge_gate import should_skip_judge as _sj_gate
         _gate_inputs = [re.sub(r'^\[[^\]]+\]:\s*', '', r or '') for r in expert_results]
         _g_skip, _g_reason, _g_idx = _sj_gate(_gate_inputs)

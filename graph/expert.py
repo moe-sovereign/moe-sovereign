@@ -410,7 +410,7 @@ async def expert_worker(state_: AgentState):
                 try:
                     from graph_rag.corrections import query_corrections as _query_corrections, format_correction_context as _format_correction_context
                     _driver = state.graph_manager.driver if hasattr(state.graph_manager, 'driver') else None
-                    _corr = await _query_corrections(_driver, state_.get("input", ""), cat)
+                    _corr = await _query_corrections(_driver, state_.get("input", ""), cat, tenant_ids=state_.get("tenant_ids") or None)
                     _corr_ctx = _format_correction_context(_corr)
                     if _corr_ctx:
                         PROM_CORRECTIONS_INJECTED.labels(category=cat).inc(len(_corr))
@@ -418,6 +418,14 @@ async def expert_worker(state_: AgentState):
                         _dynamic_sys_parts.append(_corr_ctx)
                 except Exception:
                     pass
+            # Infrastructure knowledge gathered before planning (graph/knowledge_broker.py): facts with provenance, conflicts,
+            # corrections, open gaps. Present only when the broker is on and found something.
+            _kb_block = state_.get("knowledge_block") or ""
+            if _kb_block and os.getenv("KNOWLEDGE_TO_EXPERTS", "1") != "0":
+                _kb_ctx = ("[INFRASTRUCTURE KNOWLEDGE - prefer it over your own memory; if it contradicts what you know, "
+                           "say so instead of silently choosing]\n" + _kb_block)
+                sys_prompt += f"\n\n{_kb_ctx}"
+                _dynamic_sys_parts.append(_kb_ctx)
             # Resolve per-expert context window: template override → Ollama API (cached) → static table
             from context_budget import get_model_ctx_async as _ctx_async, _params_from_name as _pfn
             _expert_ctx_override = int(model_cfg.get("context_window", 0) or 0)

@@ -59,7 +59,7 @@ from metrics import (
 from services.auth import _validate_api_key, _extract_api_key, _extract_session_id
 from services.kafka import _kafka_publish
 from services.routing import (
-    _resolve_user_experts, _resolve_template_prompts,
+    _resolve_user_experts, _resolve_template_prompts, template_state_extras, request_tenant_ids,
     _server_info, _is_endpoint_error,
 )
 from services.deliberation.contracts import DeliberationPolicyError
@@ -270,5 +270,6 @@ async def _ollama_internal_stream(
         client_max_output_tokens=client_max_output_tokens,
         no_cache=False,
         local_only=local_only,
+        template_state={**template_state_extras(tmpl_prompts), "tenant_ids": request_tenant_ids(user_id, user_perms)},
     ):
         yield sse_line

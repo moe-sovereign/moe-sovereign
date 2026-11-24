@@ -335,6 +335,7 @@ async def cache_lookup_node(state_: AgentState):
     # L1: Semantic similarity cache (ChromaDB)
     res = await asyncio.to_thread(state.cache_collection.query, query_texts=[_cache_query], n_results=3)
     cached = ""
+    cached_meta: dict = {}  # provenance of `cached` (ts, confidence, distance) for the knowledge broker
     hit = False
     # Telemetry: record the nearest-neighbour distance for every lookup (hit or
     # miss) so the static thresholds can be calibrated from the real distribution.
@@ -352,6 +353,8 @@ async def cache_lookup_node(state_: AgentState):
             if meta.get("flagged"):
                 continue  # skip negatively-rated entry
             cached = doc
+            cached_meta = {"ts": str(meta.get("ts") or ""), "distance": float(dist),
+                           "confidence": float(meta.get("confidence") or 0.0)}
             if dist < CACHE_HIT_THRESHOLD:
                 hit = True
                 PROM_CACHE_HITS.inc()
@@ -404,7 +407,7 @@ async def cache_lookup_node(state_: AgentState):
     soft_ctx = "\n\n---\n\n".join(soft_examples) if soft_examples else ""
     if soft_ctx:
         await _report(f"💡 {len(soft_examples)} similar previous answer(s) loaded as context")
-    return {"cached_facts": cached, "cache_hit": hit, "soft_cache_examples": soft_ctx}
+    return {"cached_facts": cached, "cache_hit": hit, "soft_cache_examples": soft_ctx, "cached_facts_meta": cached_meta}
 
 
 async def semantic_router_node(state_: AgentState):
@@ -480,7 +483,9 @@ async def fuzzy_router_node(state_: AgentState):
 
     plan             = state_.get("plan") or []
     complexity_level = state_.get("complexity_level") or "moderate"
-    enable_graphrag  = state_.get("enable_graphrag", True)
+    # The template's permission, not the router's own previous decision: enable_graphrag is overwritten below, so a second pass
+    # (agentic replan) would otherwise read its own "off" as the template's.
+    enable_graphrag  = state_.get("graphrag_template_allowed", state_.get("enable_graphrag", True))
     skip_research    = state_.get("skip_research", False)
 
     vector_conf, graph_conf = _compute_routing_confidence(
@@ -517,8 +522,13 @@ async def fuzzy_router_node(state_: AgentState):
     _do_research,  _src_r = await _rb_decide("research", _research_ctx, _heur_do_research, query_embedding=_query_embedding)
     _enable_graph, _src_g = await _rb_decide("graphrag", _graph_ctx,    _heur_enable_graph, query_embedding=_query_embedding)
 
+    # Entities of the request exist in the graph (knowledge broker): stronger evidence than the plan's category mix. A plain
+    # lookup plan scores graph confidence 0.30 against the threshold 0.35, so the graph was never queried for it.
+    if state_.get("knowledge_entity_hits") and not _enable_graph and os.getenv("KNOWLEDGE_FORCE_GRAPH_ON_HIT", "1") != "0":
+        _enable_graph, _src_g = True, "entity_hit"
+
     new_skip_research   = not _do_research
-    new_enable_graphrag = _enable_graph
+    new_enable_graphrag = _enable_graph and bool(enable_graphrag)  # a template that forbids the graph stays off
 
     PROM_ROUTING_BANDIT.labels(gate="research", action="fetch" if _do_research  else "skip", source=_src_r).inc()
     PROM_ROUTING_BANDIT.labels(gate="graphrag", action="on"    if _enable_graph else "off",  source=_src_g).inc()

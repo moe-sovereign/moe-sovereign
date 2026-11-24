@@ -118,9 +118,24 @@ class AgentState(TypedDict):
 
     # ── 6. Template feature toggles ───────────────────────────────────────────
     enable_cache: bool                  # Allow L1 ChromaDB cache reads/writes
-    enable_graphrag: bool               # Allow Neo4j knowledge graph queries
+    enable_graphrag: bool               # Allow Neo4j knowledge graph queries (the fuzzy router may overwrite this per pass)
+    graphrag_template_allowed: bool     # The template's permission for the graph; never overwritten by the router
     enable_web_research: bool           # Allow SearXNG web search
     search_fallback_ddg: bool           # Fall back to DuckDuckGo when SearXNG returns no results
+    # Knowledge broker (graph/knowledge_broker.py), runs before the planner; all JSON-safe, the bundle is capped (checkpoints)
+    knowledge_broker_mode: str          # template switch: "", "on" or "off"
+    knowledge_bundle: dict              # facts with provenance, conflicts, corrections, gaps, per-source status
+    knowledge_block: str                # rendered text of the bundle for experts/merger (and the planner behind its own flag)
+    knowledge_entity_hits: list         # entities of the request found in the graph
+    knowledge_gaps: list                # request terms without any infrastructure knowledge
+    knowledge_model_override: str       # template: external knowledge model name (services/knowledge_llm.py), "" = off
+    knowledge_url_override: str
+    knowledge_token_override: str
+    knowledge_max_questions: int
+    knowledge_timeout_s: float
+    knowledge_share_context: bool       # may infrastructure context go to a LOCAL knowledge model (never to a non-local one)
+    knowledge_llm_context: str          # answers of the knowledge model, kept apart from graph_context on purpose
+    cached_facts_meta: dict             # Metadata of the semantic-cache entry behind cached_facts: ts, confidence, distance
     graphrag_max_chars: int             # Hard char budget for graph_context (0 = derive from judge model context window)
     no_cache: bool                      # If True, bypass both L0 (Redis) and L1 (ChromaDB) entirely
 

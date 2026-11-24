@@ -135,7 +135,10 @@ def _entry_is_fresh(ts_iso: str, ttl_days: int) -> bool:
     if not ts_iso:
         return False
     try:
-        return datetime.now() - datetime.fromisoformat(ts_iso) <= timedelta(days=ttl_days)
+        ts = datetime.fromisoformat(ts_iso)
+        if ts.tzinfo is None:  # agent_enrichment writes naive local time, response_commit timezone-aware UTC
+            ts = ts.astimezone()
+        return datetime.now(timezone.utc) - ts <= timedelta(days=ttl_days)
     except Exception:
         return False
 

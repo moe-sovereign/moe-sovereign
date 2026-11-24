@@ -757,7 +757,9 @@ async def graph_rag_node(state_: AgentState):
         logger.info("GraphRAG disabled by template toggle")
         return {"graph_context": "", "retrieved_graph_chunks": []}
     # Complexity routing: skip for trivial requests (complexity_estimator sets skip_graph)
-    if state_.get("skip_graph"):
+    # entities of the request found in the graph by the knowledge broker beat the complexity shortcut
+    _has_entity_hits = bool(state_.get("knowledge_entity_hits"))
+    if state_.get("skip_graph") and not _has_entity_hits:
         logger.info("⚡ GraphRAG skipped (complexity routing: trivial/skip_graph)")
         return {"graph_context": "", "retrieved_graph_chunks": []}
     if not GRAPH_VIA_MCP and state.graph_manager is None:
@@ -770,16 +772,26 @@ async def graph_rag_node(state_: AgentState):
     # We still run if the plan explicitly includes knowledge_healing (graph needed).
     _has_knowledge_healing = "knowledge_healing" in categories
     _is_public_fact_query = bool(_RESEARCH_DETECT.search(state_.get("input", "")))
-    if _is_public_fact_query and not _has_knowledge_healing:
+    if _is_public_fact_query and not _has_knowledge_healing and not _has_entity_hits:
         logger.info("⚡ GraphRAG skipped (public-fact query — internal graph not relevant)")
         await _report("⚡ GraphRAG: skipped (external research query)")
         await _record_stage(state_.get("response_id", ""), "graph_rag", "skipped")
         return {"graph_context": "", "retrieved_graph_chunks": []}
 
+    # The knowledge broker (graph/knowledge_broker.py) may already have queried the graph for this request: its rendered text is
+    # exactly what query_context() returns for the matched entities, so a second Neo4j round-trip is skipped. Only the graph text
+    # is taken over: the knowledge model's answers (knowledge_llm_context) must never enter graph_context, which the trust score
+    # and the retrieval attribution read as infrastructure evidence.
+    _bundle = state_.get("knowledge_bundle") or {}
+    _bundle_sources = _bundle.get("sources") or {}
+    _bundle_ctx = (_bundle.get("rendered_graph") or "") if _bundle_sources.get("graph") == "ok" else ""
+
     # GraphRAG-Cache (Valkey, TTL=3600s)
     import hashlib as _hashlib
-    _graph_cache_key = f"moe:graph:{_hashlib.sha256((state_['input'][:200] + ''.join(sorted(categories))).encode()).hexdigest()[:16]}"
-    if state.redis_client is not None:
+    # tenant part only when present, so keys of tenant-less requests stay as they were
+    _tenant_key = "|t:" + ",".join(sorted(state_.get("tenant_ids") or [])) if state_.get("tenant_ids") else ""
+    _graph_cache_key = f"moe:graph:{_hashlib.sha256((state_['input'][:200] + ''.join(sorted(categories)) + _tenant_key).encode()).hexdigest()[:16]}"
+    if state.redis_client is not None and not _bundle_ctx:
         try:
             _cached_ctx = await state.redis_client.get(_graph_cache_key)
             if _cached_ctx:
@@ -808,25 +820,36 @@ async def graph_rag_node(state_: AgentState):
     # Episode hint: retrieve routing context from similar past tasks.
     # Appended to graph_context so the judge can use past strategies as signal.
     _ep_task_type = categories[0] if categories else "general"
-    if state.graph_manager is not None:
-        _ep_hint = await wait_for_budget(
-            get_episode_hint(
-                state.graph_manager.driver,
-                state_["input"],
-                _ep_task_type,
-                state_.get("user_id", ""),
-            ),
-            state_,
-            5.0,
-            stage="episode_hint",
-        )
+    if _bundle_sources.get("episodes") in ("ok", "empty"):
+        _ep_hint = _bundle.get("episode_hint") or ""  # the broker already asked
+    elif state.graph_manager is not None:
+        try:
+            _ep_hint = await wait_for_budget(
+                get_episode_hint(
+                    state.graph_manager.driver,
+                    state_["input"],
+                    _ep_task_type,
+                    state_.get("user_id", ""),
+                ),
+                state_,
+                5.0,
+                stage="episode_hint",
+            )
+        except RequestDeadlineExceeded:
+            # The 5 s stage cap also raises RequestDeadlineExceeded. A slow episode query must not end the request:
+            # only a spent request budget does, and remaining_timeout() raises exactly in that case.
+            remaining_timeout(state_, 0.1, stage="episode_hint")
+            logger.warning("Episode hint timed out, continuing without it")
+            _ep_hint = ""
     else:
         _ep_hint = ""
 
     await _report("🔗 GraphRAG — knowledge graph query (Neo4j)...")
     await _record_stage(state_.get("response_id", ""), "graph_rag", "started")
     try:
-        if GRAPH_VIA_MCP:
+        if _bundle_ctx:
+            ctx = _bundle_ctx
+        elif GRAPH_VIA_MCP:
             # Flange: MCP server as graph-as-a-tool (accessible to external agents)
             _graph_timeout = remaining_timeout(
                 state_,
