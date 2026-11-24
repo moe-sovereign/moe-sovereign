@@ -88,7 +88,12 @@ INFERENCE_SERVERS_LIST = [s for s in INFERENCE_SERVERS_LIST if s.get("enabled", 
 URL_MAP      = {s["name"]: s["url"]                 for s in INFERENCE_SERVERS_LIST if s.get("url")}
 TOKEN_MAP    = {s["name"]: s.get("token", "ollama")  for s in INFERENCE_SERVERS_LIST}
 API_TYPE_MAP = {s["name"]: s.get("api_type", "ollama") for s in INFERENCE_SERVERS_LIST}
-TIMEOUT_MAP  = {s["name"]: s.get("timeout", 300)     for s in INFERENCE_SERVERS_LIST}
+# Single source of truth for the upstream read timeout (seconds) of native/proxy
+# inference calls. A per-server "timeout" in INFERENCE_SERVERS wins; otherwise
+# INFERENCE_DEFAULT_TIMEOUT applies. For streams it is the max. gap between two
+# bytes, i.e. it must cover model load + prompt prefill on slow GPUs (Maxwell/M10).
+INFERENCE_DEFAULT_TIMEOUT: float = float(os.getenv("INFERENCE_DEFAULT_TIMEOUT", "300"))
+TIMEOUT_MAP  = {s["name"]: float(s.get("timeout", INFERENCE_DEFAULT_TIMEOUT)) for s in INFERENCE_SERVERS_LIST}
 
 
 # "N requests per <amount> <unit>" — the unit and its multiplier are both
