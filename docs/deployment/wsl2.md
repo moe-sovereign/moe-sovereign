@@ -50,7 +50,7 @@ Open your WSL terminal (e.g. Ubuntu) and run:
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git curl openssl
-git clone https://github.com/h3rb3rn/moe-sovereign.git /opt/moe-sovereign
+git clone https://github.com/moe-sovereign/moe-sovereign.git /opt/moe-sovereign
 cd /opt/moe-sovereign
 sudo bash install.sh
 ```

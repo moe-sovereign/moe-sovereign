@@ -7,6 +7,10 @@ lifecycle management via Quadlet.
 ## Two deployment shapes
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart LR
     IMG[["moe-sovereign/orchestrator"]]:::art
 

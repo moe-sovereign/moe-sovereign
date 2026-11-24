@@ -12,7 +12,6 @@ from pathlib import Path
 from huggingface_hub import hf_hub_download
 
 MODELS = [
-    ("moe-sovereign-student:4b", "moe-sovereign-student-4b", "moe-sovereign-student-4b-Q4_K_M.gguf", 0.1),
     ("moe-expert-coder:4b", "moe-expert-coder-4b", "moe-expert-coder-4b-Q4_K_M.gguf", 0.05),
     ("moe-expert-precision:4b", "moe-expert-precision-4b", "moe-expert-precision-4b-Q4_K_M.gguf", 0.0),
     ("moe-expert-graphrag:4b", "moe-expert-graphrag-4b", "moe-expert-graphrag-4b-Q4_K_M.gguf", 0.05),

@@ -1,0 +1,12 @@
+groups:
+  - name: ollama-scheduler
+    rules:
+      - alert: OllamaGpuDiscoveryFailed
+        # Metrik: deploy/n04-ollama-health (node_exporter textfile). Vorläufer eines Scheduler-Hängers (N04-RTX, 31.10.2026).
+        expr: ollama_gpu_discovery_failures > 0 and (time() - ollama_last_gpu_discovery_failure_timestamp_seconds) < 86400
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ollama {{ $labels.container }} on {{ $labels.instance }}: GPU discovery failed in the last 24 h"
+          description: "Ollama may stop loading new models. If requests for unloaded models hang, restart the container."

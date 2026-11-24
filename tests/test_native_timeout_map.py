@@ -22,8 +22,31 @@ def test_timeout_map_defaults_to_300_when_unset():
     """Servers without an explicit "timeout" field fall back to 300s (main.py's
     pre-fix hardcoded default), matching the fallback used at every native
     endpoint construction site in services/pipeline/chat.py."""
-    assert config.TIMEOUT_MAP.get("RTX") == 300
-    assert config.TIMEOUT_MAP.get("TESLA") == 300
+    assert config.TIMEOUT_MAP.get("RTX") == config.INFERENCE_DEFAULT_TIMEOUT
+    assert config.TIMEOUT_MAP.get("TESLA") == config.INFERENCE_DEFAULT_TIMEOUT
+
+
+def test_default_timeout_is_configurable_via_env(monkeypatch):
+    """INFERENCE_DEFAULT_TIMEOUT (env) is the single fallback for servers and user
+    connections without "timeout"; no call site may keep its own literal 300."""
+    import importlib
+    monkeypatch.setenv("INFERENCE_DEFAULT_TIMEOUT", "1800")
+    try:
+        importlib.reload(config)
+        assert config.INFERENCE_DEFAULT_TIMEOUT == 1800.0
+        assert all(v == 1800.0 for n, v in config.TIMEOUT_MAP.items()
+                   if "timeout" not in next(s for s in config.INFERENCE_SERVERS_LIST if s["name"] == n))
+    finally:
+        monkeypatch.delenv("INFERENCE_DEFAULT_TIMEOUT")
+        importlib.reload(config)
+
+
+def test_no_hardcoded_300_fallback_left_in_native_paths():
+    import pathlib, re
+    root = pathlib.Path(config.__file__).parent
+    for f in ("main.py", "services/pipeline/chat.py"):
+        src = (root / f).read_text()
+        assert not re.search(r'get\("timeout",\s*300\)', src), f
 
 
 def test_timeout_map_respects_configured_server_timeout():

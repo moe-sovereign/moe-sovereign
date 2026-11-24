@@ -1,0 +1,6 @@
+[Unit]
+Description=Ollama scheduler health metrics for node_exporter textfile collector
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ollama_scheduler_health.sh

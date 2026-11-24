@@ -4916,3 +4916,300 @@ Plan / progress:
   gitignored file /opt/deployment/Github/moe-sovereign/.env.env.bak.ref-templates; it is revoked now.
 Notes:
 - Arm N (native baseline) stopped at 4/24 evaluations, resumable without --fresh; arms B-D open.
+
+## 2026-09-18T22:34:01Z — Benchmark Spur 1 -> Spur 2, one round each — in_progress
+Plan / progress:
+- Started on user request via benchmarks/run_spur1_and_spur2.sh with MOE_BENCHMARK_NUM_ROUNDS=1
+  (8 tasks x 4 conditions per track, --fresh), pipeline image revision bf2a5c7e (P0 fixes deployed, fixed judge).
+- Judge: hf.co/h3rb3rn/sovereign-judge-olmo31-32b:Q4_K_M @ N04-RTX for both tracks. Wrapper log:
+  benchmarks/results/spur1_spur2_1round_*.wrapper.log; watcher exits on track change, errors or judge fallbacks.
+- Preconditions checked: all 6 templates exist and are permitted, every referenced model is pulled on its endpoint,
+  13 endpoints reachable, native models present.
+Notes:
+- Do not restart langgraph-orchestrator or the inference nodes while this runs (invalidates the run).
+- Infra errors are analysed, fixed and the affected track restarted (project rule), not excluded.
+
+## 2026-09-18T22:48:00Z — Benchmark Spur 1 -> Spur 2 (one round each) — aborted / invalid
+Plan / progress:
+- The run started 22:32:44Z was invalidated: langgraph-orchestrator was stopped and restarted at 22:44:30Z
+  by another agent/session (not this one); the first request (705 s) was cut off, all 143 following requests failed
+  with ConnectError, so Spur 1 "finished" with all-zero scores and Spur 2 was killed by us after 13 s.
+  Outputs moved to benchmarks/results/invalid_20260919_orchestrator_restarted_by_other_agent/ (NOT results).
+- Evidence of parallel changes found afterwards (not made by this session):
+  * running container has working-tree versions of graph/planner.py, graph/expert.py, services/routing.py
+    (hashes differ from image bf2a5c7e and from HEAD) -> files were copied into the container and it was restarted;
+  * base template tmpl-11f532fc now has a forced security shadow expert ("role": "always") under code_reviewer;
+  * uncommitted diffs: planner prompt "MULTI-DISCIPLINARY CO-EVALUATION" rule + few-shot example (global, all
+    templates), per-model system prompt for forced experts, forced flag handling.
+  Saved for reference: benchmarks/results/runbook/foreign_uncommitted_20260919.patch and
+  benchmarks/results/runbook/tmpl-11f532fc_as_found_20260919.json.
+Notes:
+- Nothing of the other agent's work was reverted or committed by this session. The benchmark must not be restarted until
+  the owner of the system state is decided (see user decision).
+
+## 2026-09-19T06:13:09Z — sovereign-judge:27b removed, judge switched to hf.co/h3rb3rn/sovereign-judge-27b — done
+Plan / progress:
+- User request: delete the outdated Ollama tag sovereign-judge:27b, use only the new fine-tunes from Hugging Face
+  (account h3rb3rn: 20 repos = 2 judges, 2 planners, 8 SmolLM3-3B experts, 8 Qwen3.5-4B experts).
+- Deleted via /api/delete on N04-RGTX and N02-M60-01. MISTAKE: Ollama instances on the same host share one model
+  store, so the tag also vanished on N04-RTX (default judge endpoint) and all N02-M60 instances; I had assumed
+  per-instance stores. The default judge (.env JUDGE_MODEL) was unavailable until the switch below (~10-15 min).
+- Fix-forward: 34 dynamic templates (moe-dyn-*) and 3 user templates of horndev repointed to
+  hf.co/h3rb3rn/sovereign-judge-27b:Q4_K_M (backup of old values: benchmarks/results/runbook/judge_repoint_backup_20260919.txt);
+  .env JUDGE_MODEL switched (old .env copy in /opt/tmp/env.before-judge-switch.*); langgraph-orchestrator recreated from
+  image moe-sovereign-orchestrator:hotpatched-20260919 (docker commit of the running container, keeps the files another
+  agent copied in) so ONLY the judge changed; clean image kept as :clean-bf2a5c7e. Verified: healthy, env correct,
+  real judge call OK (valid JSON, verdicts), model loaded on N04-RTX.
+- Benchmark tooling: harness default and runner default (Spur 2 judge) now hf.co/h3rb3rn/sovereign-judge-27b;
+  Spur 1 judge stays hf.co/h3rb3rn/sovereign-judge-olmo31-32b. Commit e8c116dc (local).
+Notes:
+- Left as is: scripts/setup_sovereign_judge_27b.sh and models/moe-sovereign-judge-27b/README.md still describe building
+  the removed tag; dynamic templates still use planner qwen3-planner:q4km.
+- Open: Spur 2 fine-tuned Qwen template does not exist yet (coder-4b Q4_K_M not pulled on N04/N02); baseline model choice;
+  variant A/B/C decision and freeze of the other agent. Benchmark NOT restarted.
+
+## 2026-09-19T06:32:33Z — Benchmark setup: one pre-finetune template + fine-tuned templates per track — done (benchmark NOT started)
+Plan / progress:
+- Per track: 5 conditions = native_baseline, prefinetune_ai (ONE template with the pre-finetune models),
+  compound_ai_debate / compound_ai / ablation_no_graphrag (fine-tuned models from hf.co/h3rb3rn).
+- Spur 1: pre-finetune = "LUMI-G Base (Pre-Finetune)" (OLMo3-7B base planner, OLMo3.1-32B base judge, SmolLM3-3B base
+  experts), fine-tuned = "LUMI-G OLMo + SmolLM3 Sovereign Ensemble" (+ Deliberation, No-GraphRAG); judge OLMo31 fine-tune.
+- Spur 2: pre-finetune = "Open-Weight Base (Pre-Finetune)" with planner changed qwen3.5:4b -> qwen3.5:9b (base Qwen3.5-9B,
+  pulled on N04, old value in benchmarks/results/runbook/spur2_planner_backup_20260919.json); fine-tuned = NEW
+  "Open-Weight Finetuned Ensemble" (+ Deliberation, No-GraphRAG; ids tmpl-ow-ft*, granted to philipp+horndev):
+  planner moe-sovereign-planner-9b, 15 categories -> moe-expert-*-4b:Q4_K_M (mapping taken from the frontier template),
+  judge sovereign-judge-27b. moe-expert-coder-4b:Q4_K_M pulled on N04 (was missing).
+- Verified: all 8 templates resolve, all referenced models present on their endpoints, real requests OK through the
+  Pre-Finetune and the Finetuned Spur 2 chains (planner, MCP, coder-4b expert on N04-TM10-01, Qwen judge).
+- Harness: optional prefinetune_ai condition + finetuning_system_delta; runner script now tracked.
+Notes:
+- Native baseline defaults (to be confirmed by the user): Spur 1 olmo31-32b-instruct-base-fixed:latest, Spur 2 qwen3.6:27b.
+- Still open before starting: variant A/B/C decision and freezing the other agent (running orchestrator = image
+  :hotpatched-20260919 incl. its files; base template tmpl-11f532fc has a forced security shadow expert).
+
+## 2026-09-19T09:00:48Z — Expert template cleanup (operator approval) — done
+Plan / progress:
+- Deleted 34 dead dynamic templates (moe-dyn-*, never used, planner qwen3-planner:q4km missing) and their 34 permission rows;
+  removed seed_default_admin_templates() (admin_ui/database.py, app.py) and deleted the four seeded "MoE Sovereign ..."
+  admin templates (planner moe-sovereign-student:4b) with 16 permission rows. Backups in benchmarks/results/runbook/
+  (dynamic_templates_backup_20260919.json, moe_sovereign_seeded_templates_backup_20260919.json). Admin templates: 58 -> 20.
+- The first DELETE attempt was blocked by the permission system ("Modify Shared Resources"); executed only after the
+  operator's explicit "Entfernen". 47 orphan permission rows for long-gone templates were left untouched.
+- Audit and prompt findings: docs/system/expert-template-audit-2026-09-19.md (+ inventory CSV).
+- Found and fixed while testing: browser test test_responsive_layout_and_resize_bounds failed intermittently/consistently because
+  sticky navbar/save bar covered controls at 375px; fixed with scroll-padding in moe-ui.css.
+Notes:
+- moe-admin still serves the OLD css (static files are baked into the image); rebuild moe-admin to deploy the fix. The seed
+  removal takes effect at the next admin restart (database.py is bind-mounted).
+- Not done (needs operator decision): align prompts with the training prompts, replace global default planner
+  qwen3-planner:q4km, 49 user templates with student:4b (owners decide).
+
+## 2026-09-19T10:00:24Z — Benchmark templates: aligned prompts, 3 pre-finetune + 3 fine-tuned + baseline per track — done (benchmark NOT started)
+Plan / progress:
+- Operator clarified the design: every track has THREE pre-finetune and THREE fine-tuned expert templates plus one native
+  baseline (7 conditions). Harness, runner and matrix now use three pre/fine pairs (finetuning_system_delta per pair).
+- System prompts aligned in 14 templates (scripts/align_benchmark_template_prompts.py, backup in
+  benchmarks/results/runbook/template_prompts_backup.json): experts = training role prompt of the assigned domain expert,
+  judge = training judge prompt, planner = training preamble + category block + empty-plan guard. 20 prompt slots, one
+  variant each. Spur 2 fine-tuned data_analyst now served by the datainfra expert (as in Spur 1).
+- Matrix: docs/system/benchmark-template-matrix-2026-09-19.md (Spur 2 all sound; Spur 1 fine-tuned x3 NOT sound: forced
+  second code_reviewer model + review_lenses added outside the design).
+- Real-request check, one request per template: Spur1 pre OK (gate pending), Spur1 fine-tuned planner returned [] and then an
+  unrelated plan (blocked by the quality gate), Spur2 pre blocked by the quality gate (missing_required_code), Spur2
+  fine-tuned OK. n=1 each: cause not established.
+Notes:
+- The planned A/B (old vs new planner prompt on tmpl-smollm3-nograph, 6 requests per arm) was blocked by the permission
+  system (Modify Shared Resources); nothing was changed. Needs the operator's decision.
+
+## 2026-09-19 update: prompt alignment finished (commit ec0f781d)
+- A/B (operator-approved, 9 planner calls per variant, tmpl-smollm3-nograph): original list format 0 empty / GDPR->governance 3/3;
+  training preamble v1 1 empty / 0/3; v2 0 empty / 0/3; Agy rule prompt 0 empty / 1/3. Planner therefore keeps the original list
+  format (Spur 1 hash 7c72ab83 byte-identical to the tested original, Spur 2 dd4700dc); experts and judge use the training prompts.
+- 14 templates aligned, 12 benchmark templates pass C1-C4 (matrix regenerated). Backup mishap (`--apply` overwrote the backup) fixed:
+  original rows recovered, script now timestamps backups and refuses to overwrite.
+- Spur 2 planner sanity check (n=3 per template, 6 outputs, raw outputs not attributed to a template): 0 empty plans, code and mutex
+  routed to code_reviewer, GDPR once to governance and once to precision_tools with an invented mcp_tool (the case the prompt forbids).
+  Too small to conclude anything about planner-9b vs base qwen3.5:9b; needs a per-template run before the benchmark.
+- Not started: benchmark (native baselines unconfirmed, other agent's hot-patched orchestrator still running).
+
+## 2026-09-19 update: planner prompt vs training format, direct check (no DB change)
+- Operator asked to adapt the prompt to the fine-tuned LLMs. Check of the training taxonomy: `VALID_CATEGORIES` / `_CANONICAL_LLM_CATEGORIES`
+  in `generate_planner_dataset.py` contain no `governance`, `security` or `compounding_knowledge` (they use e.g. `legal_advisor`), so a
+  training-format prompt with the template categories is off-distribution for those names either way. The full training prompt is
+  ~12.9k chars; the runtime caps the planner role at 8000 (`PLANNER_ROLE_MAX_CHARS`).
+- Direct Ollama check, 12 questions x 2 repeats per cell, temperature 0.2, no runtime JSON wrapper (so the S1 numbers are confounded:
+  the list prompt has no "JSON only" sentence, 15/24 and 17/24 unparsable):
+  S2 finetuned list/train hits 14/13, invalid category 0/5; S2 base 16/15, invalid 0/4. S1 not comparable in this setup.
+- Decision kept: planner prompt stays in list format (pipeline A/B: governance 3/3 vs 0/3). Templates were not changed.
+
+## 2026-09-19 update: eight experts per template, guard origin, judge role
+- Operator requirement: every template has 8 experts; the planner knows all of them; the judge only checks plausibility and scores.
+- Applied: the six Spur 2 templates were reduced from 15 to the eight Spur 1 categories (`precision_tools` <- `tool_expert`,
+  `compounding_knowledge` <- `graphrag`); both tracks now have planner prompt hash 7c72ab83 (all eight experts listed). The alignment script
+  enforces it (`EXPERT_SET`), the matrix generator checks it as C5 (all 12 templates pass C1-C5). Matrix generator bug fixed: the expert
+  table showed the pre-finetune model in the "Fine-tuned" column (wrong row index); the previously committed matrix was wrong there.
+- Guard sentence ("NEVER return an empty JSON array"): not in the planner training prompt; already in the Spur 1 template before the
+  alignment; wording matches the runtime fallback prompts of commit fb7b5378 (2026-08-08); `graph/planner.py` already creates a fallback
+  task for empty plans. The A/B with/without guard was denied by the permission system (template prompt switching); nothing was changed.
+- Judge: `judge_prompt` is used as `merger_prefix` in `graph/synthesis.py` (the judge model writes the final answer). The training judge
+  (`generate_judge_sample`) emits a JSON verdict with `action`, `quality_gate_passed`, `trust_score`, which is the plausibility-gate role the
+  operator describes; the pipeline does not implement it (no pass-through / intervene branch for multi-expert plans). A gate-only prompt
+  would make the merger return a JSON verdict as the answer, so the judge prompt was NOT changed. Needs a code change (design decision).
+- Smoke test (n=1 per template, /27 question): Spur 2 fine-tuned failed with `orchestration_failed` (planner-9b chose `vlsm_subnet_calc`
+  without `cidr` three times, fail-closed contract); Spur 1 fine-tuned: "withheld by the quality gate"; two further requests returned an
+  empty body (cause not established). Not conclusive at n=1, but it repeats the earlier Spur 2 finding (invented/incomplete mcp_tool).
+
+## 2026-09-19 update: native baselines, default planner, student:4b removal
+- Operator confirmed the native baselines: Spur 1 `olmo31-32b-instruct-base-fixed:latest`, Spur 2 `qwen3.8:27b` (runner and matrix generator updated).
+- Default planner: `.env` `PLANNER_MODEL=hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M` (was `qwen3-planner:q4km`, on no node);
+  `langgraph-orchestrator` recreated from the same image (sha256:8e0830c9...), healthy, startup log shows the new planner. The code
+  edits below take effect at the next image build (the image is not rebuilt).
+- `moe-sovereign-student:4b` removed: 49 user templates repointed (not deleted; the planner field was the only reference and the
+  13 templates of other users include the Hermes ones), functional references in code/config/installer/scripts removed, history kept.
+  47 orphaned permission rows deleted. Backup in `benchmarks/results/runbook/student4b_and_orphans_backup_20260919.json`.
+- Not done: Valkey `user:apikey:*` caches were not refreshed for the deleted permission rows (they only point at templates that no longer exist).
+
+## 2026-09-19 update: dynamic-expert escape hatch closed, baseline model list
+- Finding: `_sanitize_plan` accepted the category "dynamic" for every template and `graph/expert.py` then built an ad-hoc expert on any model of any
+  endpoint (bypasses pinned model@endpoint rosters; the planner already did not offer it to such templates, the empty-plan guard text names it).
+  0 of 36 telemetry rows of the benchmark templates used it. Fix (commit a0523d8c, only the sanitizer hunk staged; the other agent's uncommitted
+  planner changes stay in the work tree): "dynamic" is valid only without a template or when the template defines it; otherwise it maps to
+  "general". Tests: tests/test_planner_dynamic_pinned_roster.py, full suite 1374 passed.
+- Deployed: image rebuilt (GIT_REVISION=a0523d8c; /health shows it), rollback tag `moe-sovereign-orchestrator:pre-dynamic-fix-20260919`
+  (= previous `:local`). The container already ran the other agent's uncommitted code before the rebuild (graph/planner.py incl. the
+  "MULTI-DISCIPLINARY CO-EVALUATION" prompt block, graph/expert.py, contracts, routing, config): it applies to every condition of the benchmark,
+  is not in the training prompt and is not committed. Smoke test after the rebuild: Spur 1 fine-tuned template answered, planner routed to code_reviewer.
+
+## 2026-09-19 in_progress: scientific benchmark run (one round per track), started 20260919T210536Z
+- Lease: Spur 1 then Spur 2, 7 conditions each, `benchmarks/run_spur1_and_spur2.sh` with MOE_BENCHMARK_NUM_ROUNDS=1 (expected ~25-30 h per track).
+- DO NOT during the run: restart/recreate/rebuild `langgraph-orchestrator`, change any `LUMI-G*` / `Open-Weight*` admin template, change `.env`
+  planner/judge settings, or unload models on N04-RTX/N04-RGTX/N04-TM10/N02-M60. Any of it invalidates the run.
+- `benchmarks/integrity_watch.py` logs container/git/template changes to `benchmarks/results/integrity_20260919T210536Z.log` (check it after the run).
+- Runtime carries another agent's uncommitted planner/expert changes (see the entry above); they apply to all conditions equally.
+
+## 2026-09-20 update: expert evaluation after the run (queued)
+- `benchmarks/score_expert_answers.py` grades the expert answers given inside the templates; `benchmarks/replay_expert_prompts.py` sends the SAME recorded
+  expert prompts (system role prompt + sub-task, verbatim from ai_io_audit_log) to the experts of all four sets (Open Source / Open Weight x pre-finetune /
+  fine-tuned) and reports paired differences per category (mean +- SE, W/T/L, exact sign test), cross-judged by both track judges.
+- `benchmarks/post_run_expert_pipeline.sh` is running in wait mode (started while the benchmark runs, log `benchmarks/results/post_run_*.log`): after
+  `run_spur1_and_spur2.sh` exits it finds the two sidecars, scores the expert answers and then runs the replay (per-category cap 8; both judges;
+  estimated 15-20 h after the run). It uses the GPUs: do not start other GPU work on N04/N02 while it runs.
+- Offline-tested only (unit tests, dry run on an old sidecar, live template/model mapping); the judge and generation steps have not run against models yet.
+
+## 2026-09-20 incident during the run: judge reload hang on N04-RTX (resolved), parallelism findings
+- Symptom: first Spur 1 request (compound_ai, sysprog-01) stuck 75 min in the THINKING node (judge call); `benchmark_stuck` warnings in the orchestrator log.
+- Cause (reproduced): with the Spur 2 judge (`sovereign-judge-27b`, 18 GB, ctx 16384) resident, a request for the Spur 1 judge with `num_ctx=65536`
+  (template judge_num_ctx; the warm model had 16384) never completed the reload; the same model at 16384 answered in 0.7 s.
+- Fix: unloaded the idle `sovereign-judge-27b` on N04-RTX (`keep_alive: 0`); the OLMo judge then reloaded at 65536 and the request continued.
+  Consequence: the wall clock of that first cell (Spur 1 / compound_ai / sci-sysprog-01) includes ~75 min of stall and is NOT a valid latency value.
+  Risk: the same reload hang can recur at the Spur 1 -> Spur 2 switch; check the run for stalls (no new sidecar line for > 45 min).
+- Attempt to stop/restart the run was denied by the permission system; the run continues untouched.
+- Parallelism: Spur 1 experts run concurrently on separate instances (measured 4 experts, stage 61 s vs 197 s sequential = 3.2x). Spur 2 after the 8-expert
+  reduction: 6 categories on N04-TM10-01 (6 GPUs, semaphore 6), data_analyst + precision_tools serial on N04-TM10-02 (1 GPU), TM10-03/04 idle
+  (they served the removed technical_support/dynamic). Proposal: precision_tools -> N04-TM10-03 in all six Spur 2 templates (needs operator approval).
+
+## 2026-09-20 update: Open Weight instance placement 1:1 with Open Source (operator)
+- The six Open-Weight templates now use one instance per expert on N02-M60-02..09 (same category->instance mapping as Spur 1: general 02, security 03, research 04,
+  governance 05, compounding_knowledge 06, precision_tools 07, data_analyst 08, code_reviewer 09), judge N04-RTX (:11434), planner N04-RGTX (:11435, same host as N04-RTX).
+  Applied with `scripts/align_benchmark_template_prompts.py --apply` (EXPERT_ENDPOINTS; role "always" slots of the Review arms are left alone); backup
+  `benchmarks/results/runbook/template_prompts_backup_20260919T224408Z.json`. The Spur 1 templates were not touched (dry run: 0 changes) while Spur 1 runs.
+- Model store: `hf.co/h3rb3rn/moe-expert-coder-4b:Q4_K_M` was the only Qwen expert missing on N02; pulled via the free instance N02-M60-01 (instances of a host share one
+  model store). Smoke on N02-M60-01 (not used by the run): coder fine-tune 21.8 tok/s, qwen3.5:4b 18.1 tok/s at num_ctx 32768, both complete. Nothing was loaded on M60-02..09.
+- The integrity log shows the six Spur 2 template hashes changing at this point: expected, Spur 2 had not started.
+
+## 2026-09-20 update: tool hints and context windows (operator)
+- Expert `mcp_tools` emptied in the six Open-Weight templates (`mcp_tools` only selects the tool-hint text block of the expert prompt; empty = per-category default,
+  so equal categories give equal effective prompts). The matrix now checks the effective prompt and a "Cross-track parity" table: 0 differences (except models/contexts).
+- Context rule: planner/judge = model maximum, experts = largest context fitting the 8 GB GPU. Spur 2 templates set to planner 262144, judge 262144, experts 98304 (measured on
+  idle N04-TM10-03: 98304 = 6.1 GB / 11.9 tok/s; 114688 = 6.8 tok/s; 131072 = 0.3 tok/s; 196608 = CPU offload). SmolLM3 experts fit 65536 (native max, 6.9 GB, 8.7 tok/s).
+- NOT applied yet (Spur 1 is running, templates must not change): Spur 1 experts 48128 -> 65536. Run `python3 scripts/align_benchmark_template_prompts.py --apply --tracks spur1` after the run.
+- OPEN before Spur 2: Qwen3.5-9B planner at 262144 needs ~16 GB on N04-RGTX (18 GB); unverified there (test on TM10-01 showed 56 % CPU offload). If it does not fit, lower planner_num_ctx
+  in the Spur 2 templates. The Spur 1 -> Spur 2 phase switch can hang on a model reload (see incident above): unload idle models on N04-RTX/RGTX if the run stalls.
+
+## 2026-09-20 update: Spur 2 planner context capped at 131072 (operator "Ja")
+- `CONTEXT["spur2"]["planner"]` = 131072 (provisional, ~11 GB by formula) in all six Open-Weight templates; 262144 (~16 GB) to be tested on N04-RGTX after Spur 1, then raise it if it fits.
+
+## 2026-09-20 interim result, power capture
+- Interim (Spur 1, one round, 4 of 8 tasks, n=3-4 per condition, not a conclusion): overall score native 9.70, prefinetune_ablation 9.09, prefinetune_ai 9.04, compound_ai 8.85,
+  prefinetune_debate 8.29, compound_debate 8.25, ablation_no_graphrag 6.97 (graphrag-01: 4.55). The first compound_ai cell (sysprog-01) latency is invalid (75 min judge stall).
+- Expert answers: 60 collected (`expert_outputs_spur1.jsonl`), heuristics only (no empty answers, CORE_FINDING/CONFIDENCE format 96-97 %); LLM-judge scoring of the experts stays post-run.
+- Power: `benchmarks/power_monitor.py` was NOT running. Started two monitors for the rest of the run: `--host N04-RTX` (run-id bench-20260919-210551-n04) and `--host N02-M60`
+  (run-id bench-20260919-210551-n02), 10 s interval, CSVs in benchmarks/results. Retroactive N04 data comes from Prometheus (`node_gpu_power_draw_watts`, instance 192.168.155.224:9100, 15 s);
+  the N02-M60 expert host has no history before the monitor start, so the compound energy of the first ~9 h is understated (experts missing).
+
+## 2026-09-20 finding: expert prompts reach Ollama as dict reprs (code fixed, NOT deployed)
+- `graph/expert.py` built the native /api/chat messages with `hasattr(m, "type")` / `hasattr(m, "content")`; the messages are dicts, so every message got role "user" and
+  content `str(dict)`: the model received "{'role': 'system', 'content': '...role prompt...'}" as user text, no real system message. ai_io_audit_log: 100 % of expert calls since 2026-07
+  (0 % with a system role). Introduced with c25a92e7 (2026-06-08). Affects both tracks, pre-finetune and fine-tuned alike.
+- Related structure gaps (not changed): planner gets its whole prompt as ONE user message (training: system + user); judge/merger gets a hard-coded generic
+  system prompt ("Sovereign Judge 27B (Qwen3.8-27B fine-tuned)", also for the OLMo judges) and the template judge_prompt as user text; merger role differs from the judge's training role.
+- Fix: `_ollama_chat_messages()` keeps roles for dicts and LangChain messages; tests in tests/test_expert_native_messages.py; full suite 1390 passed. Only that hunk of graph/expert.py is
+  committed (foreign uncommitted changes stay in the work tree). Deploy after the benchmark: the running run measures the defective path for all conditions equally.
+
+## 2026-09-21 optimisation loop result (task sci-precision-02, template LUMI-G OLMo + SmolLM3 ... No-GraphRAG, models/pinning unchanged)
+- Code fixes (all committed, deployed): expert chat roles (073ec790), plan parser repair/reject (0d5104cc, ee812901), compact retry prompt keeps mcp_tool (93a085f2),
+  judge warm reuse + VRAM free before reload (1de953c8), native /api/chat for plain model@node (13f315f8), MCP calculate paren/^ repair (76c6a52e, b297ecc8),
+  plan limit counts model tasks (0577d7e4), MAX_PLANNER_TOKENS=4096 (.env).
+- Effect: pipeline failures ~50 % -> ~5 %, typical latency 830-1300 s -> ~100 s. Correctness: planner still writes unit/dimension errors (MWh*price, CO2 factors) in ~75 % of runs; "all 6 figures right" ~25 %.
+- Prompt-level levers (planner rules, advice rule, merger plausibility rule) did NOT robustly help (10-run validation of the best-looking config: mean 4.0); removed the advice rule again (backup restored).
+- Open levers needing a decision: dedicated MCP energy/cost tool, planner self-consistency vote, dimension-consistent training data for the next planner, replan-on-implausible-magnitude.
+- Template currently carries the tuned planner_prompt/judge_prompt (original in benchmarks/results/opt/backup_original_*.json); other templates untouched.
+
+## 2026-09-22 in_progress: Open Weight benchmark, one round (yardstick for Open Source), started 20260921T221522Z
+- Spur 2 only (`MOE_RUN_SPUR1=0`, 1 round), 7 conditions x 8 tasks, judge evaluation deferred per task, all 14 templates carry identical prompts (matrix: 6 sound, parity none).
+- DO NOT during the run: restart/rebuild the orchestrator or mcp-precision, edit any LUMI-G*/Open-Weight* template, change .env or unload models on N04/N02. Integrity log: benchmarks/results/integrity_20260921T221522Z.log.
+- Foreign keys seen earlier: odysseus_ki-vm-node05 (sweeps all templates), Dolibarr (qwen3.6:35b@N04-RTX evicts the judge). Check benchmarks/run_health_check.py.
+
+## 2026-09-22 in_progress: Open Weight benchmark restarted after infra outage, started 20260922T105205Z
+- Root cause of the 01:11 run's stall: alternating fine-tuned/base conditions swapped models on every pinned instance every condition (minutes of reload each). Fixed (commit 14b55f5c): conditions now run native_baseline -> all pre-finetune -> all fine-tuned per task (`MOE_BENCHMARK_ORDER=paired` restores old order).
+- Separate infra outage 01:57-10:51: disk `/` hit 100% (moe-docs container leaked ~93GB of orphaned mkdocs_* tmp dirs), Postgres (terra_checkpoints) briefly entered recovery, the orchestrator's one-shot moe_userdb pool init hit that window and stayed permanently broken (no retry) until a manual `docker restart langgraph-orchestrator` at 10:51. All API-key auth without a warm Valkey cache entry 401'd for ~9h. Root cause not yet fixed in code (pool has no reconnect-on-failure loop) — noted as open gap.
+- Also added (commit 557bc467): non-streaming /v1/chat/completions now cancels the LangGraph run on client disconnect (`services/pipeline/disconnect.py`) instead of leaving it running and evicting the next request's models. Verified live.
+- Spur 2 only (`MOE_RUN_SPUR1=0`, 1 round), 7 conditions x 8 tasks, judge evaluation deferred per task, all 14 templates carry identical prompts.
+- DO NOT during the run: restart/rebuild the orchestrator or mcp-precision, edit any LUMI-G*/Open-Weight* template, change .env or unload models on N04/N02.
+
+## 2026-09-22 in_progress: Open Weight benchmark resumed after trust-gate finding, since 20260922T140103Z
+- Stopped at task 3 (sci-graphrag-01-topology-cascade, multi_turn) condition prefinetune_ai_debate: turns 1-2 are pure "store this info, acknowledge" inject_fact turns with no sources/tools, which the quality gate's trust_score.py structurally scores below the 0.3 BLOCK threshold (source_count/cross_ref factors are 0 by construction) even though the hallucination check found no unsupported claims. native_baseline bypasses the gate (direct call) and passes fine; templated conditions get HTTP 422 -> score 0.0. Affects up to 2/8 tasks (both multi_turn tasks: sci-graphrag-01, sci-graphrag-02) x 6/7 templated conditions.
+- User decision: treat as a real result, no trust_score.py change (matches existing memory note: observe decision-log frequency before touching unsupported_claims_penalty weight, don't blindly tune). Documented as a finding, not fixed.
+- Resumed via `python3 run_scientific_benchmark.py` (no --fresh) with the same Spur-2 env as run_spur1_and_spur2.sh, so the checkpoint (tasks 1-2 complete, 14/14 cells) was reused instead of rerun. Log: benchmarks/results/lumig_spur2_openweight_resume_20260922T140103Z.log.
+
+## 2026-09-22 handoff to agy: Open Weight benchmark, monitoring stopped
+
+**Status beim Handoff (21:38 CEST):** Prozess läuft (PID 1399858, `python3 run_scientific_benchmark.py`, gestartet 16:01 CEST ohne `--fresh`), Log `benchmarks/results/lumig_spur2_openweight_resume_20260922T140103Z.log`, Checkpoint `benchmarks/results/checkpoint_scientific_benchmark.json`. Aufgaben 1-6 von 8 komplett ausgewertet, Aufgabe 7 (`sci-reasoning-01-distributed-consensus-safety`, Raft Consensus) läuft, Bedingung `prefinetune_ai`. Aufgabe 8 (`sci-governance-01-technical-sovereignty`) steht noch aus. Ich (Claude Code) habe das Live-Monitoring hier beendet, um keine Tokens mehr dafür zu verbrauchen — Übergabe an agy.
+
+**Was in dieser Session gefixt und committet wurde (moe-infra, main branch, lokal, nicht gepusht):**
+- `14b55f5c` — Bedingungsreihenfolge im Harness (`benchmarks/run_scientific_benchmark.py`, `_build_conditions()`) von "paired" (abwechselnd fine-tuned/base) auf "family" (native_baseline → alle 3 prefinetune → alle 3 fine-tuned) umgestellt. Grund: alte Reihenfolge tauschte bei jeder Bedingung die Modelle auf allen gepinnten Instanzen (Planner/Judge/8 Experten), 3-21 min Ladezeit pro Wechsel, verfälschte Latenzmessung. `MOE_BENCHMARK_ORDER=paired` stellt alte Reihenfolge wieder her.
+- `557bc467` — `services/pipeline/disconnect.py` (neu) + `services/pipeline/chat.py`: nicht-streamende `/v1/chat/completions`-Anfragen brechen jetzt bei Client-Disconnect sofort ab (`run_until_disconnect`, wartet auf `request.receive()` da `is_disconnected()` hinter `BaseHTTPMiddleware` nicht funktioniert). Vorher lief eine verwaiste Anfrage nach Runner-Stopp weiter und verdrängte die Modelle der nächsten Anfrage. Live verifiziert (499-Response, sauberer Abbruch).
+- Orchestrator-Image entsprechend neu gebaut/deployed. Rollback-Tag: `moe-sovereign-orchestrator:pre-disconnect-cancel-20260922`.
+- Beide Fixes sind bereits im Image, das der laufende Prozess anspricht.
+
+**Separater, unabhängig gefundener und behobener Infra-Ausfall (nicht mehr aktiv, aber gut zu kennen):** Festplatte `/` lief während dieser Session auf 100% (Ursache: `moe-docs`-Container leakte ~93GB verwaiste `mkdocs_*`-Temp-Verzeichnisse, von Nutzer extern bereinigt). Dadurch ging Postgres (`terra_checkpoints`) kurz in Recovery, und der Orchestrator-Neustart traf genau dieses Zeitfenster — sein `moe_userdb`-Connection-Pool blieb danach dauerhaft `None` (kein Retry-Mechanismus beim Start), alle API-Key-Lookups ohne warmen Valkey-Cache-Eintrag schlugen ~9h lang mit 401 fehl. Behoben durch manuellen `docker restart langgraph-orchestrator` um 10:51 CEST. **Offener Gap, nicht gefixt:** `main.py` lifespan-Startup (`state._userdb_pool = AsyncConnectionPool(...)`) hat keine Retry-Logik bei fehlgeschlagenem initialem Connect — bei erneutem Zusammentreffen von Postgres-Downtime + Orchestrator-Start/Restart tritt der gleiche stille Ausfall wieder auf. Kein Code-Fix ohne Rücksprache vorgenommen.
+
+**Bestätigter, bewusst nicht gefixter Befund (User-Entscheidung):** Trust-Gate (`services/trust_score.py`) blockt reine "Information speichern/bestätigen"-Turns (inject_fact-Turns ohne Quellen/Tools) mit Score <0.3 (BLOCK), obwohl inhaltlich korrekt — trifft nur templatisierte Bedingungen (native_baseline umgeht das Gate). Beobachtet bei Aufgabe 3 (`sci-graphrag-01-topology-cascade`), 4 von 7 Bedingungen initial 0.0, nach automatischem Backfill (max. 2 Versuche je Zelle) überwiegend auf plausible Werte (5.0-5.7) korrigiert. Bei Aufgabe 4 (`sci-graphrag-02-paraconsistent-reconciliation`, ebenfalls multi_turn) trat der Effekt NICHT auf (alle 7 Bedingungen direkt sauber). User-Entscheidung: kein Fix an `trust_score.py` (deckt sich mit bestehender Memory-Notiz, `unsupported_claims_penalty`-Gewicht erst nach Beobachtung der Decision-Log-Häufigkeit anfassen), als echtes Ergebnis werten und dokumentieren.
+
+**Zwischenergebnisse Aufgaben 1-6 (Mittelwert über 6 Aufgaben, Score 0-10):**
+| Bedingung | Ø | 
+|---|---|
+| native_baseline | 7.88 |
+| prefinetune_ai | 7.13 |
+| prefinetune_ai_debate | 7.25 |
+| prefinetune_ablation_no_graphrag | 7.16 |
+| compound_ai | 7.53 |
+| compound_ai_debate | 7.11 |
+| ablation_no_graphrag | 7.29 |
+
+Kein klares Gesamtbild bisher — native/Basis schlägt fine-tuned bei den beiden systemprogrammierungslastigen Aufgaben 1+2 und bei Aufgabe 3 (Trust-Gate-Artefakt), fine-tuned schlägt native klar bei Aufgabe 4 und 6, Aufgabe 5 (VLSM) durchgehend 10.0/10 bei allen Bedingungen (keine Differenzierung). Volles Bild erst nach Aufgabe 7+8.
+
+### Anweisungen für agy
+
+1. **Weiter überwachen, nicht neu starten.** Prozess läuft bereits (PID prüfen: `ps aux | grep run_scientific`). Fortschritt prüfen:
+   ```
+   cd /opt/deployment/moe-sovereign/moe-infra/benchmarks
+   grep -a -E "Condition:|answer stored|judged:|Score:|Backfilling|permanently" results/lumig_spur2_openweight_resume_20260922T140103Z.log | tail -20
+   ```
+2. **Bei `422 Unprocessable Entity` / `Score: 0.0` auf `prefinetune_*`- oder `compound_ai*`-Bedingungen:** das ist der oben dokumentierte, bekannte Trust-Gate-Befund. NICHT eingreifen, NICHT stoppen — der Harness backfillt automatisch bis zu 2x pro Zelle (`Backfilling missing/invalid run ...`). Kein neuer Gap.
+3. **Bei echten neuen Fehlern** (Python-Traceback im Log, Orchestrator-Container down/unhealthy, Disk wieder voll `df -h /`, Postgres-Pool-Fehler `pool 'pool-2' is already closed` im Orchestrator-Log) — das sind echte Gaps: kurz analysieren, wenn lösbar fixen (siehe AGENTS.md/CLAUDE.md: Bugs direkt fixen, kein Nachfragen nötig bei klaren technischen Fehlern), sonst hier im Status-Log dokumentieren.
+4. **Nach Abschluss aller 8 Aufgaben** (`run_scientific_benchmark.py`-Prozess beendet sich selbst, prüfen via `ps aux`):
+   - Finalen Report/Summary aus dem Log oder `results/eval_scientific_benchmark_<timestamp>.json` prüfen.
+   - Laut ursprünglichem Nutzerauftrag: dieser Open-Weight-Lauf ist die "Messlatte" — danach den Open-Source-Lauf (Spur 1) unter identischen, jetzt gefixten Infra-Bedingungen starten (`cd benchmarks && MOE_RUN_SPUR2=0 MOE_BENCHMARK_NUM_ROUNDS=1 nohup bash run_spur1_and_spur2.sh > results/runner_<ts>.log 2>&1 &`, NICHT `--fresh` falls ein Checkpoint aus dieser Session noch nützliche Spur-2-Daten enthält — ggf. vorher `checkpoint_scientific_benchmark.json` sichern, da `--fresh` ihn verwirft).
+   - Danach Experten-Bewertung nachholen: `score_expert_answers.py` und `replay_expert_prompts.py` (siehe `benchmarks/post_run_expert_pipeline.sh`).
+5. **Nicht anfassen während des laufenden Rests:** Orchestrator/mcp-precision nicht neu bauen/starten, keine Templates (`LUMI-G*`/`Open-Weight*`) editieren, `.env` nicht ändern, Modelle auf N04/N02 nicht entladen — sonst genau der Modell-Swap-Bug von vorhin erneut.

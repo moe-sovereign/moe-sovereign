@@ -125,7 +125,7 @@ The middleware has been expanded to incorporate three classical and modern AI th
 ### MoE Codex — Compliance-Grade Data Intelligence
 
 Catalog, Approval Workflow, Explorer, Drift Detection, OpenLineage, lakeFS Versioning,
-NiFi ETL, and Notebook (JupyterLite) have moved to the dedicated **[moe-codex](https://github.com/h3rb3rn/moe-codex)**
+NiFi ETL, and Notebook (JupyterLite) have moved to the dedicated **[moe-codex](https://github.com/moe-sovereign/moe-codex)**
 repository — the compliance-grade data intelligence platform for regulated industries.
 
 Deploy moe-sovereign for sovereign LLM infrastructure. Add moe-codex for

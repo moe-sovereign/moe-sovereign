@@ -41,6 +41,10 @@ This continues until either:
 ## Pipeline Flow
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TD
     PLAN[Planner\nfan-out plan] --> PAR
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  MoE Sovereign — One-Line Installer
-#  Usage: curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh | bash
+#  Usage: curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
 #         or: bash install.sh
 #
 #  Supported OS: Debian 11 (bullseye), 12 (bookworm), 13 (trixie)
@@ -53,7 +53,7 @@ else
 fi
 
 # --- Configurable defaults (override via environment) -----------------------
-MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/h3rb3rn/moe-sovereign.git}"
+MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/moe-sovereign/moe-sovereign.git}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/moe-sovereign}"
 MOE_ENV_FILE="${INSTALL_DIR}/.env"
 
@@ -1845,7 +1845,7 @@ if [[ "$INSTALL_OLLAMA" == "true" ]]; then
   echo "  --- Model Pulling Options (Individual Confirmation) ---"
   echo "  You can optionally pre-pull Sovereign models into the local Ollama instance:"
   
-  [[ "$HAS_TTY" == "1" ]] && read -rp "  Pull Sovereign Planner LLM (moe-sovereign-student:4b from HuggingFace)? [y/N]: " _p_choice < /dev/tty
+  [[ "$HAS_TTY" == "1" ]] && read -rp "  Pull Sovereign Planner LLM (moe-sovereign-planner-olmo3-7b from HuggingFace)? [y/N]: " _p_choice < /dev/tty
   _p_choice="${_p_choice:-N}"
   case "${_p_choice,,}" in
     y|yes) PULL_PLANNER_MODEL="true" ;;
@@ -2516,8 +2516,8 @@ if [[ "${INSTALL_OLLAMA:-false}" == "true" ]]; then
   if [[ "$_ollama_ready" == "true" ]]; then
     echo "  Local Ollama service is online ✓"
     if [[ "${PULL_PLANNER_MODEL:-false}" == "true" ]]; then
-      echo "  Pulling Planner LLM: hf.co/h3rb3rn/moe-sovereign-student-4b:latest ..."
-      _compose exec -T moe-ollama ollama pull hf.co/h3rb3rn/moe-sovereign-student-4b:latest || true
+      echo "  Pulling Planner LLM: hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M ..."
+      _compose exec -T moe-ollama ollama pull hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M || true
     fi
     if [[ "${PULL_JUDGE_MODEL:-false}" == "true" ]]; then
       echo "  Pulling Judge LLM: hf.co/h3rb3rn/Qwen3-MoE-35B-Sovereign-Judge-v3-GGUF:sovereign-judge-35b-q4_k_m.gguf ..."
@@ -2592,8 +2592,8 @@ echo "  1. Open the Admin UI and complete the Setup Wizard"
 echo "  2. Add at least one inference server (Ollama, OpenAI, LiteLLM, etc.)"
 echo "  3. Pull Sovereign Planner & Judge LLMs from HuggingFace:"
 echo "     • Planner (4.2B Student):"
-echo "       https://huggingface.co/h3rb3rn/moe-sovereign-student-4b"
-echo "       ollama run hf.co/h3rb3rn/moe-sovereign-student-4b:latest"
+echo "       https://huggingface.co/h3rb3rn/moe-sovereign-planner-olmo3-7b"
+echo "       ollama run hf.co/h3rb3rn/moe-sovereign-planner-olmo3-7b:Q4_K_M"
 echo "     • Judge & Refiner (35B Sovereign Judge v3 GGUF):"
 echo "       https://huggingface.co/h3rb3rn/Qwen3-MoE-35B-Sovereign-Judge-v3-GGUF"
 echo "       ollama run hf.co/h3rb3rn/Qwen3-MoE-35B-Sovereign-Judge-v3-GGUF:sovereign-judge-35b-q4_k_m.gguf"
@@ -2603,7 +2603,7 @@ echo "  Logs:    cd ${INSTALL_DIR} && sudo ${COMPOSE} logs -f"
 echo "  Status:  cd ${INSTALL_DIR} && sudo ${COMPOSE} ps"
 echo "  Stop:    cd ${INSTALL_DIR} && sudo ${COMPOSE} down"
 echo ""
-echo "  Project: https://github.com/h3rb3rn/moe-sovereign"
+echo "  Project: https://github.com/moe-sovereign/moe-sovereign"
 echo "  Docs:    https://docs.moe-sovereign.org"
 echo "  Models:  https://huggingface.co/h3rb3rn"
 echo ""

@@ -504,6 +504,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/node_targets.yml:/etc/prometheus/node_targets.yml:ro
+      - ./prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
       - ${MOE_DATA_ROOT}/prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

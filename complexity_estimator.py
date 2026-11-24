@@ -344,9 +344,9 @@ def complexity_routing_hint(level: ComplexityLevel) -> dict:
     else:  # complex
         return {
             # Soft planner budget ("TASK BUDGET" in the planner prompt). The hard
-            # contract ceiling is PLANNER_MAX_TASKS. Default kept at 4; raising it
-            # is a separate, measured decision (see runbook gate G3).
-            "max_tasks":      int(os.getenv("PLANNER_BUDGET_COMPLEX", "4")),
+            # contract ceiling is PLANNER_MAX_TASKS. Default updated to PLANNER_MAX_TASKS
+            # (default 8) to enable multi-specialist parallel decomposition.
+            "max_tasks":      int(os.getenv("PLANNER_BUDGET_COMPLEX", os.getenv("PLANNER_MAX_TASKS", "8"))),
             "skip_research":  False,
             "skip_graph":     False,
             "skip_thinking":  False,

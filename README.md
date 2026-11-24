@@ -12,7 +12,7 @@
 
 [Documentation](https://docs.moe-sovereign.org) &bull;
 [Website](https://moe-sovereign.org) &bull;
-[Issues](https://github.com/h3rb3rn/moe-sovereign/issues) &bull;
+[Issues](https://github.com/moe-sovereign/moe-sovereign/issues) &bull;
 [Changelog](CHANGELOG.md)
 
 </div>
@@ -220,10 +220,10 @@ The orchestrator started as an 11 190-line monolith in `main.py`. A 14-phase spl
 
 ### C) Enterprise Data Management (`moe-codex` Extension)
 
-> **This feature group requires the optional [`moe-codex`](https://github.com/h3rb3rn/moe-codex)
+> **This feature group requires the optional [`moe-codex`](https://github.com/moe-sovereign/moe-codex)
 > enterprise stack** (Apache NiFi, Marquez/OpenLineage, lakeFS). It is not part of the
 > `moe-sovereign` core and is deployed as a separate compose stack.
-> See the [moe-codex repository](https://github.com/h3rb3rn/moe-codex) for setup instructions.
+> See the [moe-codex repository](https://github.com/moe-sovereign/moe-codex) for setup instructions.
 
 | | Capability | Description |
 |:---:|---|---|
@@ -301,14 +301,22 @@ flowchart LR
 
 ### One-Line Install
 
+**Debian / Ubuntu:**
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
+```
+
+**macOS** (Docker Desktop or rootless Podman; run as a regular user, never with `sudo`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install-macos.sh | bash
 ```
 
 ### Manual Setup
 
 ```bash
-git clone https://github.com/h3rb3rn/moe-sovereign.git
+git clone https://github.com/moe-sovereign/moe-sovereign.git
 cd moe-sovereign
 cp .env.example .env
 nano .env                      # Set credentials and inference server URLs
@@ -347,7 +355,7 @@ flowchart LR
 |---|:---:|---|---|
 | Docker Compose | **Tested** | `team` | `docker compose up -d` |
 | LXC / Proxmox | **Tested** | `solo` | `deploy/lxc/setup.sh` |
-| Podman (rootless) | **Tested** | `team` | `curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh \| bash` |
+| Podman (rootless) | **Tested** | `team` | `curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh \| bash` |
 | K3s / Kubernetes | CI-validated (Helm charts) | `enterprise` | `helm install moe charts/moe-sovereign` |
 | OpenShift | Implemented, environment-unvalidated | `enterprise` | `helm install` with `openshift.enabled=true` |
 
@@ -559,7 +567,7 @@ Built on personally purchased consumer hardware. No cloud credits, no institutio
 
 [docs.moe-sovereign.org](https://docs.moe-sovereign.org) &bull;
 
-[GitHub](https://github.com/h3rb3rn/moe-sovereign)
+[GitHub](https://github.com/moe-sovereign/moe-sovereign)
 
 </sub>
 </div>

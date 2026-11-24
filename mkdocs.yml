@@ -67,6 +67,7 @@ extra_javascript:
   # Do NOT add a mermaid-init.js: material handles init + render + theme
   # switching on its own. See docs/assets/js/README.md.
   - assets/js/mermaid.min.js
+  - assets/js/mermaid-look.js
 
 nav:
   - Overview: index.md
@@ -132,6 +133,7 @@ nav:
     - System Documentation: system/overview.md
     - Pipeline Details: system/pipeline.md
     - Adaptive Deliberation: system/deliberation.md
+    - Debate Analysis: system/debate-analysis.md
     - Data Flow: system/dataflow.md
     - Infrastructure: system/infrastructure.md
     - Hardware: system/hardware.md

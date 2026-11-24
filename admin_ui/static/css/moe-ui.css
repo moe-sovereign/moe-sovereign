@@ -72,6 +72,10 @@
 .moe-section-picker { color: var(--moe-muted); font-size: .85rem; max-width: 100%; }
 .moe-section-picker select { max-width: 21rem; margin-top: .25rem; }
 #config-form .card { scroll-margin-top: 9rem; }
+/* Keep controls that are scrolled into view (keyboard focus, anchors, assistive tech) clear of the sticky navbar
+   (99px at 375px width) and of the sticky save bar (163px at 375px, 116px at 768px). */
+html { scroll-padding-top: 7rem; }
+html:has(.moe-save-bar) { scroll-padding-bottom: 11rem; }
 .moe-save-bar { position: sticky; bottom: .75rem; z-index: 1010; display: flex; align-items: center; justify-content: end; flex-wrap: wrap; gap: .65rem; padding: .85rem 1rem; border: 1px solid var(--moe-border); border-radius: .75rem; background: var(--moe-surface); box-shadow: 0 4px 24px rgb(0 0 0 / 15%); }
 .moe-save-bar > [role="status"] { margin-right: auto; color: var(--moe-muted); font-size: .9rem; }
 .moe-save-bar.is-dirty { border-color: var(--moe-accent); }

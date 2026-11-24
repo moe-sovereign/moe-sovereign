@@ -49,6 +49,7 @@ from graph_rag.corrections import (
 )
 
 from config import (
+    INFERENCE_DEFAULT_TIMEOUT,
     # Runtime flags
     CORRECTION_MEMORY_ENABLED, _EDGE_MODE, LOG_LEVEL,
     MCP_STRUCTURED_RESULT_REQUIRED,
@@ -1357,6 +1358,7 @@ from routes.embeddings       import router as _embeddings_router
 from routes.gates            import router as _gates_router
 from routes.handover         import router as _handover_router
 from routes.kpi              import router as _kpi_router
+from routes.debate_analysis  import router as _debate_analysis_router
 app.include_router(_health_router)
 app.include_router(_watchdog_router)
 app.include_router(_mc_router)
@@ -1377,6 +1379,7 @@ app.include_router(_gates_router)
 app.include_router(_handover_router)
 app.include_router(_embeddings_router)
 app.include_router(_kpi_router)
+app.include_router(_debate_analysis_router)
 
 # ── HTTP middleware (extracted to services/middleware.py) ─────────────────────
 # Added in the original order; Starlette executes add_middleware in reverse.
@@ -1702,7 +1705,7 @@ async def _stream_native_llm(
 
     # Use the per-server timeout from INFERENCE_SERVERS config (fallback: 300s).
     # A 10s connect timeout prevents silent hangs when the server URL is wrong.
-    _srv_timeout = float(endpoint.get("timeout", 300))
+    _srv_timeout = float(endpoint.get("timeout", INFERENCE_DEFAULT_TIMEOUT))
     _http_timeout = httpx.Timeout(connect=10.0, read=_srv_timeout, write=30.0, pool=10.0)
 
     try:

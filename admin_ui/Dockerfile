@@ -12,6 +12,7 @@ COPY grafana_generator.py .
 COPY maintenance.py .
 COPY statistics.py .
 COPY deliberation_policy.py .
+COPY debate_analysis_policy.py .
 COPY backup_retention.py .
 COPY templates/ templates/
 COPY static/ static/

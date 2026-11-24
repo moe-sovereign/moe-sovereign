@@ -21,7 +21,7 @@ Debian 11 (bullseye), 12 (bookworm), and 13 (trixie) are supported. Other Linux 
 Run this on a fresh Debian system as root or with sudo:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
 ```
 
 ## macOS
@@ -32,15 +32,16 @@ machine, generates `.env` with random secrets, creates the host directories
 under `$HOME`, validates Compose, and starts the stack:
 
 ```bash
-git clone https://github.com/h3rb3rn/moe-sovereign.git
+git clone https://github.com/moe-sovereign/moe-sovereign.git
 cd moe-sovereign
 bash install-macos.sh
 ```
 
-Alternatively, clone and install in one step (without `sudo`):
+Alternatively, use the one-line installer, which clones the repository below
+`~/moe-sovereign` and installs in one step (never with `sudo`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install-macos.sh | bash
+curl -fsSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install-macos.sh | bash
 ```
 
 Use `bash install-macos.sh --runtime podman` to select Podman explicitly.
@@ -114,7 +115,7 @@ prometheus-data,admin-logs,userdb,few-shot} \
 ### 3. Clone the repository
 
 ```bash
-git clone https://github.com/h3rb3rn/moe-sovereign.git \
+git clone https://github.com/moe-sovereign/moe-sovereign.git \
   /opt/moe-sovereign
 cd /opt/moe-sovereign
 ```

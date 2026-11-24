@@ -24,6 +24,10 @@ The **Graph-basierte Wissensakkumulation** addresses both gaps with two compleme
 ## Architecture Overview
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TD
     MN["merger_node\n(Judge LLM synthesis)"]
 

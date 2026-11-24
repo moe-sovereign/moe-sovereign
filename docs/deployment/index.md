@@ -8,6 +8,10 @@ cluster, without code forks or feature loss.
 ## The universal deployment principle
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     subgraph ART["One Artefact"]
         IMG[["moe-sovereign/orchestrator:x.y.z<br/>multi-stage, non-root UID 1001<br/>OCI-compliant, read-only rootfs"]]
@@ -51,6 +55,10 @@ what guarantees "no performance or functional loss across all layers".
 ## Choosing your tier
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart LR
     Q{{What do you have?}}
     Q --> A[Single Proxmox LXC<br/>or Debian VM]:::low

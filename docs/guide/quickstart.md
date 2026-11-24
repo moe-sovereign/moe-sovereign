@@ -25,7 +25,8 @@ Incoming requests are analyzed, distributed to specialized LLM experts, calculat
 > `.env` (e.g. `ADMIN_UI_HOST_PORT=8089`) — see
 > [Deployment → Docker Compose](../deployment/compose.md#configuration-via-env-no-compose-file-edits-needed)
 > for the full list. macOS users should run
-> `bash scripts/bootstrap-macos.sh` instead of `install.sh`; details
+> `install-macos.sh` instead of `install.sh` (one-liner:
+> `curl -fsSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install-macos.sh | bash`); details
 > in [Deployment → macOS](../deployment/macos.md).
 
 ---
@@ -134,7 +135,7 @@ curl http://localhost:8002/v1/models
 For a fresh **Debian or Ubuntu** server, the recommended approach is the one-line installer:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install.sh | bash
 ```
 
 The installer handles container runtime setup (Docker CE or Podman), directory

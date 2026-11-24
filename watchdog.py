@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
+import httpx
+
 logger = logging.getLogger("MOE-SOVEREIGN.watchdog")
 
 # ── Valkey key names ──────────────────────────────────────────────────────────
@@ -62,12 +64,14 @@ class AlertType(str, Enum):
     VRAM_HIGH        = "vram_high"
     NO_MODELS_LOADED = "no_models"
     BENCHMARK_STUCK  = "benchmark_stuck"
+    LOAD_STALLED     = "load_stalled"
 
 
 _DEFAULT_CONFIG = {
     "down_threshold":               _ENV_DOWN_THRESH,
     "vram_threshold":               _ENV_VRAM_THRESH,
     "stuck_minutes":                30,
+    "load_stall_seconds":           300,
     "email_escalation_enabled":     False,
     "escalation_to":                "",
     "escalation_cooldown_minutes":  30,
@@ -202,6 +206,87 @@ def _evaluate_alerts(
             ))
 
     return alerts
+
+
+def _evaluate_load_stalls(
+    active: list[dict],
+    loaded_by_node: dict[str, set],
+    stall_seconds: float,
+    now: Optional[datetime] = None,
+) -> list[dict]:
+    """Requests that wait longer than stall_seconds for a model that the node has not loaded.
+
+    A cold load of a 35B model takes ~3 min, so the default threshold is 300 s. A scheduler
+    that no longer loads anything (seen on N04-RTX after a failed GPU discovery) answers
+    /api/tags and /api/ps normally, so node_up stays 1 and only this check notices it.
+
+    active:         decoded moe:active:* entries (need backend_host, backend_model, started_at).
+    loaded_by_node: node name -> model names from that node's /api/ps (nodes without a
+                    successful probe are left out and therefore never alerted on).
+    """
+    now = now or datetime.now(timezone.utc)
+    stalled: dict[tuple, dict] = {}
+    for req in active:
+        node, model = req.get("backend_host") or "", req.get("backend_model") or ""
+        if not node or not model or node not in loaded_by_node:
+            continue
+        try:
+            started = datetime.fromisoformat(str(req["started_at"]).replace("Z", "+00:00"))
+        except (KeyError, ValueError):
+            continue
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        age = (now - started).total_seconds()
+        if age < stall_seconds:
+            continue
+        loaded = loaded_by_node[node]
+        if model in loaded or f"{model}:latest" in loaded:
+            continue  # model is loaded: the request is generating, not waiting for a load
+        entry = stalled.setdefault((node, model), {"count": 0, "oldest": 0.0})
+        entry["count"] += 1
+        entry["oldest"] = max(entry["oldest"], age)
+    alerts = []
+    for (node, model), e in stalled.items():
+        alerts.append(_make_alert(
+            AlertType.LOAD_STALLED, AlertSeverity.WARNING, node,
+            f"{e['count']} request(s) wait for {model} on {node} for up to {e['oldest'] / 60:.0f} min "
+            f"but the model is not loaded (loaded: {', '.join(sorted(loaded_by_node[node])) or 'none'}) "
+            f"— Ollama scheduler may be stuck",
+            extra={"model": model, "waiting": e["count"], "oldest_seconds": round(e["oldest"])},
+        ))
+    return alerts
+
+
+async def _collect_load_stalls(redis_client, inference_servers: list[dict], cfg: dict) -> list[dict]:
+    """Read active requests from Valkey, probe /api/ps of the involved Ollama nodes, evaluate."""
+    if redis_client is None:
+        return []
+    stall_seconds = float(cfg.get("load_stall_seconds", 300))
+    try:
+        keys = [k for k in await redis_client.keys("moe:active:*") if not str(k).endswith(":trace")]
+        active = []
+        for k in keys:
+            raw = await redis_client.get(k)
+            if raw:
+                active.append(json.loads(raw))
+    except Exception as exc:
+        logger.debug("Watchdog: active request read failed: %s", exc)
+        return []
+    now = datetime.now(timezone.utc)
+    suspects = {r["backend_host"] for r in active if r.get("backend_host") and r.get("backend_model")}
+    urls = {s["name"]: s["url"] for s in inference_servers if s.get("name") in suspects and s.get("url")}
+    loaded_by_node: dict[str, set] = {}
+    if urls:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            for name, url in urls.items():
+                base = url.rstrip("/").removesuffix("/v1")
+                try:
+                    r = await client.get(f"{base}/api/ps")
+                    r.raise_for_status()
+                    loaded_by_node[name] = {m.get("name", "") for m in r.json().get("models", [])}
+                except Exception as exc:
+                    logger.debug("Watchdog: /api/ps probe of %s failed: %s", name, exc)
+    return _evaluate_load_stalls(active, loaded_by_node, stall_seconds, now)
 
 
 # ── Email escalation ──────────────────────────────────────────────────────────
@@ -433,6 +518,8 @@ async def watchdog_loop(
                 stuck_since=stuck_since,
                 cfg=cfg,
             )
+
+            alerts.extend(await _collect_load_stalls(redis_client, inference_servers, cfg))
 
             # Update recovery state AFTER evaluation.
             for name, state in server_states.items():

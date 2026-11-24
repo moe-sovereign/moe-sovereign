@@ -12,6 +12,10 @@ and W3C `traceparent`-header propagation in the orchestrator middleware.
 ## The universal pipeline
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     subgraph LXC[LXC edge node]
         O1[orchestrator<br/>UID 1001]

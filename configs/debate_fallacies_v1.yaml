@@ -1,0 +1,78 @@
+# Fallacy and rhetorical-pattern catalogue for debate analysis, version v1.
+# STATUS: draft. Each entry names what it is NOT, because misclassification
+# (e.g. calling relevant criticism of credibility "ad hominem") is the main
+# failure mode. Retrieved and reviewed extensions belong here, not in prompts.
+version: v1
+status: draft
+
+fallacies:
+  - id: ad_hominem
+    name: Personal attack
+    definition: Attacks the person instead of the argument (appearance, private life, unrelated character).
+    hint: The attacked trait has no bearing on the claim under discussion.
+    not_to_be_confused_with: Criticism of relevant expertise, conflicts of interest or a documented record of misstatements, which bear on credibility.
+  - id: false_analogy
+    name: Apples and oranges
+    definition: Compares cases that differ in the properties that matter for the claim.
+    hint: The example is real but does not fit the context of the argument.
+    not_to_be_confused_with: A valid analogy that shares the decisive properties.
+  - id: straw_man
+    name: Straw man
+    definition: Misrepresents the opponent's position and refutes the distorted version.
+    hint: The refuted claim is stronger, simpler or more extreme than what was said.
+    not_to_be_confused_with: A fair summary or a legitimate reductio ad absurdum that follows from the stated premises.
+  - id: tu_quoque
+    name: Whataboutism / tu quoque
+    definition: Answers a criticism by pointing to the critic's or a third party's faults.
+    hint: The reply changes the subject to someone else's conduct.
+    not_to_be_confused_with: Pointing out an inconsistency that undermines the specific claim.
+  - id: false_dilemma
+    name: False dilemma
+    definition: Presents two options as exhaustive although others exist.
+    hint: 'An "either ... or" with an unmentioned middle ground.'
+    not_to_be_confused_with: A genuine binary decision.
+  - id: appeal_to_authority
+    name: Appeal to authority
+    definition: Treats a source's status as proof, outside its competence or without its reasons.
+    hint: Name or title replaces the argument.
+    not_to_be_confused_with: Citing an expert within their field as evidence, with the reasons.
+  - id: appeal_to_popularity
+    name: Appeal to popularity (populism)
+    definition: Treats broad approval as proof of correctness, or addresses the crowd instead of the matter.
+    hint: 'Phrases like "everyone knows" or "the people want" stand in for reasons.'
+    not_to_be_confused_with: Evidence about actual public opinion when public opinion is the subject.
+  - id: slippery_slope
+    name: Slippery slope
+    definition: Claims an unavoidable chain of consequences without support for the links.
+    hint: Escalating steps with no evidence for each transition.
+    not_to_be_confused_with: A documented causal chain.
+  - id: circular_reasoning
+    name: Circular reasoning
+    definition: The conclusion is used as its own premise.
+    hint: The reason restates the claim.
+    not_to_be_confused_with: A summary that restates a conclusion after having argued it.
+  - id: red_herring
+    name: Red herring
+    definition: Introduces an irrelevant point to divert from the question.
+    hint: A vivid but unrelated topic appears at the moment of a hard question.
+    not_to_be_confused_with: A necessary clarification of terms.
+  - id: hasty_generalisation
+    name: Hasty generalisation
+    definition: Generalises from too few or unrepresentative cases.
+    hint: A single anecdote carries a general claim.
+    not_to_be_confused_with: A well-chosen example that illustrates a claim supported elsewhere.
+  - id: moving_goalposts
+    name: Moving the goalposts
+    definition: Changes the criteria for proof after they have been met.
+    hint: New demands appear once the previous one is satisfied.
+    not_to_be_confused_with: Refining a question after new information.
+  - id: frame_mismatch
+    name: Anachronism / frame mismatch
+    definition: Judges or argues with norms, knowledge or terms of a different time, culture or audience than the situation's.
+    hint: A contribution is measured against a frame that does not belong to the debate.
+    not_to_be_confused_with: A deliberate comparison across frames that is labelled as such.
+  - id: quote_phrase_confusion
+    name: Quote / phrase confusion
+    definition: Presents a common phrase as a quotation from a named source, or a genuine quotation as a phrase.
+    hint: An attribution that cannot be traced, or a real quote used without acknowledgement.
+    not_to_be_confused_with: A correctly attributed quotation or a phrase openly used as a phrase.

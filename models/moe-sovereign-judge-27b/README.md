@@ -104,5 +104,5 @@ ollama create sovereign-judge:27b-q4km -f Modelfile
 ## 📜 Citation & License
 
 * **License:** Apache 2.0
-* **Repository:** [https://github.com/h3rb3rn/moe-sovereign](https://github.com/h3rb3rn/moe-sovereign)
+* **Repository:** [https://github.com/moe-sovereign/moe-sovereign](https://github.com/moe-sovereign/moe-sovereign)
 * **Documentation:** [https://docs.moe-sovereign.org](https://docs.moe-sovereign.org)

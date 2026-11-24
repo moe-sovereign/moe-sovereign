@@ -3,8 +3,8 @@ langchain>=1.3.9
 langchain-openai
 langchain-community
 langchain-chroma
-langgraph>=0.4.0
-langgraph-checkpoint-postgres>=3.1.1
+langgraph>=1.2.14
+langgraph-checkpoint-postgres>=3.1.3
 psycopg[binary,pool]>=3.2.0
 
 # --- API & Server ---
@@ -39,15 +39,15 @@ aiokafka>=0.11.0
 prometheus_client>=0.21.0
 
 # --- OIDC/JWT ---
-PyJWT>=2.13.0
+PyJWT>=2.15.0
 cryptography>=50.0.0
 
 # --- PDF generation & parsing ---
 weasyprint>=70.0
-pypdf>=6.16.2
+pypdf>=6.21.4
 
 # --- System Constitution enforcement ---
 pyyaml>=6.0
 
 # --- Pinned transitive deps (guard against unwanted bumps) ---
-urllib3==2.7.0
+urllib3==2.8.0

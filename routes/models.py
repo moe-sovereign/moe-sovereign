@@ -113,6 +113,93 @@ async def _get_public_models(created: int) -> list:
         logger.warning("_get_public_models failed: %s", _e)
     return []
 
+# Per-node loaded-context cache: {node: (monotonic_ts, {model_name: num_ctx})}
+_node_loaded_ctx_cache: dict = {}
+_NODE_LOADED_CTX_TTL = 30.0  # seconds — a reload may change the allocation
+
+
+async def _node_model_ids(node: str) -> list:
+    """List the model IDs a configured node serves (60s cached)."""
+    now = time.monotonic()
+    cached = _node_listing_cache.get(node)
+    if cached and (now - cached[0]) < _NODE_LISTING_TTL:
+        return cached[1]
+    base = URL_MAP[node].rstrip("/").removesuffix("/v1")
+    headers = {"Authorization": f"Bearer {TOKEN_MAP.get(node, 'ollama')}"}
+    api_type = {s["name"]: s.get("api_type", "ollama") for s in INFERENCE_SERVERS_LIST}.get(node, "ollama")
+    async with httpx.AsyncClient(timeout=5) as client:
+        if api_type == "ollama":
+            r = await client.get(f"{base}/api/tags", headers=headers)
+            models = [m["name"] for m in (r.json().get("models") or [])] if r.status_code == 200 else []
+        else:
+            r = await client.get(f"{base}/v1/models", headers=headers)
+            models = [m["id"] for m in (r.json().get("data") or [])] if r.status_code == 200 else []
+    _node_listing_cache[node] = (now, models)
+    return models
+
+
+async def _node_loaded_ctx(node: str) -> dict:
+    """Return {model_name: allocated num_ctx} for models currently loaded on an Ollama node.
+
+    Uses /api/ps, i.e. the context the model was actually loaded with (not the
+    GGUF training maximum). OpenAI-compatible clients such as Hermes read
+    ``context_length`` from /v1/models; without it they fall back to a default
+    window. Returns {} for unknown/non-Ollama nodes or on any error.
+    """
+    if node not in URL_MAP:
+        return {}
+    api_type = {s["name"]: s.get("api_type", "ollama") for s in INFERENCE_SERVERS_LIST}.get(node, "ollama")
+    if api_type != "ollama":
+        return {}
+    now = time.monotonic()
+    cached = _node_loaded_ctx_cache.get(node)
+    if cached and (now - cached[0]) < _NODE_LOADED_CTX_TTL:
+        return cached[1]
+    loaded: dict = {}
+    try:
+        base = URL_MAP[node].rstrip("/").removesuffix("/v1")
+        async with httpx.AsyncClient(timeout=3) as client:
+            r = await client.get(
+                f"{base}/api/ps",
+                headers={"Authorization": f"Bearer {TOKEN_MAP.get(node, 'ollama')}"},
+            )
+        if r.status_code == 200:
+            for m in r.json().get("models") or []:
+                name = m.get("name") or m.get("model")
+                ctx = m.get("context_length") or m.get("context_window")
+                if name and isinstance(ctx, int) and ctx > 0:
+                    loaded[name] = ctx
+    except Exception as exc:
+        logger.debug("loaded-context lookup failed for node %s: %s", node, exc)
+    _node_loaded_ctx_cache[node] = (now, loaded)
+    return loaded
+
+
+def _endpoint_allowed(allowed_endpoints: list, model_n: str, node: str) -> bool:
+    """True if the key's model_endpoint grants list contains model@node or *@node."""
+    return any(e in (f"{model_n}@{node}", f"*@{node}") for e in allowed_endpoints or [])
+
+
+async def _native_model_entry(model_n: str, node: str, created: int) -> Optional[dict]:
+    """Build the /v1/models/{model@node} entry incl. the best-known context window."""
+    ctx = (await _node_loaded_ctx(node)).get(model_n) or await _context_window_for_model(f"{model_n}@{node}")
+    if not ctx:
+        api_type = {s["name"]: s.get("api_type", "ollama") for s in INFERENCE_SERVERS_LIST}.get(node, "ollama")
+        if api_type == "ollama":
+            from context_budget import fetch_ollama_native_ctx_max
+            ctx = await fetch_ollama_native_ctx_max(model_n, URL_MAP[node], TOKEN_MAP.get(node, "ollama")) or None
+    entry: dict = {
+        "id": f"{model_n}@{node}", "object": "model",
+        "owned_by": "moe-sovereign", "created": created,
+        "description": f"Direkt via {node}",
+        "display_name": f"{model_n} ({node})",
+    }
+    if ctx:
+        entry["context_length"] = ctx
+        entry["context_window"] = ctx
+    return entry
+
+
 router = APIRouter()
 
 
@@ -162,6 +249,19 @@ async def get_model(model_id: str, raw_request: Request):
                 "description": cfg["description"],
                 "display_name": _model_display_name(model_id, cfg["description"]),
             }
+
+    # Native model@node (Ollama/OpenAI-compatible node passthrough).
+    model_n, _, node = model_id.rpartition("@")
+    if model_n and node in URL_MAP:
+        allowed = json.loads(user_ctx.get("permissions_json", "{}")).get("model_endpoint") or []
+        if _endpoint_allowed(allowed, model_n, node):
+            try:
+                served = model_n in await _node_model_ids(node)
+            except Exception:
+                served = False
+            # Explicit grants stay resolvable while the node is unreachable.
+            if served or f"{model_n}@{node}" in allowed:
+                return await _native_model_entry(model_n, node, _created)
 
     return JSONResponse(status_code=404, content={"error": {
         "message": f"Model '{model_id}' not found",
@@ -275,50 +375,32 @@ async def list_models(raw_request: Request):
                 if node not in URL_MAP:
                     continue
                 try:
-                    _api_type = _api_type_map.get(node, "ollama")
-                    _wc_base  = URL_MAP[node].rstrip("/").removesuffix("/v1")
-                    _wc_token = TOKEN_MAP.get(node, "ollama")
-                    # 60s cache: avoid re-fetching node model lists on every /v1/models call
-                    _now_wc = time.monotonic()
-                    _cached = _node_listing_cache.get(node)
-                    if _cached and (_now_wc - _cached[0]) < _NODE_LISTING_TTL:
-                        _wc_models = _cached[1]
-                    else:
-                        async with httpx.AsyncClient(timeout=5) as _wc_client:
-                            if _api_type == "ollama":
-                                _r = await _wc_client.get(
-                                    f"{_wc_base}/api/tags",
-                                    headers={"Authorization": f"Bearer {_wc_token}"},
-                                )
-                                _wc_models = [
-                                    m["name"] for m in (_r.json().get("models") or [])
-                                ] if _r.status_code == 200 else []
-                            else:
-                                _r = await _wc_client.get(
-                                    f"{_wc_base}/v1/models",
-                                    headers={"Authorization": f"Bearer {_wc_token}"},
-                                )
-                                _wc_models = [
-                                    m["id"] for m in (_r.json().get("data") or [])
-                                ] if _r.status_code == 200 else []
-                        _node_listing_cache[node] = (_now_wc, _wc_models)
+                    _wc_models = await _node_model_ids(node)
+                    _wc_loaded = await _node_loaded_ctx(node)
                     for _wc_m in _wc_models:
                         mid = f"{_wc_m}@{node}"
                         if mid not in seen and mid not in existing_ids:
                             seen.add(mid)
-                            native_models.append({
+                            _wc_entry: dict = {
                                 "id": mid, "object": "model",
                                 "owned_by": "moe-sovereign", "created": _model_created,
                                 "description": f"Direkt via {node}",
                                 "display_name": f"{_wc_m} ({node})",
-                            })
+                            }
+                            _wc_ctx = _wc_loaded.get(_wc_m)
+                            if _wc_ctx:
+                                _wc_entry["context_length"] = _wc_ctx
+                                _wc_entry["context_window"] = _wc_ctx
+                            native_models.append(_wc_entry)
                 except Exception:
                     pass
                 continue
             model_id = f"{model_n}@{node}" if node else model_n
             if model_id not in seen and model_id not in existing_ids:
                 seen.add(model_id)
-                _ctx_len = await _context_window_for_model(model_id)
+                _ctx_len = (
+                    (await _node_loaded_ctx(node)).get(model_n) if node else None
+                ) or await _context_window_for_model(model_id)
                 _native_entry: dict = {
                     "id":           model_id,
                     "object":       "model",
@@ -329,6 +411,7 @@ async def list_models(raw_request: Request):
                 }
                 if _ctx_len:
                     _native_entry["context_length"] = _ctx_len
+                    _native_entry["context_window"] = _ctx_len
                 native_models.append(_native_entry)
 
     _user_conns_m: dict = {}

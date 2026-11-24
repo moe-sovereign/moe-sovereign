@@ -83,6 +83,15 @@ initial allocation and separate reserve from complexity, plan structure and
 the remaining request deadline. See [Adaptive Deliberation](../system/deliberation.md)
 for the exact policy, `moe-auto` behavior and compatibility rules.
 
+### Debate analysis (in development)
+
+The **Debate analysis** switch enables rubric-based analysis of a debate
+transcript through `POST /v1/debate-analysis`. It is off by default and is
+independent of deliberation. Only the activation is editable in the UI; the
+other policy fields (judge count, samples, call budget) are preserved on save
+and can be set through template import. See
+[Debate Analysis](../system/debate-analysis.md).
+
 ### Standard Expert Categories
 
 | Category ID | Display Name | Use Case |

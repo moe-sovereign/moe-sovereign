@@ -352,6 +352,7 @@
               <div class="col-md-2"><label class="form-label small" for="ct_deliberation_max_rounds">{{ t(request, 'deliberation.max_rounds') }}</label><input class="form-control form-control-sm" id="ct_deliberation_max_rounds" type="number" min="1" max="8" value="5"></div>
               <div class="col-md-2"><label class="form-label small" for="ct_deliberation_max_calls">{{ t(request, 'deliberation.max_calls') }}</label><input class="form-control form-control-sm" id="ct_deliberation_max_calls" type="number" min="3" max="96" value="18"></div>
               <div class="col-md-4"><label class="form-label small" for="ct_deliberation_fallback">{{ t(request, 'deliberation.fallback') }}</label><select class="form-select form-select-sm" id="ct_deliberation_fallback"><option value="standard">{{ t(request, 'deliberation.fallback_standard') }}</option><option value="fail">{{ t(request, 'deliberation.fallback_fail') }}</option></select></div>
+              <div class="col-md-4"><label class="form-label small" for="ct_debate_analysis_activation">{{ t(request, 'debate_analysis.label') }}</label><select class="form-select form-select-sm" id="ct_debate_analysis_activation"><option value="disabled">{{ t(request, 'debate_analysis.disabled') }}</option><option value="enabled">{{ t(request, 'debate_analysis.enabled') }}</option></select></div>
             </div>
           </div>
         </div>
@@ -741,7 +742,30 @@ function addExpertCategory(prefix) {
 }
 
 // ─── Page init ───────────────────────────────────────────────────────────────
+// Debate-analysis policy as loaded; only "activation" is editable here, all
+// other fields survive a save unchanged.
+const _debateAnalysisBase = {};
+
+function setDebateAnalysisControls(prefix, policy) {
+  _debateAnalysisBase[prefix] = policy ? { ...policy } : {};
+  const el = document.getElementById(`${prefix}_debate_analysis_activation`);
+  if (el) el.value = (policy && policy.activation) || 'disabled';
+}
+
+function collectDebateAnalysis(prefix) {
+  return {
+    ...(_debateAnalysisBase[prefix] || {}),
+    schema_version: '1.0',
+    activation: document.getElementById(`${prefix}_debate_analysis_activation`)?.value || 'disabled',
+  };
+}
+
+// Full policy as loaded, per editor prefix. The form only exposes a subset of
+// the fields; the remaining ones must survive a save unchanged.
+const _deliberationBase = {};
+
 function setDeliberationControls(prefix, policy, legacyWhenMissing = false) {
+  _deliberationBase[prefix] = policy ? { ...policy } : {};
   const dp = policy || (legacyWhenMissing ? {
     activation: 'required', mode: 'micro', initial_agent_cap: 2,
     reserve_agents: 0, absolute_max_agents: 2, initial_round_cap: 1,
@@ -790,6 +814,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     buildLlmDropdown('ct_judge_llm_select',   l, '');
     buildLlmDropdown('ct_tool_expert_llm_select', l, '');
     setDeliberationControls('ct', null, false);
+    setDebateAnalysisControls('ct', null);
     _updateMedicalLegalWarning('ct');
   });
   document.getElementById('createTemplateModal').addEventListener('hidden.bs.modal', () => {
@@ -826,6 +851,7 @@ async function copyTemplate(tmplId) {
   if (ctJudgeCtx)   ctJudgeCtx.value   = src.judge_num_ctx   || '';
   if (ctToolExpertCtx) ctToolExpertCtx.value = src.tool_expert_num_ctx || '';
   setDeliberationControls('ct', src.deliberation_policy, true);
+  setDebateAnalysisControls('ct', src.debate_analysis);
   _updateMedicalLegalWarning('ct');
   document.getElementById('ct_error').classList.add('d-none');
   new bootstrap.Modal(document.getElementById('createTemplateModal')).show();
@@ -838,23 +864,26 @@ function collectDeliberationPolicy(prefix) {
     return Number.isFinite(value) ? value : fallback;
   };
   return {
-    schema_version: '1.0',
-    activation: document.getElementById(`${prefix}_deliberation_activation`)?.value || 'disabled',
-    mode: document.getElementById(`${prefix}_deliberation_mode`)?.value || 'auto',
+    // Defaults first, then the policy as loaded, then the visible form fields,
+    // so hidden fields (min_*, thresholds, max_turn_tokens, ...) are preserved.
     min_agents: 2,
-    initial_agent_cap: intValue('initial_agents', 6),
-    reserve_agents: intValue('reserve_agents', 2),
-    absolute_max_agents: intValue('max_agents', 8),
     min_rounds: 1,
-    initial_round_cap: intValue('initial_rounds', 3),
-    reserve_rounds: intValue('reserve_rounds', 2),
-    absolute_max_rounds: intValue('max_rounds', 5),
-    max_model_calls: intValue('max_calls', 18),
     moderator_interval: 1,
     estimated_turn_seconds: 20.0,
     synthesis_reserve_seconds: 30.0,
     convergence_threshold: 0.82,
     repetition_threshold: 0.78,
+    ...(_deliberationBase[prefix] || {}),
+    schema_version: '1.0',
+    activation: document.getElementById(`${prefix}_deliberation_activation`)?.value || 'disabled',
+    mode: document.getElementById(`${prefix}_deliberation_mode`)?.value || 'auto',
+    initial_agent_cap: intValue('initial_agents', 6),
+    reserve_agents: intValue('reserve_agents', 2),
+    absolute_max_agents: intValue('max_agents', 8),
+    initial_round_cap: intValue('initial_rounds', 3),
+    reserve_rounds: intValue('reserve_rounds', 2),
+    absolute_max_rounds: intValue('max_rounds', 5),
+    max_model_calls: intValue('max_calls', 18),
     fallback: document.getElementById(`${prefix}_deliberation_fallback`)?.value || 'standard',
   };
 }
@@ -892,6 +921,7 @@ async function createTemplate() {
         agent_graphrag:          document.getElementById('ct_agent_graphrag').checked,
         agent_ingest:            document.getElementById('ct_agent_ingest').checked,
         deliberation_policy:     collectDeliberationPolicy('ct'),
+        debate_analysis:         collectDebateAnalysis('ct'),
         graphrag_max_chars:  parseInt(document.getElementById('ct_graphrag_max_chars').value) || 0,
         history_max_turns:   document.getElementById('ct_compression_enabled').checked
                                ? (parseInt(document.getElementById('ct_history_max_turns').value) || 0)
@@ -923,6 +953,8 @@ async function openEditModal(tmplId) {
   ]);
   const tmpl = listRes.find(t => t.id === tmplId);
   if (!tmpl) { document.getElementById('editModalBody').innerHTML = '<p class="text-danger">Template not found.</p>'; return; }
+  _deliberationBase.et = tmpl.deliberation_policy ? { ...tmpl.deliberation_policy } : {};
+  _debateAnalysisBase.et = tmpl.debate_analysis ? { ...tmpl.debate_analysis } : {};
   const dp = tmpl.deliberation_policy || {
     activation: 'required', mode: 'micro', initial_agent_cap: 2,
     reserve_agents: 0, absolute_max_agents: 2, initial_round_cap: 1,
@@ -1080,6 +1112,7 @@ async function openEditModal(tmplId) {
           <div class="col-md-2"><label class="form-label small" for="et_deliberation_max_rounds">{{ t(request, 'deliberation.max_rounds') }}</label><input class="form-control form-control-sm" id="et_deliberation_max_rounds" type="number" min="1" max="8" value="${dp.absolute_max_rounds ?? 5}"></div>
           <div class="col-md-2"><label class="form-label small" for="et_deliberation_max_calls">{{ t(request, 'deliberation.max_calls') }}</label><input class="form-control form-control-sm" id="et_deliberation_max_calls" type="number" min="3" max="96" value="${dp.max_model_calls ?? 18}"></div>
           <div class="col-md-4"><label class="form-label small" for="et_deliberation_fallback">{{ t(request, 'deliberation.fallback') }}</label><select class="form-select form-select-sm" id="et_deliberation_fallback"><option value="standard" ${dp.fallback !== 'fail' ? 'selected' : ''}>{{ t(request, 'deliberation.fallback_standard') }}</option><option value="fail" ${dp.fallback === 'fail' ? 'selected' : ''}>{{ t(request, 'deliberation.fallback_fail') }}</option></select></div>
+          <div class="col-md-4"><label class="form-label small" for="et_debate_analysis_activation">{{ t(request, 'debate_analysis.label') }}</label><select class="form-select form-select-sm" id="et_debate_analysis_activation"><option value="disabled" ${(tmpl.debate_analysis || {}).activation !== 'enabled' ? 'selected' : ''}>{{ t(request, 'debate_analysis.disabled') }}</option><option value="enabled" ${(tmpl.debate_analysis || {}).activation === 'enabled' ? 'selected' : ''}>{{ t(request, 'debate_analysis.enabled') }}</option></select></div>
         </div>
       </div>
     </div>
@@ -1182,6 +1215,7 @@ async function saveEditTemplate() {
         agent_graphrag:          document.getElementById('et_agent_graphrag').checked,
         agent_ingest:            document.getElementById('et_agent_ingest').checked,
         deliberation_policy:     collectDeliberationPolicy('et'),
+        debate_analysis:         collectDebateAnalysis('et'),
         graphrag_max_chars:  parseInt(document.getElementById('et_graphrag_max_chars').value) || 0,
         history_max_turns:   document.getElementById('et_compression_enabled').checked
                                ? (parseInt(document.getElementById('et_history_max_turns').value) || 0)

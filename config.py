@@ -88,7 +88,12 @@ INFERENCE_SERVERS_LIST = [s for s in INFERENCE_SERVERS_LIST if s.get("enabled", 
 URL_MAP      = {s["name"]: s["url"]                 for s in INFERENCE_SERVERS_LIST if s.get("url")}
 TOKEN_MAP    = {s["name"]: s.get("token", "ollama")  for s in INFERENCE_SERVERS_LIST}
 API_TYPE_MAP = {s["name"]: s.get("api_type", "ollama") for s in INFERENCE_SERVERS_LIST}
-TIMEOUT_MAP  = {s["name"]: s.get("timeout", 300)     for s in INFERENCE_SERVERS_LIST}
+# Single source of truth for the upstream read timeout (seconds) of native/proxy
+# inference calls. A per-server "timeout" in INFERENCE_SERVERS wins; otherwise
+# INFERENCE_DEFAULT_TIMEOUT applies. For streams it is the max. gap between two
+# bytes, i.e. it must cover model load + prompt prefill on slow GPUs (Maxwell/M10).
+INFERENCE_DEFAULT_TIMEOUT: float = float(os.getenv("INFERENCE_DEFAULT_TIMEOUT", "300"))
+TIMEOUT_MAP  = {s["name"]: float(s.get("timeout", INFERENCE_DEFAULT_TIMEOUT)) for s in INFERENCE_SERVERS_LIST}
 
 
 # "N requests per <amount> <unit>" — the unit and its multiplier are both
@@ -293,10 +298,10 @@ MAX_EXPERT_OUTPUT_CHARS   = int(os.getenv("MAX_EXPERT_OUTPUT_CHARS",    "2400"))
 # the pipeline for 10+ minutes. Thinking traces are stripped before use —
 # 4096 tokens captures ample reasoning + answer for any expert category.
 MAX_EXPERT_TOKENS         = int(os.getenv("MAX_EXPERT_TOKENS",          "4096"))
-# Per-category token limits override the global MAX_EXPERT_TOKENS.
-# Code generation needs much higher limits than factual lookups.
-MAX_EXPERT_TOKENS_CODE    = int(os.getenv("MAX_EXPERT_TOKENS_CODE",     "16384"))
-MAX_EXPERT_OUTPUT_CHARS_CODE = int(os.getenv("MAX_EXPERT_OUTPUT_CHARS_CODE", "48000"))
+# Code generation limit: 4096 tokens is generous for code subtasks (~800 lines) while
+# preventing unbounded 16k generation spirals on M60 GPUs (which generate at ~20 tok/sec).
+MAX_EXPERT_TOKENS_CODE    = int(os.getenv("MAX_EXPERT_TOKENS_CODE",     "4096"))
+MAX_EXPERT_OUTPUT_CHARS_CODE = int(os.getenv("MAX_EXPERT_OUTPUT_CHARS_CODE", "16000"))
 # Judge generation limit — prevents thinking-mode judges from generating
 # massive traces. 8192 is generous for synthesis while still bounding cost.
 MAX_JUDGE_TOKENS          = int(os.getenv("MAX_JUDGE_TOKENS",           "32768"))

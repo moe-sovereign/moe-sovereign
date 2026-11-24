@@ -10,12 +10,16 @@ vanilla Kubernetes, k3s, and Red Hat OpenShift from the same source tree.
     is **Planned** and OpenShift is **Untested** in the deployment matrix.
 
     If you successfully deploy on K8s/OpenShift, please share your experience via a
-    [GitHub Discussion](https://github.com/h3rb3rn/moe-sovereign/discussions) — your
+    [GitHub Discussion](https://github.com/moe-sovereign/moe-sovereign/discussions) — your
     feedback directly drives the validation milestone.
 
 ## Chart structure
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     subgraph C["charts/moe-sovereign"]
         CY["Chart.yaml<br/>(+ 4 conditional deps)"]
@@ -64,6 +68,10 @@ Helm manage the data tier, leave it `false` to point at an existing cluster via
 ## Three profiles, three values files
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart LR
     subgraph E["values.yaml<br/>(enterprise default)"]
         E1[all subcharts DISABLED]
@@ -152,6 +160,10 @@ is required.
 ## Security posture
 
 ```mermaid
+---
+config:
+  look: classic
+---
 flowchart TB
     subgraph P[Pod]
         direction TB

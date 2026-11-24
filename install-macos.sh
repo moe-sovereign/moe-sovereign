@@ -3,7 +3,7 @@
 #  MoE Sovereign — macOS installer
 #
 #  Usage: bash install-macos.sh [--runtime docker|podman]
-#         curl -fsSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install-macos.sh | bash
+#         curl -fsSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install-macos.sh | bash
 #
 #  This is the macOS counterpart to install.sh. It deliberately does not use
 #  apt, sudo, systemd, Linux UID remapping, or /opt bind mounts. Docker Desktop
@@ -47,7 +47,7 @@ INSTALL_DIR="${INSTALL_DIR:-${SCRIPT_DIR:-${HOME}/moe-sovereign}}"
 ENV_FILE="${INSTALL_DIR}/.env"
 MOE_DATA_ROOT_DEFAULT="${MOE_DATA_ROOT:-${HOME}/moe-data}"
 GRAFANA_DATA_ROOT_DEFAULT="${GRAFANA_DATA_ROOT:-${HOME}/moe-grafana}"
-MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/h3rb3rn/moe-sovereign.git}"
+MOE_REPO_URL="${MOE_REPO_URL:-https://github.com/moe-sovereign/moe-sovereign.git}"
 
 print_banner() {
   cat <<'EOF'
@@ -345,7 +345,6 @@ prepare_env() {
   set_env MINIO_ENDPOINT "moe-storage-garage:3900"
   set_env GARAGE_RPC_SECRET "$GEN_GARAGE_SECRET"
   set_env INSTALL_CODEX false
-  set_env INSTALL_LANGFUSE false
   set_env INSTALL_OLLAMA false
   set_env OLLAMA_GPU_ENABLED false
   set_env KAFKA_HOST_PORT 9092

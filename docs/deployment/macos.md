@@ -30,7 +30,7 @@ management, UID remapping, or `/opt` bind mounts.
    Podman / Podman Desktop from <https://podman.io/docs/installation>.
 2. Clone the repository:
    ```bash
-   git clone https://github.com/h3rb3rn/moe-sovereign.git
+   git clone https://github.com/moe-sovereign/moe-sovereign.git
    cd moe-sovereign
    ```
 3. Run the macOS installer (interactive — asks for admin password):
@@ -47,7 +47,7 @@ management, UID remapping, or `/opt` bind mounts.
    To clone into `~/moe-sovereign` and install in one step, use (never use
    `sudo`):
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/h3rb3rn/moe-sovereign/main/install-macos.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/moe-sovereign/moe-sovereign/main/install-macos.sh | bash
    ```
 4. With Docker Desktop, verify that both paths are allowed in **Settings →
    Resources → File Sharing** and apply the change. Home-directory paths are

@@ -557,3 +557,24 @@ def test_vlsm_subnet_calc_second_subnet_does_not_fit_returns_error():
 def test_vlsm_subnet_calc_invalid_cidr_returns_error():
     result = vlsm_subnet_calc("not-an-ip", [{"id": "A", "hosts": 10}])
     assert result.startswith("Error")
+
+
+def test_calculate_closes_missing_trailing_parentheses_and_shows_the_evaluated_expression():
+    assert calculate("((2+3)*4") == "((2+3)*4) = 20"
+    assert calculate("(((1+1)*3") == "(((1+1)*3)) = 6"
+
+
+def test_calculate_reads_caret_as_power_but_still_rejects_other_operators():
+    assert calculate("2^3") == "2**3 = 8"
+    assert calculate("2 & 3").startswith("Error")
+
+
+def test_calculate_leaves_valid_expressions_untouched():
+    assert calculate("(2+3)*4") == "(2+3)*4 = 20"
+    assert calculate("10/4") == "10/4 = 2.5"
+
+
+def test_calculate_drops_surplus_closing_parentheses_at_the_end_only():
+    assert calculate("(2+3)*4)") == "(2+3)*4 = 20"
+    assert calculate("((1+1)*3))") == "((1+1)*3) = 6"
+    assert calculate("2+3)*4").startswith("Error")   # a stray parenthesis in the middle is not guessed

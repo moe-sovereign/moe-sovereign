@@ -43,7 +43,13 @@ fi
 if [ "$ROLE" == "judge" ]; then
     MODEL_NAME="sovereign-judge-27b"
 elif [ "$ROLE" == "planner" ]; then
-    MODEL_NAME="moe-sovereign-student-4b"
+    MODEL_NAME="moe-sovereign-student-9b"
+elif [ "$ROLE" == "judge_olmo31" ]; then
+    MODEL_NAME="sovereign-judge-olmo31-32b"
+elif [[ "$ROLE" == *_smollm3 ]]; then
+    MODEL_NAME="smollm3-expert-${ROLE%_smollm3}-3b"
+elif [ "$ROLE" == "planner_olmo3" ]; then
+    MODEL_NAME="moe-sovereign-planner-olmo3-7b"
 else
     MODEL_NAME="moe-expert-${ROLE}-4b"
 fi
