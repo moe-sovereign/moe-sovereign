@@ -301,8 +301,11 @@ async def _increment_user_budget(
             logger.debug("Team budget deduct failed: %s", _tbe)
 
 
+_IP_RATE_WINDOW_S = 60
+
+
 async def _check_ip_rate_limit(request: Request) -> bool:
-    """Token-bucket rate limit per client IP using Redis. Fails open on error."""
+    """Fixed-window rate limit per client IP using Redis. Fails open on error."""
     if state.redis_client is None:
         return True
     try:
@@ -311,10 +314,19 @@ async def _check_ip_rate_limit(request: Request) -> bool:
             or request.headers.get("x-real-ip", "")
             or (request.client.host if request.client else "unknown")
         )
-        _key   = f"moe:ratelimit:ip:{_ip}"
-        _count = await state.redis_client.incr(_key)
-        if _count == 1:
-            await state.redis_client.expire(_key, 60)
+        _key = f"moe:ratelimit:ip:{_ip}"
+        # SET NX EX, INCR and TTL run in one MULTI/EXEC transaction, so a
+        # cancelled request or a dropped connection can no longer leave a
+        # counter behind that has no expiry (a separate INCR + EXPIRE did, and
+        # that locked a client IP out permanently).
+        _pipe = state.redis_client.pipeline(transaction=True)
+        _pipe.set(_key, 0, ex=_IP_RATE_WINDOW_S, nx=True)
+        _pipe.incr(_key)
+        _pipe.ttl(_key)
+        _, _count, _ttl = await _pipe.execute()
+        if _ttl == -1:
+            # Self-heal a counter written by older code without an expiry.
+            await state.redis_client.expire(_key, _IP_RATE_WINDOW_S)
         return _count <= MAX_REQUESTS_PER_MINUTE
     except Exception:
         return True

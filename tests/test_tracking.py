@@ -219,3 +219,100 @@ async def test_get_premature_stop_rate_never_raises_on_redis_error():
     with patch.object(state, "redis_client", mock_redis):
         rate = await _get_premature_stop_rate("qwen3.6:35b", "http://x:11434")
     assert rate == 0.0
+
+
+# ── _check_ip_rate_limit: counter must always carry an expiry ───────────────
+
+class _FakeRedis:
+    """Minimal in-memory Redis: SET NX EX, INCR, TTL, EXPIRE, MULTI pipeline."""
+
+    def __init__(self):
+        self.values = {}
+        self.ttls = {}
+
+    def pipeline(self, transaction=True):
+        return _FakePipe(self)
+
+    async def expire(self, key, seconds):
+        self.ttls[key] = seconds
+
+
+class _FakePipe:
+    def __init__(self, redis):
+        self.redis = redis
+        self.ops = []
+
+    def set(self, key, value, ex=None, nx=False):
+        self.ops.append(("set", key, value, ex, nx))
+
+    def incr(self, key):
+        self.ops.append(("incr", key))
+
+    def ttl(self, key):
+        self.ops.append(("ttl", key))
+
+    async def execute(self):
+        out = []
+        for op in self.ops:
+            if op[0] == "set":
+                _, key, value, ex, nx = op
+                if nx and key in self.redis.values:
+                    out.append(None)
+                else:
+                    self.redis.values[key] = value
+                    self.redis.ttls[key] = ex if ex is not None else -1
+                    out.append(True)
+            elif op[0] == "incr":
+                self.redis.values[op[1]] += 1
+                out.append(self.redis.values[op[1]])
+            else:
+                out.append(self.redis.ttls.get(op[1], -2))
+        return out
+
+
+def _request(ip="10.0.0.5"):
+    req = MagicMock()
+    req.headers = {}
+    req.client.host = ip
+    return req
+
+
+@pytest.mark.asyncio
+async def test_ip_rate_limit_counter_always_has_expiry():
+    from services.tracking import _check_ip_rate_limit
+    fake = _FakeRedis()
+    with patch.object(state, "redis_client", fake):
+        assert await _check_ip_rate_limit(_request()) is True
+    assert fake.values["moe:ratelimit:ip:10.0.0.5"] == 1
+    assert fake.ttls["moe:ratelimit:ip:10.0.0.5"] == 60
+
+
+@pytest.mark.asyncio
+async def test_ip_rate_limit_blocks_above_threshold():
+    from services.tracking import _check_ip_rate_limit
+    import services.tracking as tr
+    fake = _FakeRedis()
+    with patch.object(state, "redis_client", fake), \
+         patch.object(tr, "MAX_REQUESTS_PER_MINUTE", 3):
+        results = [await _check_ip_rate_limit(_request()) for _ in range(5)]
+    assert results == [True, True, True, False, False]
+
+
+@pytest.mark.asyncio
+async def test_ip_rate_limit_heals_counter_without_expiry():
+    from services.tracking import _check_ip_rate_limit
+    fake = _FakeRedis()
+    fake.values["moe:ratelimit:ip:10.0.0.5"] = 686
+    fake.ttls["moe:ratelimit:ip:10.0.0.5"] = -1   # legacy stuck counter
+    with patch.object(state, "redis_client", fake):
+        await _check_ip_rate_limit(_request())
+    assert fake.ttls["moe:ratelimit:ip:10.0.0.5"] == 60
+
+
+@pytest.mark.asyncio
+async def test_ip_rate_limit_fails_open_on_redis_error():
+    from services.tracking import _check_ip_rate_limit
+    mock_redis = MagicMock()
+    mock_redis.pipeline.side_effect = RuntimeError("down")
+    with patch.object(state, "redis_client", mock_redis):
+        assert await _check_ip_rate_limit(_request()) is True
